@@ -14,14 +14,21 @@
 }
 
 @media print {
-  .no-print {
-    display: none !important;
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
   }
   
   body {
-    background: white !important;
+    background-color: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
     padding: 0 !important;
     margin: 0 !important;
+  }
+
+  .no-print {
+    display: none !important;
   }
 
   main {
@@ -34,34 +41,33 @@
     box-shadow: none !important;
   }
 
-  @page {
-    size: A4 landscape;
-    margin: 1.5cm;
-  }
-
-  .print-header {
-    display: flex !important;
-    justify-content: space-between !important;
-    align-items: center !important;
-    border-bottom: 2px solid #1a1c1e !important;
-    padding-bottom: 1rem !important;
-    margin-bottom: 2rem !important;
-  }
-
+  /* Ensure tables don't break awkwardly */
   table {
     width: 100% !important;
     border-collapse: collapse !important;
+    page-break-inside: auto;
+  }
+  
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
   }
 
   th, td {
     border: 1px solid #e5e7eb !important;
-    padding: 8px !important;
+    padding: 12px 8px !important;
   }
 
   th {
     background-color: #f9fafb !important;
     color: #111827 !important;
-    font-weight: bold !important;
+    font-weight: 900 !important;
+    text-transform: uppercase !important;
+  }
+
+  /* Force background colors in print */
+  .print-bg-gray {
+    background-color: #f9fafb !important;
   }
 }
 
