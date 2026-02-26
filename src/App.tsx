@@ -112,7 +112,7 @@ export default function App() {
 
       {/* Main Content */}
       <main className={`flex-1 transition-all duration-300 ${isSidebarOpen ? 'mr-64' : 'mr-20'} p-8`}>
-        {!(import.meta as any).env.VITE_GAS_URL && (
+        {(!import.meta.env.VITE_GAS_URL || import.meta.env.VITE_GAS_URL.includes('...')) && (
           <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3 text-amber-800">
             <AlertCircle size={20} />
             <p className="text-sm">يرجى ضبط رابط Google Apps Script في ملف .env لتفعيل النظام.</p>
