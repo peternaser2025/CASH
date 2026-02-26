@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
 import { Wallet, TrendingUp, TrendingDown, RefreshCw, Users, Activity, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { EmployeeBalance } from '../types';
+import { formatKWD } from '../utils/format';
 
 interface DashboardProps {
   balances: EmployeeBalance[];
@@ -15,14 +16,14 @@ export default function Dashboard({ balances, loading, onRefresh }: DashboardPro
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h2 className="text-4xl font-black text-gray-900 tracking-tight">المركز المالي</h2>
           <p className="text-gray-500 mt-1 font-medium">نظرة شاملة على السيولة النقدية وأرصدة العهد</p>
         </div>
         <button 
           onClick={onRefresh}
-          className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-200 rounded-2xl hover:bg-gray-50 transition-all shadow-sm hover:shadow-md text-sm font-bold text-gray-700 active:scale-95"
+          className="flex items-center justify-center gap-2 px-6 py-3 bg-white border border-gray-200 rounded-2xl hover:bg-gray-50 transition-all shadow-sm hover:shadow-md text-sm font-bold text-gray-700 active:scale-95"
         >
           <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
           تحديث البيانات
@@ -45,10 +46,10 @@ export default function Dashboard({ balances, loading, onRefresh }: DashboardPro
               <span className="text-sm font-black uppercase tracking-widest opacity-80">إجمالي السيولة المتاحة</span>
             </div>
             <div className="flex items-baseline gap-3">
-              <h3 className="text-5xl font-black tracking-tighter">{totalBalance.toFixed(3)}</h3>
+              <h3 className="text-5xl font-black tracking-tighter">{formatKWD(totalBalance)}</h3>
               <span className="text-xl font-medium opacity-70">د.ك</span>
             </div>
-            <div className="mt-8 flex gap-4">
+            <div className="mt-8 flex flex-wrap gap-4">
               <div className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl backdrop-blur-sm">
                 <TrendingUp size={16} className="text-emerald-300" />
                 <span className="text-xs font-bold">{positiveBalances} عهد إيجابية</span>
@@ -76,7 +77,7 @@ export default function Dashboard({ balances, loading, onRefresh }: DashboardPro
               <span>نشط</span>
             </div>
           </div>
-          <div>
+          <div className="mt-4">
             <p className="text-sm font-bold text-gray-400 uppercase mb-1">إجمالي الموظفين</p>
             <h4 className="text-3xl font-black text-gray-900">{balances.length}</h4>
           </div>
@@ -94,7 +95,7 @@ export default function Dashboard({ balances, loading, onRefresh }: DashboardPro
             </div>
             <p className="text-[10px] font-black text-gray-400 uppercase">Live Update</p>
           </div>
-          <div>
+          <div className="mt-4">
             <p className="text-sm font-bold text-gray-400 uppercase mb-1">آخر تحديث</p>
             <h4 className="text-xl font-black text-gray-900">{new Date().toLocaleTimeString('ar-KW', { hour: '2-digit', minute: '2-digit' })}</h4>
           </div>
@@ -103,12 +104,12 @@ export default function Dashboard({ balances, loading, onRefresh }: DashboardPro
 
       {/* Balances Grid - Bento Style */}
       <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl shadow-gray-200/40 overflow-hidden">
-        <div className="p-8 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
+        <div className="p-8 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gray-50/30">
           <div className="flex items-center gap-3">
             <div className="w-2 h-8 bg-emerald-500 rounded-full"></div>
             <h3 className="text-xl font-black text-gray-900">تفاصيل أرصدة العهد</h3>
           </div>
-          <span className="text-xs font-bold text-gray-400 bg-white px-3 py-1 rounded-full border border-gray-100">
+          <span className="text-xs font-bold text-gray-400 bg-white px-3 py-1 rounded-full border border-gray-100 w-fit">
             {balances.length} سجل مالي
           </span>
         </div>
@@ -159,7 +160,7 @@ export default function Dashboard({ balances, loading, onRefresh }: DashboardPro
                     <td className="px-8 py-6">
                       <div className="flex flex-col">
                         <span className={`text-2xl font-black font-mono ${item.balance < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                          {item.balance.toFixed(3)}
+                          {formatKWD(item.balance)}
                         </span>
                         <span className="text-[10px] text-gray-400 font-bold uppercase">دينار كويتي</span>
                       </div>

@@ -157,7 +157,10 @@ export default function App() {
               />
             )}
             {activeView === 'reports' && (
-              <ReportViewer employees={balances.map(b => b.name)} />
+              <ReportViewer 
+                employees={balances.map(b => b.name)} 
+                balances={balances}
+              />
             )}
             {activeView === 'employees' && (
               <EmployeeManager balances={balances} onRefresh={fetchBalances} />
