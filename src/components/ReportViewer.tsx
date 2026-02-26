@@ -195,23 +195,34 @@ export default function ReportViewer({ employees }: ReportViewerProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {report.rows.map((row, i) => (
-                  <tr key={i} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-6 py-4 font-mono">{row[0]}</td>
-                    <td className="px-6 py-4">{row[2]}</td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        row[3].includes('Income') || row[3].includes('In') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
-                      }`}>
-                        {row[3]}
-                      </span>
+                {(!report.rows || report.rows.length === 0) ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center text-gray-400">
+                      <div className="flex flex-col items-center gap-2">
+                        <Search size={40} className="opacity-20" />
+                        <p>لا توجد بيانات لهذه الفترة أو لهذا الموظف</p>
+                      </div>
                     </td>
-                    <td className="px-6 py-4 text-gray-500">{row[4]}</td>
-                    <td className="px-6 py-4 font-bold text-emerald-600">{row[5] > 0 ? row[5].toFixed(3) : '-'}</td>
-                    <td className="px-6 py-4 font-bold text-red-600">{row[6] > 0 ? row[6].toFixed(3) : '-'}</td>
-                    <td className="px-6 py-4 font-bold bg-gray-50/30 font-mono">{row[7]} د.ك</td>
                   </tr>
-                ))}
+                ) : (
+                  report.rows.map((row, i) => (
+                    <tr key={i} className="hover:bg-gray-50/50 transition-colors print:break-inside-avoid">
+                      <td className="px-6 py-4 font-mono">{row[0]}</td>
+                      <td className="px-6 py-4">{row[2] || 'عام'}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          row[3].includes('Income') || row[3].includes('In') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {row[3]}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-gray-500">{row[4]}</td>
+                      <td className="px-6 py-4 font-bold text-emerald-600">{row[5] > 0 ? row[5].toFixed(3) : '-'}</td>
+                      <td className="px-6 py-4 font-bold text-red-600">{row[6] > 0 ? row[6].toFixed(3) : '-'}</td>
+                      <td className="px-6 py-4 font-bold bg-gray-50/30 font-mono">{row[7]} د.ك</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

@@ -28,9 +28,18 @@ export const gasService = {
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
         body: JSON.stringify({ action: 'add', data: transaction }),
       });
-      return await response.json();
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        return { success: false, error: 'خطأ في معالجة البيانات من السيرفر' };
+      }
     } catch (error) {
       console.error('Error adding transaction:', error);
       return { success: false, error: 'خطأ في الاتصال. يرجى التأكد من نشر السكريبت بصلاحية "Anyone" وإعادة المحاولة.' };
@@ -42,9 +51,18 @@ export const gasService = {
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
         body: JSON.stringify({ action: 'report', filters }),
       });
-      return await response.json();
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        return null;
+      }
     } catch (error) {
       console.error('Error fetching report:', error);
       return null;
@@ -56,9 +74,18 @@ export const gasService = {
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
         body: JSON.stringify({ action: 'addEmployee', name }),
       });
-      return await response.json();
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        return { success: false, error: 'خطأ في معالجة البيانات' };
+      }
     } catch (error) {
       console.error('Error adding employee:', error);
       return { success: false, error: 'خطأ في الاتصال. يرجى التأكد من نشر السكريبت بصلاحية "Anyone".' };
