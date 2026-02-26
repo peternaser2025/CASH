@@ -9,7 +9,11 @@ export const gasService = {
   async getBalances(): Promise<EmployeeBalance[]> {
     if (!GAS_URL || GAS_URL.includes('...')) return [];
     try {
-      const response = await fetch(GAS_URL, { method: 'GET', cache: 'no-cache' });
+      // Use redirect: 'follow' which is crucial for Google Apps Script
+      const response = await fetch(GAS_URL, { 
+        method: 'GET',
+        redirect: 'follow'
+      });
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
       return data.map(([name, balance]: [string, number]) => ({ name, balance }));
@@ -24,14 +28,12 @@ export const gasService = {
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
-        mode: 'cors',
         body: JSON.stringify({ action: 'add', data: transaction }),
       });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       return await response.json();
     } catch (error) {
       console.error('Error adding transaction:', error);
-      return { success: false, error: 'خطأ في الاتصال بالسيرفر (Network Error). تأكد من نشر السكريبت كـ "Anyone".' };
+      return { success: false, error: 'خطأ في الاتصال. يرجى التأكد من نشر السكريبت بصلاحية "Anyone" وإعادة المحاولة.' };
     }
   },
 
@@ -40,10 +42,8 @@ export const gasService = {
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
-        mode: 'cors',
         body: JSON.stringify({ action: 'report', filters }),
       });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       return await response.json();
     } catch (error) {
       console.error('Error fetching report:', error);
@@ -56,14 +56,12 @@ export const gasService = {
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
-        mode: 'cors',
         body: JSON.stringify({ action: 'addEmployee', name }),
       });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       return await response.json();
     } catch (error) {
       console.error('Error adding employee:', error);
-      return { success: false, error: 'خطأ في الاتصال بالسيرفر (Network Error). يرجى التأكد من أن السكريبت منشور بصلاحية "Anyone".' };
+      return { success: false, error: 'خطأ في الاتصال. يرجى التأكد من نشر السكريبت بصلاحية "Anyone".' };
     }
   }
 };
