@@ -5,7 +5,11 @@ import { gasService } from '../services/gasService';
 import { ReportFilter, ReportData } from '../types';
 import { BRANCHES } from '../constants';
 
-export default function ReportViewer() {
+interface ReportViewerProps {
+  employees: string[];
+}
+
+export default function ReportViewer({ employees }: ReportViewerProps) {
   const [filters, setFilters] = useState<ReportFilter>({
     employee: '',
     branch: '',
@@ -53,13 +57,16 @@ export default function ReportViewer() {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
           <div className="space-y-2">
             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">الموظف</label>
-            <input
-              type="text"
-              placeholder="اسم الموظف..."
+            <select
               value={filters.employee}
               onChange={(e) => setFilters({ ...filters, employee: e.target.value })}
               className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
-            />
+            >
+              <option value="">اختر الموظف (الكل)</option>
+              {employees.map(emp => (
+                <option key={emp} value={emp}>{emp}</option>
+              ))}
+            </select>
           </div>
           <div className="space-y-2">
             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">الفرع</label>
@@ -125,7 +132,18 @@ export default function ReportViewer() {
           id="printable-report"
         >
           {/* Print Header */}
-          <div className="p-8 border-b border-gray-100 flex justify-between items-start">
+          <div className="hidden print:flex justify-between items-center mb-8 border-b-2 border-gray-900 pb-6">
+            <div className="text-right">
+              <h1 className="text-3xl font-black text-gray-900">كشف حساب مالي</h1>
+              <p className="text-sm font-bold text-gray-500">KWD Finance Pro - نظام إدارة العهد</p>
+            </div>
+            <div className="text-left">
+              <div className="w-16 h-16 bg-gray-900 rounded-lg flex items-center justify-center text-white font-black text-2xl mb-2">K</div>
+              <p className="text-[10px] text-gray-400">تاريخ التقرير: {new Date().toLocaleDateString('ar-KW')}</p>
+            </div>
+          </div>
+
+          <div className="p-8 border-b border-gray-100 flex justify-between items-start print:border-none print:p-0 print:mb-6">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">كشف حساب تفصيلي</h1>
               <p className="text-gray-500 mt-1">الموظف: {filters.employee || 'الكل'}</p>
@@ -137,28 +155,28 @@ export default function ReportViewer() {
             </div>
           </div>
 
-          <div className="p-8 bg-gray-50/50 flex justify-between items-center border-b border-gray-100">
+          <div className="p-8 bg-gray-50/50 flex justify-between items-center border-b border-gray-100 print:bg-white print:border-y print:border-gray-200 print:my-4">
             <div className="text-center">
-              <p className="text-xs font-bold text-gray-400 uppercase">الرصيد الافتتاحي</p>
+              <p className="text-xs font-bold text-gray-400 uppercase print:text-gray-600">الرصيد الافتتاحي</p>
               <p className="text-xl font-bold text-gray-900">{report.openingBalance} د.ك</p>
             </div>
-            <div className="h-8 w-px bg-gray-200"></div>
+            <div className="h-8 w-px bg-gray-200 print:bg-gray-300"></div>
             <div className="text-center">
-              <p className="text-xs font-bold text-gray-400 uppercase">إجمالي المدين</p>
+              <p className="text-xs font-bold text-gray-400 uppercase print:text-gray-600">إجمالي المدين</p>
               <p className="text-xl font-bold text-red-600">
                 {report.rows.reduce((acc, row) => acc + (row[6] || 0), 0).toFixed(3)} د.ك
               </p>
             </div>
-            <div className="h-8 w-px bg-gray-200"></div>
+            <div className="h-8 w-px bg-gray-200 print:bg-gray-300"></div>
             <div className="text-center">
-              <p className="text-xs font-bold text-gray-400 uppercase">إجمالي الدائن</p>
+              <p className="text-xs font-bold text-gray-400 uppercase print:text-gray-600">إجمالي الدائن</p>
               <p className="text-xl font-bold text-emerald-600">
                 {report.rows.reduce((acc, row) => acc + (row[5] || 0), 0).toFixed(3)} د.ك
               </p>
             </div>
-            <div className="h-8 w-px bg-gray-200"></div>
+            <div className="h-8 w-px bg-gray-200 print:bg-gray-300"></div>
             <div className="text-center">
-              <p className="text-xs font-bold text-gray-400 uppercase">الرصيد الختامي</p>
+              <p className="text-xs font-bold text-gray-400 uppercase print:text-gray-600">الرصيد الختامي</p>
               <p className="text-xl font-bold text-blue-600">{report.finalBalance} د.ك</p>
             </div>
           </div>
@@ -166,14 +184,14 @@ export default function ReportViewer() {
           <div className="overflow-x-auto">
             <table className="w-full text-right text-sm">
               <thead>
-                <tr className="bg-gray-50 text-gray-500 border-b border-gray-100">
+                <tr className="bg-gray-50 text-gray-500 border-b border-gray-100 print:bg-gray-100 print:text-gray-900">
                   <th className="px-6 py-4 font-bold">التاريخ</th>
                   <th className="px-6 py-4 font-bold">الفرع</th>
                   <th className="px-6 py-4 font-bold">النوع</th>
                   <th className="px-6 py-4 font-bold">التصنيف</th>
-                  <th className="px-6 py-4 font-bold text-emerald-600">وارد (+)</th>
-                  <th className="px-6 py-4 font-bold text-red-600">صادر (-)</th>
-                  <th className="px-6 py-4 font-bold bg-gray-100/50">الرصيد الجاري</th>
+                  <th className="px-6 py-4 font-bold text-emerald-600 print:text-emerald-800">وارد (+)</th>
+                  <th className="px-6 py-4 font-bold text-red-600 print:text-red-800">صادر (-)</th>
+                  <th className="px-6 py-4 font-bold bg-gray-100/50 print:bg-gray-200">الرصيد الجاري</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">

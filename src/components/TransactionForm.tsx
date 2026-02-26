@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Save, ArrowRightLeft, TrendingUp, TrendingDown, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { gasService } from '../services/gasService';
+import { TransactionType } from '../types';
 import { BRANCHES, CATEGORIES } from '../constants';
 
 interface TransactionFormProps {
@@ -113,14 +114,13 @@ export default function TransactionForm({ onComplete, employees }: TransactionFo
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-bold text-gray-700">الفرع</label>
+              <label className="text-sm font-bold text-gray-700">الفرع (اختياري)</label>
                 <select
-                  required
                   value={formData.branch}
                   onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
                   className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none"
                 >
-                  <option value="">اختر الفرع</option>
+                  <option value="">غير محدد / عام</option>
                   {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
                 </select>
             </div>

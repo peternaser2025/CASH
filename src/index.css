@@ -34,7 +34,32 @@
 
   @page {
     size: A4 landscape;
-    margin: 1cm;
+    margin: 1.5cm;
+  }
+
+  .print-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    border-bottom: 2px solid #1a1c1e !important;
+    padding-bottom: 1rem !important;
+    margin-bottom: 2rem !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  th, td {
+    border: 1px solid #e5e7eb !important;
+    padding: 8px !important;
+  }
+
+  th {
+    background-color: #f9fafb !important;
+    color: #111827 !important;
+    font-weight: bold !important;
   }
 }
 
