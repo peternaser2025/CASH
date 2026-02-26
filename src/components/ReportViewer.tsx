@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   FileText, 
   Filter, 
@@ -36,12 +36,46 @@ export default function ReportViewer({ employees }: ReportViewerProps) {
 
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleGenerate = async () => {
+    if (!filters.employee && !filters.branch) {
+      setError('يرجى اختيار موظف أو فرع على الأقل لتوليد التقرير');
+      return;
+    }
+
     setLoading(true);
-    const data = await gasService.getReport(filters);
-    setReport(data);
-    setLoading(false);
+    setError(null);
+    setReport(null);
+
+    try {
+      // Clean up filters: if type is 'All', send empty string
+      const cleanFilters = {
+        ...filters,
+        type: filters.type === 'All' ? '' : filters.type,
+        // Ensure dates are valid
+        startDate: filters.startDate || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
+        endDate: filters.endDate || new Date().toISOString().split('T')[0]
+      };
+
+      const data = await gasService.getReport(cleanFilters);
+      
+      if (!data) {
+        setError('لم يتم العثور على بيانات لهذا البحث. يرجى التأكد من اختيار الموظف الصحيح أو الفترة الزمنية.');
+      } else if (!Array.isArray(data.rows)) {
+        setError('تنسيق البيانات المستلمة غير صحيح. يرجى مراجعة السيرفر.');
+      } else {
+        setReport(data);
+        if (data.rows.length === 0) {
+          setError('لا توجد حركات مسجلة لهذا الموظف في هذه الفترة.');
+        }
+      }
+    } catch (err) {
+      setError('حدث خطأ غير متوقع أثناء جلب التقرير.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePrint = () => {
@@ -126,15 +160,29 @@ export default function ReportViewer({ employees }: ReportViewerProps) {
               className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
             />
           </div>
-          <div className="md:col-span-5 flex justify-end mt-2">
+          <div className="md:col-span-5 flex flex-col gap-4 mt-2">
             <button
               onClick={handleGenerate}
               disabled={loading}
-              className="flex items-center gap-2 px-8 py-3 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20 disabled:bg-gray-300"
+              className="flex items-center justify-center gap-2 px-8 py-3 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20 disabled:bg-gray-300"
             >
               {loading ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
               توليد الكشف
             </button>
+
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-800"
+                >
+                  <AlertCircle size={18} />
+                  <p className="text-xs font-black">{error}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
@@ -205,7 +253,12 @@ export default function ReportViewer({ employees }: ReportViewerProps) {
                 <p className="text-xs font-bold text-gray-400 uppercase">إجمالي الصادر</p>
               </div>
               <p className="text-2xl font-black text-red-600">
-                {report.rows.reduce((acc, row) => acc + (row[6] || 0), 0).toFixed(3)} <span className="text-sm font-medium text-gray-400">د.ك</span>
+                {report.rows.reduce((acc, row) => {
+                  const type = row[3] || '';
+                  const amount = parseFloat(row[6]) || 0;
+                  const isExpense = type.includes('Expense') || type.includes('Ex') || type.includes('صرف');
+                  return isExpense ? acc + Math.abs(amount) : acc;
+                }, 0).toFixed(3)} <span className="text-sm font-medium text-gray-400">د.ك</span>
               </p>
             </div>
 
@@ -217,7 +270,12 @@ export default function ReportViewer({ employees }: ReportViewerProps) {
                 <p className="text-xs font-bold text-gray-400 uppercase">إجمالي الوارد</p>
               </div>
               <p className="text-2xl font-black text-emerald-600">
-                {report.rows.reduce((acc, row) => acc + (row[5] || 0), 0).toFixed(3)} <span className="text-sm font-medium text-gray-400">د.ك</span>
+                {report.rows.reduce((acc, row) => {
+                  const type = row[3] || '';
+                  const amount = parseFloat(row[6]) || 0;
+                  const isIncome = type.includes('Income') || type.includes('In') || type.includes('توريد');
+                  return isIncome ? acc + amount : acc;
+                }, 0).toFixed(3)} <span className="text-sm font-medium text-gray-400">د.ك</span>
               </p>
             </div>
 
@@ -267,58 +325,66 @@ export default function ReportViewer({ employees }: ReportViewerProps) {
                     </td>
                   </tr>
                 ) : (
-                  report.rows.map((row, i) => (
-                    <tr key={i} className="hover:bg-gray-50/50 transition-colors group print:break-inside-avoid">
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col">
-                          <span className="font-mono font-bold text-gray-900">{row[0]}</span>
-                          <span className="text-[10px] text-gray-400 uppercase tracking-tighter">تاريخ العملية</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-gray-100 rounded-lg text-gray-500">
-                            <Building2 size={14} />
+                  report.rows.map((row, i) => {
+                    const type = row[3] || '';
+                    const amount = parseFloat(row[6]) || 0;
+                    const isIncome = type.includes('Income') || type.includes('In') || type.includes('توريد');
+                    const isExpense = type.includes('Expense') || type.includes('Ex') || type.includes('صرف');
+                    const isTransfer = type.includes('Transfer') || type.includes('تحويل');
+
+                    return (
+                      <tr key={i} className="hover:bg-gray-50/50 transition-all group print:break-inside-avoid">
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="font-mono font-bold text-gray-900">{row[0]}</span>
+                            <span className="text-[10px] text-gray-400 uppercase tracking-tighter">تاريخ العملية</span>
                           </div>
-                          <span className="font-medium">{row[2] || 'عام'}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                          row[3].includes('Income') || row[3].includes('In') 
-                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' 
-                            : row[3].includes('Transfer')
-                            ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                            : 'bg-red-100 text-red-700 border border-red-200'
-                        }`}>
-                          {row[3].includes('Income') || row[3].includes('In') ? <TrendingUp size={12} /> : row[3].includes('Transfer') ? <ArrowRightLeft size={12} /> : <TrendingDown size={12} />}
-                          {row[3]}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col">
-                          <span className="text-gray-900 font-medium">{row[4]}</span>
-                          <span className="text-[10px] text-gray-400 max-w-[200px] truncate">{row[5] || 'لا يوجد وصف إضافي'}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`font-black text-lg ${row[5] > 0 ? 'text-emerald-600' : 'text-gray-300'}`}>
-                          {row[5] > 0 ? `+${row[5].toFixed(3)}` : '0.000'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`font-black text-lg ${row[6] > 0 ? 'text-red-600' : 'text-gray-300'}`}>
-                          {row[6] > 0 ? `-${row[6].toFixed(3)}` : '0.000'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 bg-gray-50/50 group-hover:bg-emerald-50/30 transition-colors">
-                        <div className="flex flex-col items-end">
-                          <span className="font-black text-gray-900 font-mono">{row[7]}</span>
-                          <span className="text-[10px] text-gray-400 uppercase">د.ك</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <div className="p-1.5 bg-gray-100 rounded-lg text-gray-500">
+                              <Building2 size={14} />
+                            </div>
+                            <span className="font-medium">{row[2] || 'عام'}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                            isIncome 
+                              ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' 
+                              : isTransfer
+                              ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                              : 'bg-red-100 text-red-700 border border-red-200'
+                          }`}>
+                            {isIncome ? <TrendingUp size={12} /> : isTransfer ? <ArrowRightLeft size={12} /> : <TrendingDown size={12} />}
+                            {type}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-gray-900 font-medium">{row[4]}</span>
+                            <span className="text-[10px] text-gray-400 max-w-[200px] truncate">{row[5] || 'لا يوجد وصف إضافي'}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`font-black text-lg ${isIncome ? 'text-emerald-600' : 'text-gray-300'}`}>
+                            {isIncome ? `+${amount.toFixed(3)}` : '0.000'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`font-black text-lg ${isExpense ? 'text-red-600' : 'text-gray-300'}`}>
+                            {isExpense ? `-${Math.abs(amount).toFixed(3)}` : '0.000'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 bg-gray-50/50 group-hover:bg-emerald-50/30 transition-colors">
+                          <div className="flex flex-col items-end">
+                            <span className="font-black text-gray-900 font-mono">{parseFloat(row[7]).toFixed(3)}</span>
+                            <span className="text-[10px] text-gray-400 uppercase">د.ك</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

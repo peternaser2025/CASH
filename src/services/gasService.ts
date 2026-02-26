@@ -52,15 +52,34 @@ export const gasService = {
       const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
+        redirect: 'follow',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify({ action: 'report', filters }),
       });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const text = await response.text();
+      
+      // Check if the response is HTML (often an error page from Google)
+      if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+        console.error('Received HTML instead of JSON from GAS:', text.substring(0, 200));
+        return null;
+      }
+
       try {
-        return JSON.parse(text);
+        const data = JSON.parse(text);
+        // Ensure rows exists even if empty
+        if (data && !data.rows) {
+          data.rows = [];
+        }
+        return data;
       } catch (e) {
+        console.error('Failed to parse report JSON:', text);
         return null;
       }
     } catch (error) {
