@@ -30,7 +30,7 @@ export const formatFinancialAmount = (amount: number | string, type?: string): s
  */
 export const isIncomeType = (type: string): boolean => {
   const t = type.toLowerCase();
-  return t.includes('income') || t.includes('توريد') || t.includes('وارد') || t.includes('إيداع');
+  return t.includes('income') || t.includes('in') || t.includes('توريد') || t.includes('وارد') || t.includes('إيداع');
 };
 
 /**
@@ -38,7 +38,7 @@ export const isIncomeType = (type: string): boolean => {
  */
 export const isExpenseType = (type: string): boolean => {
   const t = type.toLowerCase();
-  return t.includes('expense') || t.includes('صرف') || t.includes('مصروف') || t.includes('سحب') || t.includes('مشتريات');
+  return t.includes('expense') || t.includes('out') || t.includes('صرف') || t.includes('مصروف') || t.includes('سحب') || t.includes('مشتريات');
 };
 
 /**

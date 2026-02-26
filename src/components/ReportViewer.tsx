@@ -310,9 +310,9 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                 <div className="flex items-baseline gap-2">
                   <p className="text-3xl font-black text-red-600">
                     {formatKWD(report.rows.reduce((acc, row) => {
-                      const type = String(row[3] || '');
-                      const amount = Math.abs(parseFloat(row[6]) || 0);
-                      return isExpenseType(type) || isTransferType(type) ? acc + amount : acc;
+                      const type = String(row[4] || ''); // Type is at index 4
+                      const amount = Math.abs(parseFloat(row[6]) || 0); // Amount is at index 6
+                      return isExpenseType(type) ? acc + amount : acc;
                     }, 0))}
                   </p>
                   <span className="text-xs font-bold text-gray-400">د.ك</span>
@@ -329,8 +329,8 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                 <div className="flex items-baseline gap-2">
                   <p className="text-3xl font-black text-emerald-600">
                     {formatKWD(report.rows.reduce((acc, row) => {
-                      const type = String(row[3] || '');
-                      const amount = Math.abs(parseFloat(row[6]) || 0);
+                      const type = String(row[4] || ''); // Type is at index 4
+                      const amount = Math.abs(parseFloat(row[6]) || 0); // Amount is at index 6
                       return isIncomeType(type) ? acc + amount : acc;
                     }, 0))}
                   </p>
@@ -386,9 +386,14 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                     </tr>
                   ) : (
                     report.rows.map((row, i) => {
-                      const typeStr = String(row[3] || '');
-                      const category = String(row[4] || '');
+                      const date = String(row[1] || '');
+                      const branch = String(row[3] || 'عام');
+                      const typeStr = String(row[4] || '');
+                      const category = String(row[5] || '');
                       const amount = Math.abs(parseFloat(row[6]) || 0);
+                      const description = String(row[7] || '-');
+                      // Balance is usually the last column added by GAS
+                      const balance = row[row.length - 1];
                       
                       const isIncome = isIncomeType(typeStr);
                       const isExpense = isExpenseType(typeStr);
@@ -397,12 +402,12 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                       return (
                         <tr key={i} className="hover:bg-gray-50/80 transition-all group print:break-inside-avoid">
                           <td className="px-6 py-6">
-                            <span className="font-mono font-black text-gray-900 text-base">{row[0]}</span>
+                            <span className="font-mono font-black text-gray-900 text-base">{date}</span>
                           </td>
                           <td className="px-6 py-6">
                             <div className="flex items-center gap-2">
                               <Building2 size={14} className="text-gray-300" />
-                              <span className="font-bold text-gray-700">{row[2] || 'عام'}</span>
+                              <span className="font-bold text-gray-700">{branch}</span>
                             </div>
                           </td>
                           <td className="px-6 py-6">
@@ -415,7 +420,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                                   : 'bg-red-50 text-red-700 border-red-100'
                               }`}>
                                 {isIncome ? <TrendingUp size={12} /> : isTransfer ? <ArrowRightLeft size={12} /> : <TrendingDown size={12} />}
-                                {row[3]}
+                                {typeStr}
                               </div>
                               <span className="text-[11px] font-black text-gray-400 uppercase tracking-tighter flex items-center gap-1">
                                 <Info size={10} />
@@ -424,7 +429,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                             </div>
                           </td>
                           <td className="px-6 py-6">
-                            <p className="text-gray-900 font-bold text-xs leading-relaxed max-w-[300px]">{row[5] || '-'}</p>
+                            <p className="text-gray-900 font-bold text-xs leading-relaxed max-w-[300px]">{description}</p>
                           </td>
                           <td className="px-6 py-6">
                             <span className={`font-black text-lg ${isIncome ? 'text-emerald-600' : 'text-gray-200'}`}>
@@ -432,13 +437,13 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                             </span>
                           </td>
                           <td className="px-6 py-6">
-                            <span className={`font-black text-lg ${(isExpense || isTransfer) ? 'text-red-600' : 'text-gray-200'}`}>
-                              {(isExpense || isTransfer) ? `-${amount.toFixed(3)}` : '0.000'}
+                            <span className={`font-black text-lg ${isExpense ? 'text-red-600' : 'text-gray-200'}`}>
+                              {isExpense ? `-${amount.toFixed(3)}` : '0.000'}
                             </span>
                           </td>
                           <td className="px-6 py-6 bg-gray-50/30 group-hover:bg-emerald-50/50 transition-colors print:bg-gray-100">
                             <div className="flex flex-col items-end">
-                              <span className="font-black text-gray-900 font-mono text-lg">{formatKWD(row[7])}</span>
+                              <span className="font-black text-gray-900 font-mono text-lg">{formatKWD(balance)}</span>
                               <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">KWD</span>
                             </div>
                           </td>
