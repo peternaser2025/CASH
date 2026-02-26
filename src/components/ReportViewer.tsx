@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { FileText, Filter, Printer, Download, Search, Loader2 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { ReportFilter, ReportData } from '../types';
+import { BRANCHES } from '../constants';
 
 export default function ReportViewer() {
   const [filters, setFilters] = useState<ReportFilter>({
@@ -26,8 +27,6 @@ export default function ReportViewer() {
   const handlePrint = () => {
     window.print();
   };
-
-  const branches = ['حولي', 'السالمية', 'العاصمة', 'الفروانية', 'الجهراء', 'الأحمدي'];
 
   return (
     <div className="space-y-8">
@@ -70,7 +69,7 @@ export default function ReportViewer() {
               className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
             >
               <option value="">الكل</option>
-              {branches.map(b => <option key={b} value={b}>{b}</option>)}
+              {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
           </div>
           <div className="space-y-2">
