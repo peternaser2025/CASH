@@ -378,8 +378,8 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                     </tr>
                   ) : (
                     report.rows.map((row, i) => {
-                      // ترتيب الأعمدة المتوقع:
-                      // 0: Date, 1: Employee, 2: Branch, 3: Type, 4: Category, 5: Income, 6: Expense, 7: Balance, 8: Description
+                      // ترتيب الأعمدة الصارم المتوقع من السيرفر:
+                      // 0: التاريخ، 1: الموظف، 2: الفرع، 3: النوع، 4: التصنيف، 5: وارد، 6: صادر، 7: الرصيد، 8: البيان (الوصف)
                       const date = String(row[0] || '');
                       const employee = String(row[1] || '');
                       const branch = String(row[2] || 'عام');
@@ -389,8 +389,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                       const expense = parseFloat(row[6]) || 0;
                       const balance = row[7];
                       
-                      // إذا كان طول الصف 9، فالبيان في الـ index 8
-                      // إذا كان طول الصف أقل، فقد يكون البيان مفقوداً من السيرفر
+                      // قراءة البيان من العمود رقم 9 (Index 8)
                       const description = row.length > 8 ? String(row[8] || '-') : '-';
                       
                       const isIncome = income > 0;
@@ -426,7 +425,10 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                                 <Info size={10} />
                                 {category}
                               </span>
-                              <p className="text-gray-900 font-bold text-[11px] leading-relaxed max-w-[300px]">{description}</p>
+                              {/* هنا يظهر البيان / الوصف التفصيلي بخط واضح */}
+                              <p className="text-gray-900 font-black text-xs leading-relaxed max-w-[350px] bg-gray-50/50 p-1 rounded">
+                                {description}
+                              </p>
                             </div>
                           </td>
                           <td className="px-4 py-4 text-center">
