@@ -14,6 +14,7 @@ import {
   User, 
   Building2, 
   ArrowRightLeft, 
+  ArrowRight,
   CheckCircle2, 
   AlertCircle,
   ChevronDown,
@@ -243,7 +244,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                 </div>
               </div>
               
-              <div className="grid grid-cols-2 gap-8 mt-8 p-6 bg-gray-50 rounded-2xl border border-gray-100">
+              <div className="grid grid-cols-3 gap-8 mt-8 p-6 bg-gray-50 rounded-2xl border border-gray-100">
                 <div className="space-y-2">
                   <p className="text-xs font-black text-gray-400 uppercase">بيانات الحساب</p>
                   <p className="text-lg font-black text-gray-900">الموظف: <span className="text-emerald-600">{filters.employee || 'كافة الموظفين'}</span></p>
@@ -253,6 +254,10 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                   <p className="text-xs font-black text-gray-400 uppercase">الفترة الزمنية</p>
                   <p className="text-lg font-black text-gray-900">من: {filters.startDate}</p>
                   <p className="text-lg font-black text-gray-900">إلى: {filters.endDate}</p>
+                </div>
+                <div className="space-y-2 bg-emerald-600 p-4 rounded-xl text-white shadow-lg shadow-emerald-200">
+                  <p className="text-[10px] font-black opacity-80 uppercase">الرصيد الافتتاحي</p>
+                  <p className="text-xl font-black">{formatKWD(report.openingBalance)} د.ك</p>
                 </div>
               </div>
             </div>
@@ -362,6 +367,31 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 print:divide-y-2 print:divide-gray-200">
+                  {/* سطر الرصيد الافتتاحي - أول سطر في كشف الحساب */}
+                  {report && report.openingBalance !== undefined && (
+                    <tr className="bg-emerald-50/30 font-black print:bg-gray-50 border-b-2 border-emerald-100">
+                      <td className="px-4 py-4 text-center text-gray-400 font-mono text-xs">---</td>
+                      <td className="px-4 py-4 text-center text-gray-400 text-[10px]">---</td>
+                      <td className="px-4 py-4">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <Wallet size={12} />
+                          رصيد افتتاحي
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] font-black text-emerald-600 uppercase tracking-tighter">INITIAL BALANCE</span>
+                          <p className="text-gray-500 text-[11px] font-bold">الرصيد المتوفر في العهدة قبل تاريخ {filters.startDate}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-center text-gray-300 font-mono">0.000</td>
+                      <td className="px-4 py-4 text-center text-gray-300 font-mono">0.000</td>
+                      <td className="px-4 py-4 bg-emerald-50/50 text-center border-l border-emerald-100">
+                        <span className="font-black text-gray-900 font-mono text-sm">{formatKWD(report.openingBalance)}</span>
+                      </td>
+                    </tr>
+                  )}
+
                   {(!report.rows || report.rows.length === 0) ? (
                     <tr>
                       <td colSpan={7} className="px-6 py-24 text-center text-gray-400">
@@ -381,7 +411,6 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                       // ترتيب الأعمدة الصارم المتوقع من السيرفر:
                       // 0: التاريخ، 1: الموظف، 2: الفرع، 3: النوع، 4: التصنيف، 5: وارد، 6: صادر، 7: الرصيد، 8: البيان (الوصف)
                       const date = String(row[0] || '');
-                      const employee = String(row[1] || '');
                       const branch = String(row[2] || 'عام');
                       const typeStr = String(row[3] || '');
                       const category = String(row[4] || '');
@@ -401,11 +430,8 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                           <td className="px-4 py-4 text-center">
                             <span className="font-mono font-black text-gray-900 text-sm">{date}</span>
                           </td>
-                          <td className="px-4 py-4">
-                            <div className="flex flex-col">
-                              <span className="font-bold text-gray-900 text-xs">{employee}</span>
-                              <span className="text-[10px] text-gray-400">{branch}</span>
-                            </div>
+                          <td className="px-4 py-4 text-center">
+                            <span className="font-bold text-gray-500 text-[10px]">{branch}</span>
                           </td>
                           <td className="px-4 py-4">
                             <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider w-fit border ${
@@ -441,7 +467,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                               {expense > 0 ? `-${expense.toFixed(3)}` : '0.000'}
                             </span>
                           </td>
-                          <td className="px-4 py-4 bg-gray-50/30 group-hover:bg-emerald-50/50 transition-colors print:bg-gray-50 text-center">
+                          <td className="px-4 py-4 bg-gray-50/30 group-hover:bg-emerald-50/50 transition-colors print:bg-gray-50 text-center border-l border-gray-100">
                             <div className="flex flex-col items-center">
                               <span className="font-black text-gray-900 font-mono text-sm">{formatKWD(balance)}</span>
                             </div>
@@ -456,6 +482,25 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
 
             {/* Footer for Print - Formal Signatures */}
             <div className="p-16 hidden print:block border-t-4 border-emerald-600 mt-12 bg-gray-50 rounded-b-[3rem]">
+              <div className="grid grid-cols-3 gap-8 mb-12">
+                <div className="bg-white p-6 rounded-2xl border-2 border-gray-100 text-center">
+                  <p className="text-[10px] font-black text-gray-400 uppercase mb-2">إجمالي الوارد (+)</p>
+                  <p className="text-2xl font-black text-emerald-600">
+                    {formatKWD(report.rows.reduce((acc, row) => acc + (parseFloat(row[5]) || 0), 0))}
+                  </p>
+                </div>
+                <div className="bg-white p-6 rounded-2xl border-2 border-gray-100 text-center">
+                  <p className="text-[10px] font-black text-gray-400 uppercase mb-2">إجمالي الصادر (-)</p>
+                  <p className="text-2xl font-black text-red-600">
+                    {formatKWD(report.rows.reduce((acc, row) => acc + (parseFloat(row[6]) || 0), 0))}
+                  </p>
+                </div>
+                <div className="bg-emerald-600 p-6 rounded-2xl text-white text-center shadow-lg shadow-emerald-200">
+                  <p className="text-[10px] font-black opacity-80 uppercase mb-2">الصافي النهائي</p>
+                  <p className="text-2xl font-black">{formatKWD(report.finalBalance)}</p>
+                </div>
+              </div>
+
               <div className="grid grid-cols-3 gap-16 text-center">
                 <div className="space-y-8">
                   <div className="h-1 bg-gray-200 w-full rounded-full"></div>
