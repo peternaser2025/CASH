@@ -386,7 +386,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                     </tr>
                   ) : (
                     report.rows.map((row, i) => {
-                      // ترتيب الأعمدة بناءً على مخرجات السيرفر المحدثة:
+                      // ترتيب الأعمدة المتوقع:
                       // 0: Date, 1: Employee, 2: Branch, 3: Type, 4: Category, 5: Income, 6: Expense, 7: Balance, 8: Description
                       const date = String(row[0] || '');
                       const employee = String(row[1] || '');
@@ -396,7 +396,10 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                       const income = parseFloat(row[5]) || 0;
                       const expense = parseFloat(row[6]) || 0;
                       const balance = row[7];
-                      const description = String(row[8] || '-');
+                      
+                      // إذا كان طول الصف 9، فالبيان في الـ index 8
+                      // إذا كان طول الصف أقل، فقد يكون البيان مفقوداً من السيرفر
+                      const description = row.length > 8 ? String(row[8] || '-') : '-';
                       
                       const isIncome = income > 0;
                       const isExpense = expense > 0;
