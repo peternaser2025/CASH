@@ -409,22 +409,25 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                             </div>
                           </td>
                           <td className="px-4 py-4">
-                            <div className="flex flex-col gap-1">
-                              <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider w-fit border ${
-                                isIncome 
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
-                                  : isTransfer
-                                  ? 'bg-blue-50 text-blue-700 border-blue-100'
-                                  : 'bg-red-50 text-red-700 border-red-100'
-                              }`}>
-                                {isIncome ? <TrendingUp size={10} /> : isTransfer ? <ArrowRightLeft size={10} /> : <TrendingDown size={10} />}
-                                {typeStr}
-                              </div>
-                              <span className="text-[10px] font-bold text-gray-400">{category}</span>
+                            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider w-fit border ${
+                              isIncome 
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                                : isTransfer
+                                ? 'bg-blue-50 text-blue-700 border-blue-100'
+                                : 'bg-red-50 text-red-700 border-red-100'
+                            }`}>
+                              {isIncome ? <TrendingUp size={12} /> : isTransfer ? <ArrowRightLeft size={12} /> : <TrendingDown size={12} />}
+                              {typeStr}
                             </div>
                           </td>
                           <td className="px-4 py-4">
-                            <p className="text-gray-900 font-bold text-[11px] leading-relaxed max-w-[250px]">{description}</p>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-tighter flex items-center gap-1">
+                                <Info size={10} />
+                                {category}
+                              </span>
+                              <p className="text-gray-900 font-bold text-[11px] leading-relaxed max-w-[300px]">{description}</p>
+                            </div>
                           </td>
                           <td className="px-4 py-4 text-center">
                             <span className={`font-black text-sm ${isIncome ? 'text-emerald-600' : 'text-gray-200'}`}>
