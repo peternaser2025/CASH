@@ -309,11 +309,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                 </div>
                 <div className="flex items-baseline gap-2">
                   <p className="text-3xl font-black text-red-600">
-                    {formatKWD(report.rows.reduce((acc, row) => {
-                      const type = String(row[4] || ''); // Type is at index 4
-                      const amount = Math.abs(parseFloat(row[6]) || 0); // Amount is at index 6
-                      return isExpenseType(type) ? acc + amount : acc;
-                    }, 0))}
+                    {formatKWD(report.rows.reduce((acc, row) => acc + (parseFloat(row[6]) || 0), 0))}
                   </p>
                   <span className="text-xs font-bold text-gray-400">د.ك</span>
                 </div>
@@ -328,11 +324,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                 </div>
                 <div className="flex items-baseline gap-2">
                   <p className="text-3xl font-black text-emerald-600">
-                    {formatKWD(report.rows.reduce((acc, row) => {
-                      const type = String(row[4] || ''); // Type is at index 4
-                      const amount = Math.abs(parseFloat(row[6]) || 0); // Amount is at index 6
-                      return isIncomeType(type) ? acc + amount : acc;
-                    }, 0))}
+                    {formatKWD(report.rows.reduce((acc, row) => acc + (parseFloat(row[5]) || 0), 0))}
                   </p>
                   <span className="text-xs font-bold text-gray-400">د.ك</span>
                 </div>
