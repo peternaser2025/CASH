@@ -386,65 +386,64 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                     </tr>
                   ) : (
                     report.rows.map((row, i) => {
-                      const date = String(row[1] || '');
-                      const branch = String(row[3] || 'عام');
-                      const typeStr = String(row[4] || '');
-                      const category = String(row[5] || '');
-                      const amount = Math.abs(parseFloat(row[6]) || 0);
-                      const description = String(row[7] || '-');
-                      // Balance is usually the last column added by GAS
-                      const balance = row[row.length - 1];
+                      // ترتيب الأعمدة بناءً على مخرجات السيرفر المحدثة:
+                      // 0: Date, 1: Employee, 2: Branch, 3: Type, 4: Category, 5: Income, 6: Expense, 7: Balance, 8: Description
+                      const date = String(row[0] || '');
+                      const employee = String(row[1] || '');
+                      const branch = String(row[2] || 'عام');
+                      const typeStr = String(row[3] || '');
+                      const category = String(row[4] || '');
+                      const income = parseFloat(row[5]) || 0;
+                      const expense = parseFloat(row[6]) || 0;
+                      const balance = row[7];
+                      const description = String(row[8] || '-');
                       
-                      const isIncome = isIncomeType(typeStr);
-                      const isExpense = isExpenseType(typeStr);
+                      const isIncome = income > 0;
+                      const isExpense = expense > 0;
                       const isTransfer = isTransferType(typeStr);
 
                       return (
-                        <tr key={i} className="hover:bg-gray-50/80 transition-all group print:break-inside-avoid">
-                          <td className="px-6 py-6">
-                            <span className="font-mono font-black text-gray-900 text-base">{date}</span>
+                        <tr key={i} className="hover:bg-gray-50/80 transition-all group print:break-inside-avoid border-b border-gray-100 print:border-gray-300">
+                          <td className="px-4 py-4 text-center">
+                            <span className="font-mono font-black text-gray-900 text-sm">{date}</span>
                           </td>
-                          <td className="px-6 py-6">
-                            <div className="flex items-center gap-2">
-                              <Building2 size={14} className="text-gray-300" />
-                              <span className="font-bold text-gray-700">{branch}</span>
+                          <td className="px-4 py-4">
+                            <div className="flex flex-col">
+                              <span className="font-bold text-gray-900 text-xs">{employee}</span>
+                              <span className="text-[10px] text-gray-400">{branch}</span>
                             </div>
                           </td>
-                          <td className="px-6 py-6">
-                            <div className="flex flex-col gap-2">
-                              <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider w-fit border ${
+                          <td className="px-4 py-4">
+                            <div className="flex flex-col gap-1">
+                              <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider w-fit border ${
                                 isIncome 
                                   ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
                                   : isTransfer
                                   ? 'bg-blue-50 text-blue-700 border-blue-100'
                                   : 'bg-red-50 text-red-700 border-red-100'
                               }`}>
-                                {isIncome ? <TrendingUp size={12} /> : isTransfer ? <ArrowRightLeft size={12} /> : <TrendingDown size={12} />}
+                                {isIncome ? <TrendingUp size={10} /> : isTransfer ? <ArrowRightLeft size={10} /> : <TrendingDown size={10} />}
                                 {typeStr}
                               </div>
-                              <span className="text-[11px] font-black text-gray-400 uppercase tracking-tighter flex items-center gap-1">
-                                <Info size={10} />
-                                {category}
-                              </span>
+                              <span className="text-[10px] font-bold text-gray-400">{category}</span>
                             </div>
                           </td>
-                          <td className="px-6 py-6">
-                            <p className="text-gray-900 font-bold text-xs leading-relaxed max-w-[300px]">{description}</p>
+                          <td className="px-4 py-4">
+                            <p className="text-gray-900 font-bold text-[11px] leading-relaxed max-w-[250px]">{description}</p>
                           </td>
-                          <td className="px-6 py-6">
-                            <span className={`font-black text-lg ${isIncome ? 'text-emerald-600' : 'text-gray-200'}`}>
-                              {isIncome ? `+${amount.toFixed(3)}` : '0.000'}
+                          <td className="px-4 py-4 text-center">
+                            <span className={`font-black text-sm ${isIncome ? 'text-emerald-600' : 'text-gray-200'}`}>
+                              {income > 0 ? `+${income.toFixed(3)}` : '0.000'}
                             </span>
                           </td>
-                          <td className="px-6 py-6">
-                            <span className={`font-black text-lg ${isExpense ? 'text-red-600' : 'text-gray-200'}`}>
-                              {isExpense ? `-${amount.toFixed(3)}` : '0.000'}
+                          <td className="px-4 py-4 text-center">
+                            <span className={`font-black text-sm ${isExpense ? 'text-red-600' : 'text-gray-200'}`}>
+                              {expense > 0 ? `-${expense.toFixed(3)}` : '0.000'}
                             </span>
                           </td>
-                          <td className="px-6 py-6 bg-gray-50/30 group-hover:bg-emerald-50/50 transition-colors print:bg-gray-100">
-                            <div className="flex flex-col items-end">
-                              <span className="font-black text-gray-900 font-mono text-lg">{formatKWD(balance)}</span>
-                              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">KWD</span>
+                          <td className="px-4 py-4 bg-gray-50/30 group-hover:bg-emerald-50/50 transition-colors print:bg-gray-50 text-center">
+                            <div className="flex flex-col items-center">
+                              <span className="font-black text-gray-900 font-mono text-sm">{formatKWD(balance)}</span>
                             </div>
                           </td>
                         </tr>
