@@ -42,6 +42,29 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [printSettings, setPrintSettings] = useState({
+    margins: 'narrow' as 'none' | 'narrow' | 'normal' | 'wide',
+    fontSize: 'normal' as 'small' | 'normal' | 'large',
+    showSummary: true
+  });
+  const [showPrintConfig, setShowPrintConfig] = useState(false);
+
+  const getPageMargins = () => {
+    switch (printSettings.margins) {
+      case 'none': return '0';
+      case 'narrow': return '5mm';
+      case 'wide': return '20mm';
+      default: return '10mm';
+    }
+  };
+
+  const getFontSize = () => {
+    switch (printSettings.fontSize) {
+      case 'small': return '8px';
+      case 'large': return '12px';
+      default: return '10px';
+    }
+  };
 
   const handleGenerate = async () => {
     if (!filters.employee && !filters.branch) {
@@ -94,14 +117,73 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
           <p className="text-gray-500 mt-2 font-medium">استخراج كشوف حساب تفصيلية وتحليل حركة العهد</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={handlePrint}
-            disabled={!report}
-            className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-200 rounded-2xl hover:bg-gray-50 transition-all shadow-sm font-bold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Printer size={18} />
-            طباعة الكشف
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowPrintConfig(!showPrintConfig)}
+              disabled={!report}
+              className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-200 rounded-2xl hover:bg-gray-50 transition-all shadow-sm font-bold text-gray-700 disabled:opacity-50"
+            >
+              <Printer size={18} />
+              إعدادات الطباعة
+            </button>
+
+            <AnimatePresence>
+              {showPrintConfig && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                  className="absolute left-0 top-full mt-2 w-72 bg-white border border-gray-100 shadow-2xl rounded-3xl p-6 z-50 space-y-4"
+                >
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">حجم الهوامش</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(['none', 'narrow', 'normal', 'wide'] as const).map(m => (
+                        <button
+                          key={m}
+                          onClick={() => setPrintSettings({ ...printSettings, margins: m })}
+                          className={`px-3 py-2 rounded-xl text-[10px] font-bold border transition-all ${
+                            printSettings.margins === m ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-gray-50 border-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {m === 'none' ? 'بدون' : m === 'narrow' ? 'ضيقة' : m === 'normal' ? 'عادية' : 'واسعة'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">حجم الخط</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['small', 'normal', 'large'] as const).map(s => (
+                        <button
+                          key={s}
+                          onClick={() => setPrintSettings({ ...printSettings, fontSize: s })}
+                          className={`px-3 py-2 rounded-xl text-[10px] font-bold border transition-all ${
+                            printSettings.fontSize === s ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-gray-50 border-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {s === 'small' ? 'صغير' : s === 'normal' ? 'متوسط' : 'كبير'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-gray-50">
+                    <button
+                      onClick={() => {
+                        setShowPrintConfig(false);
+                        handlePrint();
+                      }}
+                      className="w-full py-3 bg-emerald-600 text-white rounded-xl font-black text-sm shadow-lg shadow-emerald-600/20 active:scale-95 transition-all"
+                    >
+                      بدء الطباعة الآن
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
           <button
             disabled={!report}
             className="flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-2xl hover:bg-gray-800 transition-all shadow-lg shadow-gray-900/20 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
@@ -224,9 +306,28 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl shadow-gray-200/40 overflow-hidden print:shadow-none print:border-none"
+            className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl shadow-gray-200/40 overflow-hidden print:shadow-none print:border-none print:overflow-visible"
             id="printable-report"
           >
+            <style dangerouslySetInnerHTML={{ __html: `
+              @media print {
+                @page {
+                  margin: ${getPageMargins()};
+                  size: A4 portrait;
+                }
+                body {
+                  -webkit-print-color-adjust: exact;
+                  print-color-adjust: exact;
+                }
+                #printable-report {
+                  font-size: ${getFontSize()};
+                }
+                .print-compact-row {
+                  padding-top: 2px !important;
+                  padding-bottom: 2px !important;
+                }
+              }
+            ` }} />
             {/* Print Header - Formal Accounting Style */}
             <div className="hidden print:block mb-6">
               <div className="flex justify-between items-center border-b-2 border-emerald-600 pb-4">
@@ -427,14 +528,14 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
 
                       return (
                         <tr key={i} className="hover:bg-gray-50/80 transition-all group print:break-inside-avoid border-b border-gray-100 print:border-gray-300">
-                          <td className="px-4 py-4 print:px-2 print:py-1.5 text-center">
-                            <span className="font-mono font-black text-gray-900 text-sm print:text-[10px]">{date}</span>
+                          <td className="px-4 py-4 print:px-2 print:py-1 text-center print-compact-row">
+                            <span className="font-mono font-black text-gray-900 text-sm print:text-[9px]">{date}</span>
                           </td>
-                          <td className="px-4 py-4 print:px-2 print:py-1.5 text-center">
-                            <span className="font-bold text-gray-500 text-[10px] print:text-[8px]">{branch}</span>
+                          <td className="px-4 py-4 print:px-2 print:py-1 text-center print-compact-row">
+                            <span className="font-bold text-gray-500 text-[10px] print:text-[7px]">{branch}</span>
                           </td>
-                          <td className="px-4 py-4 print:px-2 print:py-1.5">
-                            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-xl text-[10px] print:text-[8px] font-black uppercase tracking-wider w-fit border print:px-1.5 print:py-0.5 ${
+                          <td className="px-4 py-4 print:px-2 print:py-1 print-compact-row">
+                            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-xl text-[10px] print:text-[7px] font-black uppercase tracking-wider w-fit border print:px-1 print:py-0 ${
                               isIncome 
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
                                 : isTransfer
@@ -445,31 +546,31 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                               {typeStr}
                             </div>
                           </td>
-                          <td className="px-4 py-4 print:px-2 print:py-1.5">
+                          <td className="px-4 py-4 print:px-2 print:py-1 print-compact-row">
                             <div className="flex flex-col gap-1">
-                              <span className="text-[10px] print:text-[8px] font-black text-emerald-600 uppercase tracking-tighter flex items-center gap-1">
+                              <span className="text-[10px] print:text-[7px] font-black text-emerald-600 uppercase tracking-tighter flex items-center gap-1">
                                 <Info size={10} className="print:w-2 print:h-2" />
                                 {category}
                               </span>
                               {/* هنا يظهر البيان / الوصف التفصيلي بخط واضح */}
-                              <p className="text-gray-900 font-black text-xs print:text-[9px] leading-relaxed max-w-[350px] bg-gray-50/50 p-1 rounded">
+                              <p className="text-gray-900 font-black text-xs print:text-[8px] leading-tight max-w-[350px] bg-gray-50/50 p-1 rounded print:bg-transparent print:p-0">
                                 {description}
                               </p>
                             </div>
                           </td>
-                          <td className="px-4 py-4 print:px-2 print:py-1.5 text-center">
-                            <span className={`font-black text-sm print:text-[10px] ${isIncome ? 'text-emerald-600' : 'text-gray-200'}`}>
+                          <td className="px-4 py-4 print:px-2 print:py-1 text-center print-compact-row">
+                            <span className={`font-black text-sm print:text-[9px] ${isIncome ? 'text-emerald-600' : 'text-gray-200'}`}>
                               {income > 0 ? `+${income.toFixed(3)}` : '0.000'}
                             </span>
                           </td>
-                          <td className="px-4 py-4 print:px-2 print:py-1.5 text-center">
-                            <span className={`font-black text-sm print:text-[10px] ${isExpense ? 'text-red-600' : 'text-gray-200'}`}>
+                          <td className="px-4 py-4 print:px-2 print:py-1 text-center print-compact-row">
+                            <span className={`font-black text-sm print:text-[9px] ${isExpense ? 'text-red-600' : 'text-gray-200'}`}>
                               {expense > 0 ? `-${expense.toFixed(3)}` : '0.000'}
                             </span>
                           </td>
-                          <td className="px-4 py-4 print:px-2 print:py-1.5 bg-gray-50/30 group-hover:bg-emerald-50/50 transition-colors print:bg-gray-50 text-center border-l border-gray-100">
+                          <td className="px-4 py-4 print:px-2 print:py-1 bg-gray-50/30 group-hover:bg-emerald-50/50 transition-colors print:bg-gray-50 text-center border-l border-gray-100 print-compact-row">
                             <div className="flex flex-col items-center">
-                              <span className="font-black text-gray-900 font-mono text-sm print:text-[10px]">{formatKWD(balance)}</span>
+                              <span className="font-black text-gray-900 font-mono text-sm print:text-[9px]">{formatKWD(balance)}</span>
                             </div>
                           </td>
                         </tr>
