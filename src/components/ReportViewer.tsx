@@ -342,8 +342,8 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                   align-items: center !important;
                 }
                 .print-compact-row {
-                  padding-top: 6px !important;
-                  padding-bottom: 6px !important;
+                  padding-top: 4px !important;
+                  padding-bottom: 4px !important;
                 }
                 table {
                   border-collapse: collapse !important;
@@ -352,12 +352,17 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                   border: 2px solid #000 !important;
                   table-layout: auto !important;
                 }
+                tr {
+                  page-break-inside: avoid !important;
+                  break-inside: avoid !important;
+                }
                 th, td {
                   border: 1px solid #000 !important;
                   color: black !important;
                   background: transparent !important;
-                  padding: 8px 4px !important;
+                  padding: 4px 2px !important;
                   text-align: right !important;
+                  word-wrap: break-word !important;
                 }
                 thead tr {
                   border-bottom: 2px solid #000 !important;
