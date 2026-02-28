@@ -59,7 +59,7 @@
   table {
     width: 100% !important;
     border-collapse: collapse !important;
-    table-layout: fixed;
+    table-layout: auto;
   }
 
   th, td {

@@ -314,7 +314,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
               @media print {
                 @page {
                   margin: ${getPageMargins()};
-                  size: A4 portrait;
+                  size: A4 landscape;
                 }
                 body {
                   background: white !important;
@@ -350,6 +350,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                   width: 100% !important;
                   margin: 0 auto !important;
                   border: 2px solid #000 !important;
+                  table-layout: auto !important;
                 }
                 th, td {
                   border: 1px solid #000 !important;
