@@ -73,6 +73,10 @@ export const gasService = {
 
       try {
         const data = JSON.parse(text);
+        if (data && data.error) {
+          console.error('GAS Error:', data.error);
+          return null;
+        }
         // Ensure rows exists even if empty
         if (data && !data.rows) {
           data.rows = [];
