@@ -45,6 +45,8 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
   const [printSettings, setPrintSettings] = useState({
     margins: 'narrow' as 'none' | 'narrow' | 'normal' | 'wide',
     fontSize: 'normal' as 'small' | 'normal' | 'large',
+    orientation: 'landscape' as 'portrait' | 'landscape',
+    scale: 100,
     showSummary: true
   });
   const [showPrintConfig, setShowPrintConfig] = useState(false);
@@ -60,9 +62,9 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
 
   const getFontSize = () => {
     switch (printSettings.fontSize) {
-      case 'small': return '8px';
-      case 'large': return '12px';
-      default: return '10px';
+      case 'small': return '7pt';
+      case 'large': return '11pt';
+      default: return '9pt';
     }
   };
 
@@ -124,7 +126,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
             تحليل دقيق وشامل لكافة الحركات المالية والعهد النقدية بنظام التدقيق الموحد.
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 relative">
           <button
             onClick={() => setShowPrintConfig(!showPrintConfig)}
             disabled={!report}
@@ -133,6 +135,110 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
             <Printer size={18} className="group-hover:rotate-12 transition-transform" />
             تخصيص الطباعة
           </button>
+
+          <AnimatePresence>
+            {showPrintConfig && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="absolute left-0 top-full mt-4 w-80 bg-white border-2 border-gray-900 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] rounded-3xl p-6 z-50 space-y-6"
+              >
+                <div className="space-y-3">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">حجم الهوامش (Margins)</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['none', 'narrow', 'normal', 'wide'] as const).map(m => (
+                      <button
+                        key={m}
+                        onClick={() => setPrintSettings({ ...printSettings, margins: m })}
+                        className={`px-3 py-2 rounded-xl text-[10px] font-bold border-2 transition-all ${
+                          printSettings.margins === m ? 'bg-gray-900 border-gray-900 text-white' : 'bg-gray-50 border-gray-100 text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        {m === 'none' ? 'بدون' : m === 'narrow' ? 'ضيقة' : m === 'normal' ? 'عادية' : 'واسعة'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">حجم الخط (Font Size)</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['small', 'normal', 'large'] as const).map(s => (
+                      <button
+                        key={s}
+                        onClick={() => setPrintSettings({ ...printSettings, fontSize: s })}
+                        className={`px-3 py-2 rounded-xl text-[10px] font-bold border-2 transition-all ${
+                          printSettings.fontSize === s ? 'bg-gray-900 border-gray-900 text-white' : 'bg-gray-50 border-gray-100 text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        {s === 'small' ? 'صغير' : s === 'normal' ? 'متوسط' : 'كبير'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">اتجاه الصفحة (Orientation)</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['portrait', 'landscape'] as const).map(o => (
+                      <button
+                        key={o}
+                        onClick={() => setPrintSettings({ ...printSettings, orientation: o })}
+                        className={`px-3 py-2 rounded-xl text-[10px] font-bold border-2 transition-all ${
+                          printSettings.orientation === o ? 'bg-gray-900 border-gray-900 text-white' : 'bg-gray-50 border-gray-100 text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        {o === 'portrait' ? 'طولي (Portrait)' : 'عرضي (Landscape)'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">مقياس الرسم (Scale: {printSettings.scale}%)</p>
+                  <input 
+                    type="range" 
+                    min="50" 
+                    max="150" 
+                    step="5"
+                    value={printSettings.scale}
+                    onChange={(e) => setPrintSettings({ ...printSettings, scale: parseInt(e.target.value) })}
+                    className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                  />
+                  <div className="flex justify-between text-[8px] font-bold text-gray-400 uppercase">
+                    <span>50%</span>
+                    <span>100%</span>
+                    <span>150%</span>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t-2 border-gray-100 flex gap-2">
+                  <button
+                    onClick={() => setPrintSettings({
+                      margins: 'narrow',
+                      fontSize: 'normal',
+                      orientation: 'landscape',
+                      scale: 100,
+                      showSummary: true
+                    })}
+                    className="px-4 py-4 bg-gray-100 text-gray-600 rounded-2xl font-black text-sm hover:bg-gray-200 transition-all"
+                  >
+                    إعادة ضبط
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowPrintConfig(false);
+                      handlePrint();
+                    }}
+                    className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-emerald-600/20 active:scale-95 transition-all hover:bg-emerald-700"
+                  >
+                    تطبيق والطباعة
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
           
           <button
             onClick={handlePrint}
@@ -275,7 +381,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
               @media print {
                 @page {
                   margin: ${getPageMargins()};
-                  size: A4 landscape;
+                  size: A4 ${printSettings.orientation};
                 }
                 body {
                   background: white !important;
@@ -293,6 +399,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                   background: white !important;
                   box-shadow: none !important;
                   border: none !important;
+                  zoom: ${printSettings.scale}%;
                 }
                 table {
                   border-collapse: collapse !important;
