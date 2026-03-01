@@ -1,5 +1,40 @@
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-serif: "Playfair Display", serif;
+  
+  --color-brand-primary: #10b981;
+  --color-brand-secondary: #064e3b;
+  --color-surface-bg: #f8fafc;
+  --color-surface-card: #ffffff;
+  --color-ink-primary: #0f172a;
+  --color-ink-secondary: #64748b;
+}
+
+@layer base {
+  body {
+    @apply bg-[var(--color-surface-bg)] text-[var(--color-ink-primary)] font-sans antialiased;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
+  }
+  
+  .data-grid-bg {
+    background-image: radial-gradient(circle at 1px 1px, rgba(0,0,0,0.05) 1px, transparent 0);
+    background-size: 24px 24px;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}
 
 @theme {
   --font-sans: "Inter", "Cairo", ui-sans-serif, system-ui, sans-serif;
