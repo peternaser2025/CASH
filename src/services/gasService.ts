@@ -115,6 +115,25 @@ export const gasService = {
     }
   },
 
+  async deleteEmployee(name: string): Promise<{ success: boolean; error?: string }> {
+    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({ action: 'deleteEmployee', name }),
+      });
+      const text = await response.text();
+      return JSON.parse(text);
+    } catch (error) {
+      console.error('Error deleting employee:', error);
+      return { success: false, error: 'خطأ في الاتصال' };
+    }
+  },
+
   async updateTransaction(id: number, transaction: any): Promise<{ success: boolean; error?: string }> {
     if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
     try {
@@ -157,6 +176,44 @@ export const gasService = {
       }
     } catch (error) {
       console.error('Error deleting transaction:', error);
+      return { success: false, error: 'خطأ في الاتصال' };
+    }
+  },
+
+  async getSettings(): Promise<{ branches: string[], categories: string[] }> {
+    if (!GAS_URL || GAS_URL.includes('...')) return { branches: [], categories: [] };
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({ action: 'getSettings' }),
+      });
+      const text = await response.text();
+      return JSON.parse(text);
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+      return { branches: [], categories: [] };
+    }
+  },
+
+  async updateSettings(type: 'branches' | 'categories', items: string[]): Promise<{ success: boolean; error?: string }> {
+    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({ action: 'updateSettings', type, items }),
+      });
+      const text = await response.text();
+      return JSON.parse(text);
+    } catch (error) {
+      console.error('Error updating settings:', error);
       return { success: false, error: 'خطأ في الاتصال' };
     }
   }

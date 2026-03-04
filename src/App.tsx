@@ -25,25 +25,38 @@ import Dashboard from './components/Dashboard';
 import TransactionForm from './components/TransactionForm';
 import ReportViewer from './components/ReportViewer';
 import EmployeeManager from './components/EmployeeManager';
+import SettingsManager from './components/SettingsManager';
 
-type View = 'dashboard' | 'transaction' | 'reports' | 'employees';
+type View = 'dashboard' | 'transaction' | 'reports' | 'employees' | 'settings';
 
 export default function App() {
   const [activeView, setActiveView] = useState<View>('dashboard');
   const [balances, setBalances] = useState<EmployeeBalance[]>([]);
+  const [branches, setBranches] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchBalances = async () => {
+  const fetchData = async () => {
     setLoading(true);
-    const data = await gasService.getBalances();
-    setBalances(data);
-    setLoading(false);
+    try {
+      const [balanceData, settingsData] = await Promise.all([
+        gasService.getBalances(),
+        gasService.getSettings()
+      ]);
+      setBalances(balanceData);
+      setBranches(settingsData.branches || []);
+      setCategories(settingsData.categories || []);
+    } catch (err) {
+      console.error('Error fetching data:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    fetchBalances();
+    fetchData();
   }, []);
 
   const navItems = [
@@ -51,6 +64,7 @@ export default function App() {
     { id: 'transaction', label: 'تسجيل عملية', icon: PlusCircle },
     { id: 'reports', label: 'كشف حساب', icon: FileText },
     { id: 'employees', label: 'إدارة الموظفين', icon: Users },
+    { id: 'settings', label: 'إعدادات النظام', icon: Settings },
   ];
 
   return (
@@ -145,13 +159,15 @@ export default function App() {
             transition={{ duration: 0.2 }}
           >
             {activeView === 'dashboard' && (
-              <Dashboard balances={balances} loading={loading} onRefresh={fetchBalances} />
+              <Dashboard balances={balances} loading={loading} onRefresh={fetchData} />
             )}
             {activeView === 'transaction' && (
               <TransactionForm 
                 employees={balances.map(b => b.name)}
+                branches={branches}
+                categories={categories}
                 onComplete={() => {
-                  fetchBalances();
+                  fetchData();
                   setActiveView('dashboard');
                 }} 
               />
@@ -160,10 +176,19 @@ export default function App() {
               <ReportViewer 
                 employees={balances.map(b => b.name)} 
                 balances={balances}
+                branches={branches}
+                categories={categories}
               />
             )}
             {activeView === 'employees' && (
-              <EmployeeManager balances={balances} onRefresh={fetchBalances} />
+              <EmployeeManager balances={balances} onRefresh={fetchData} />
+            )}
+            {activeView === 'settings' && (
+              <SettingsManager 
+                branches={branches} 
+                categories={categories} 
+                onRefresh={fetchData} 
+              />
             )}
           </motion.div>
         </AnimatePresence>
