@@ -18,9 +18,9 @@ export default function SettingsManager({ branches, categories, onRefresh }: Set
   const handleAdd = async (type: 'branches' | 'categories') => {
     if (!newItem.trim()) return;
     setLoading(type);
-    const currentItems = type === 'branches' ? branches : categories;
-    const updatedItems = [...currentItems, newItem.trim()];
-    const res = await gasService.updateSettings(type, updatedItems);
+    const newBranches = type === 'branches' ? [...branches, newItem.trim()] : branches;
+    const newCategories = type === 'categories' ? [...categories, newItem.trim()] : categories;
+    const res = await gasService.updateSettings(newBranches, newCategories);
     if (res.success) {
       setNewItem('');
       onRefresh();
@@ -33,9 +33,9 @@ export default function SettingsManager({ branches, categories, onRefresh }: Set
   const handleDelete = async (type: 'branches' | 'categories', index: number) => {
     if (!confirm('هل أنت متأكد من حذف هذا البند؟')) return;
     setLoading(type);
-    const currentItems = type === 'branches' ? [...branches] : [...categories];
-    currentItems.splice(index, 1);
-    const res = await gasService.updateSettings(type, currentItems);
+    const newBranches = type === 'branches' ? branches.filter((_, i) => i !== index) : branches;
+    const newCategories = type === 'categories' ? categories.filter((_, i) => i !== index) : categories;
+    const res = await gasService.updateSettings(newBranches, newCategories);
     if (res.success) {
       onRefresh();
     } else {
@@ -47,9 +47,9 @@ export default function SettingsManager({ branches, categories, onRefresh }: Set
   const handleUpdate = async (type: 'branches' | 'categories', index: number) => {
     if (!editValue.trim()) return;
     setLoading(type);
-    const currentItems = type === 'branches' ? [...branches] : [...categories];
-    currentItems[index] = editValue.trim();
-    const res = await gasService.updateSettings(type, currentItems);
+    const newBranches = type === 'branches' ? branches.map((b, i) => i === index ? editValue.trim() : b) : branches;
+    const newCategories = type === 'categories' ? categories.map((c, i) => i === index ? editValue.trim() : c) : categories;
+    const res = await gasService.updateSettings(newBranches, newCategories);
     if (res.success) {
       setEditingIndex(null);
       onRefresh();

@@ -199,7 +199,7 @@ export const gasService = {
     }
   },
 
-  async updateSettings(type: 'branches' | 'categories', items: string[]): Promise<{ success: boolean; error?: string }> {
+  async updateSettings(branches: string[], categories: string[]): Promise<{ success: boolean; error?: string }> {
     if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
     try {
       const response = await fetch(GAS_URL, {
@@ -208,7 +208,7 @@ export const gasService = {
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
-        body: JSON.stringify({ action: 'updateSettings', type, items }),
+        body: JSON.stringify({ action: 'updateSettings', branches, categories }),
       });
       const text = await response.text();
       return JSON.parse(text);
