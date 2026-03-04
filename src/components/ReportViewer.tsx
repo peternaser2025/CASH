@@ -18,7 +18,8 @@ import {
   CheckCircle2, 
   AlertCircle,
   ChevronDown,
-  Info
+  Info,
+  CalendarClock
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { ReportFilter, ReportData, EmployeeBalance } from '../types';
@@ -565,6 +566,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                     const expense = parseFloat(row[6]) || 0;
                     const balance = row[7];
                     const description = row.length > 8 ? String(row[8] || '-') : '-';
+                    const targetMonth = row.length > 9 ? String(row[9] || '') : '';
                     
                     const isIncome = income > 0;
 
@@ -572,6 +574,13 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                       <tr key={i} className="hover:bg-gray-50 transition-colors group">
                         <td className="px-6 py-4 text-center border-l border-gray-900">
                           <span className="font-mono font-bold text-gray-600 text-[11px]">{date}</span>
+                          {targetMonth && (
+                            <div className="mt-1">
+                              <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[8px] font-black rounded-full border border-blue-100 uppercase">
+                                يخص: {targetMonth}
+                              </span>
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-center border-l border-gray-900">
                           <span className="font-black text-gray-400 text-[10px] uppercase tracking-tighter">{branch}</span>
@@ -609,7 +618,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
             </div>
 
             {/* Detailed Financial Analysis Section */}
-            <div className="px-10 pb-10 grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="px-10 pb-10 grid grid-cols-1 md:grid-cols-3 gap-8">
               {/* Branch Analysis */}
               <div className="p-6 border-2 border-gray-900 rounded-3xl bg-gray-50/50">
                 <div className="flex items-center gap-3 mb-6">
@@ -675,6 +684,49 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                   ))}
                 </div>
               </div>
+
+              {/* Target Month Analysis */}
+              <div className="p-6 border-2 border-gray-900 rounded-3xl bg-gray-50/50">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center text-white">
+                    <CalendarClock size={16} />
+                  </div>
+                  <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">تحليل حسب شهر الاستحقاق</h3>
+                </div>
+                <div className="space-y-3">
+                  {(Object.entries(
+                    report.rows.reduce((acc: Record<string, { in: number, out: number }>, row) => {
+                      const targetMonth = row.length > 9 ? String(row[9] || '') : '';
+                      if (!targetMonth) return acc;
+                      
+                      const income = parseFloat(String(row[5])) || 0;
+                      const expense = parseFloat(String(row[6])) || 0;
+                      
+                      if (!acc[targetMonth]) acc[targetMonth] = { in: 0, out: 0 };
+                      acc[targetMonth].in += income;
+                      acc[targetMonth].out += expense;
+                      return acc;
+                    }, {} as Record<string, { in: number, out: number }>)
+                  ) as [string, { in: number, out: number }][]).sort((a, b) => b[0].localeCompare(a[0])).map(([month, totals]) => (
+                    <div key={month} className="p-3 bg-white border border-gray-200 rounded-xl space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black text-blue-600 uppercase">{month}</span>
+                      </div>
+                      <div className="flex justify-between text-[9px] font-bold">
+                        <span className="text-emerald-600">وارد: {formatKWD(totals.in)}</span>
+                        <span className="text-rose-600">صادر: {formatKWD(totals.out)}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {Object.keys(report.rows.reduce((acc: Record<string, any>, row) => {
+                    const targetMonth = row.length > 9 ? String(row[9] || '') : '';
+                    if (targetMonth) acc[targetMonth] = true;
+                    return acc;
+                  }, {})).length === 0 && (
+                    <p className="text-[10px] text-gray-400 italic text-center py-4">لا توجد عمليات مخصصة لشهور محددة</p>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Redesigned Footer - Formal Bank Style */}
@@ -713,6 +765,26 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                       ) as [string, number][]).map(([branch, total]) => (
                         <div key={branch} className="flex justify-between text-[9px] border-b border-gray-100 py-1">
                           <span className="font-bold">{branch}:</span>
+                          <span className="font-mono">{formatKWD(total)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-black border-b-2 border-black pb-2">تحليل حسب شهر الاستحقاق</h3>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                      {(Object.entries(
+                        report.rows.reduce((acc: Record<string, number>, row) => {
+                          const targetMonth = row.length > 9 ? String(row[9] || '') : '';
+                          if (!targetMonth) return acc;
+                          const expense = parseFloat(String(row[6])) || 0;
+                          if (expense > 0) acc[targetMonth] = (acc[targetMonth] || 0) + expense;
+                          return acc;
+                        }, {} as Record<string, number>)
+                      ) as [string, number][]).sort((a, b) => b[0].localeCompare(a[0])).map(([month, total]) => (
+                        <div key={month} className="flex justify-between text-[9px] border-b border-gray-100 py-1">
+                          <span className="font-bold">{month}:</span>
                           <span className="font-mono">{formatKWD(total)}</span>
                         </div>
                       ))}
