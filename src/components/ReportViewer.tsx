@@ -608,28 +608,119 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
               </table>
             </div>
 
+            {/* Detailed Financial Analysis Section */}
+            <div className="px-10 pb-10 grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Branch Analysis */}
+              <div className="p-6 border-2 border-gray-900 rounded-3xl bg-gray-50/50">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center text-white">
+                    <Building2 size={16} />
+                  </div>
+                  <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">تحليل المصروفات حسب الفرع</h3>
+                </div>
+                <div className="space-y-3">
+                  {(Object.entries(
+                    report.rows.reduce((acc: Record<string, number>, row) => {
+                      const branch = String(row[2] || 'عام');
+                      const expense = parseFloat(String(row[6])) || 0;
+                      if (expense > 0) acc[branch] = (acc[branch] || 0) + expense;
+                      return acc;
+                    }, {} as Record<string, number>)
+                  ) as [string, number][]).map(([branch, total]) => (
+                    <div key={branch} className="flex justify-between items-center p-3 bg-white border border-gray-200 rounded-xl">
+                      <span className="text-[10px] font-black text-gray-500 uppercase">{branch}</span>
+                      <span className="font-mono font-black text-rose-600 text-xs">{formatKWD(total)}</span>
+                    </div>
+                  ))}
+                  {Object.keys(report.rows.reduce((acc, row) => {
+                    const branch = String(row[2] || 'عام');
+                    const expense = parseFloat(row[6]) || 0;
+                    if (expense > 0) acc[branch] = (acc[branch] || 0) + expense;
+                    return acc;
+                  }, {} as Record<string, number>)).length === 0 && (
+                    <p className="text-[10px] text-gray-400 italic text-center py-4">لا توجد مصروفات مسجلة</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Category Analysis */}
+              <div className="p-6 border-2 border-gray-900 rounded-3xl bg-gray-50/50">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center text-white">
+                    <Filter size={16} />
+                  </div>
+                  <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">تحليل العمليات حسب التصنيف</h3>
+                </div>
+                <div className="space-y-3">
+                  {(Object.entries(
+                    report.rows.reduce((acc: Record<string, { in: number, out: number }>, row) => {
+                      const cat = String(row[4] || 'غير مصنف');
+                      const income = parseFloat(String(row[5])) || 0;
+                      const expense = parseFloat(String(row[6])) || 0;
+                      if (!acc[cat]) acc[cat] = { in: 0, out: 0 };
+                      acc[cat].in += income;
+                      acc[cat].out += expense;
+                      return acc;
+                    }, {} as Record<string, { in: number, out: number }>)
+                  ) as [string, { in: number, out: number }][]).map(([cat, totals]) => (
+                    <div key={cat} className="p-3 bg-white border border-gray-200 rounded-xl space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black text-gray-900 uppercase">{cat}</span>
+                      </div>
+                      <div className="flex justify-between text-[9px] font-bold">
+                        <span className="text-emerald-600">وارد: {formatKWD(totals.in)}</span>
+                        <span className="text-rose-600">صادر: {formatKWD(totals.out)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             {/* Redesigned Footer - Formal Bank Style */}
             <div className="p-12 hidden print:block border-t-4 border-black bg-white">
-              <div className="grid grid-cols-3 gap-12 mb-16">
-                <div className="p-6 border-2 border-black rounded-2xl">
-                  <p className="text-[8px] font-black text-gray-400 uppercase mb-2">ملخص العمليات</p>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-[10px] font-bold">
-                      <span>إجمالي الوارد:</span>
-                      <span className="font-mono">{formatKWD(report.rows.reduce((acc, row) => acc + (parseFloat(row[5]) || 0), 0))}</span>
+              <div className="grid grid-cols-1 gap-12 mb-16">
+                {/* Print Summary Table */}
+                <div className="grid grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-black border-b-2 border-black pb-2">ملخص الحساب الإجمالي</h3>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-[10px] font-bold">
+                        <span>إجمالي المدين (وارد):</span>
+                        <span className="font-mono">{formatKWD(report.rows.reduce((acc, row) => acc + (parseFloat(row[5]) || 0), 0))}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px] font-bold">
+                        <span>إجمالي الدائن (صادر):</span>
+                        <span className="font-mono">{formatKWD(report.rows.reduce((acc, row) => acc + (parseFloat(row[6]) || 0), 0))}</span>
+                      </div>
+                      <div className="pt-2 border-t border-black flex justify-between text-xs font-black">
+                        <span>الرصيد النهائي:</span>
+                        <span className="font-mono">{formatKWD(report.finalBalance)}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between text-[10px] font-bold">
-                      <span>إجمالي الصادر:</span>
-                      <span className="font-mono">{formatKWD(report.rows.reduce((acc, row) => acc + (parseFloat(row[6]) || 0), 0))}</span>
-                    </div>
-                    <div className="pt-2 border-t border-black flex justify-between text-xs font-black">
-                      <span>الرصيد النهائي:</span>
-                      <span className="font-mono">{formatKWD(report.finalBalance)}</span>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-black border-b-2 border-black pb-2">تحليل المصروفات حسب الفرع</h3>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                      {(Object.entries(
+                        report.rows.reduce((acc: Record<string, number>, row) => {
+                          const branch = String(row[2] || 'عام');
+                          const expense = parseFloat(String(row[6])) || 0;
+                          if (expense > 0) acc[branch] = (acc[branch] || 0) + expense;
+                          return acc;
+                        }, {} as Record<string, number>)
+                      ) as [string, number][]).map(([branch, total]) => (
+                        <div key={branch} className="flex justify-between text-[9px] border-b border-gray-100 py-1">
+                          <span className="font-bold">{branch}:</span>
+                          <span className="font-mono">{formatKWD(total)}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
 
-                <div className="col-span-2 grid grid-cols-2 gap-8">
+                <div className="grid grid-cols-3 gap-12 mt-8">
                   <div className="space-y-12">
                     <div className="border-b-2 border-black pb-2">
                       <p className="text-[10px] font-black text-black">توقيع المحاسب المسؤول</p>
@@ -638,7 +729,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                       <p className="text-[10px] font-black text-black">توقيع الموظف / صاحب العهدة</p>
                     </div>
                   </div>
-                  <div className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-2xl p-4">
+                  <div className="col-span-2 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-2xl p-4">
                     <div className="w-20 h-20 border-4 border-gray-100 rounded-full flex items-center justify-center opacity-20">
                       <span className="text-[8px] font-black text-center">OFFICIAL STAMP HERE</span>
                     </div>
