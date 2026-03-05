@@ -113,51 +113,5 @@ export const gasService = {
       console.error('Error adding employee:', error);
       return { success: false, error: 'خطأ في الاتصال. يرجى التأكد من نشر السكريبت بصلاحية "Anyone".' };
     }
-  },
-
-  async updateTransaction(id: number, transaction: any): Promise<{ success: boolean; error?: string }> {
-    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
-    try {
-      const response = await fetch(GAS_URL, {
-        method: 'POST',
-        mode: 'cors',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-        },
-        body: JSON.stringify({ action: 'update', id, data: transaction }),
-      });
-      const text = await response.text();
-      try {
-        return JSON.parse(text);
-      } catch (e) {
-        return { success: false, error: 'خطأ في معالجة البيانات' };
-      }
-    } catch (error) {
-      console.error('Error updating transaction:', error);
-      return { success: false, error: 'خطأ في الاتصال' };
-    }
-  },
-
-  async deleteTransaction(id: number): Promise<{ success: boolean; error?: string }> {
-    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
-    try {
-      const response = await fetch(GAS_URL, {
-        method: 'POST',
-        mode: 'cors',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-        },
-        body: JSON.stringify({ action: 'delete', id }),
-      });
-      const text = await response.text();
-      try {
-        return JSON.parse(text);
-      } catch (e) {
-        return { success: false, error: 'خطأ في معالجة البيانات' };
-      }
-    } catch (error) {
-      console.error('Error deleting transaction:', error);
-      return { success: false, error: 'خطأ في الاتصال' };
-    }
   }
 };

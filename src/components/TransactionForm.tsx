@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Save, ArrowRightLeft, TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Calendar, Building2, User, Tag, Info, Coins, CalendarClock } from 'lucide-react';
+import { Save, ArrowRightLeft, TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Calendar, Building2, User, Tag, Info, Coins } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { TransactionType } from '../types';
 import { BRANCHES, CATEGORIES } from '../constants';
@@ -23,9 +23,7 @@ export default function TransactionForm({ onComplete, employees }: TransactionFo
     amount: '',
     description: '',
     sender: '',
-    receiver: '',
-    hasTargetMonth: false,
-    targetMonth: new Date().toISOString().slice(0, 7) // YYYY-MM
+    receiver: ''
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,8 +34,7 @@ export default function TransactionForm({ onComplete, employees }: TransactionFo
     const data = {
       ...formData,
       type,
-      amount: parseFloat(formData.amount),
-      targetMonth: formData.hasTargetMonth ? formData.targetMonth : undefined
+      amount: parseFloat(formData.amount)
     };
 
     const result = await gasService.addTransaction(data);
@@ -243,53 +240,6 @@ export default function TransactionForm({ onComplete, employees }: TransactionFo
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none resize-none font-medium text-gray-900"
               />
-            </div>
-
-            {/* Target Month Feature */}
-            <div className="md:col-span-2 p-6 bg-gray-50/50 border border-gray-100 rounded-3xl space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-xl shadow-sm border border-gray-100 text-blue-600">
-                    <CalendarClock size={20} />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-black text-gray-900">تخصيص لشهر محدد</h4>
-                    <p className="text-[10px] font-bold text-gray-400">فعل هذا الخيار إذا كان المصروف يخص شهراً سابقاً (مصروف مستحق)</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, hasTargetMonth: !formData.hasTargetMonth })}
-                  className={`w-12 h-6 rounded-full transition-all relative ${
-                    formData.hasTargetMonth ? 'bg-emerald-500' : 'bg-gray-200'
-                  }`}
-                >
-                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${
-                    formData.hasTargetMonth ? 'right-7' : 'right-1'
-                  }`} />
-                </button>
-              </div>
-
-              <AnimatePresence>
-                {formData.hasTargetMonth && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="pt-4 border-t border-gray-100">
-                      <label className="block text-[10px] font-black text-gray-400 uppercase mb-2">اختر الشهر والسنة</label>
-                      <input
-                        type="month"
-                        value={formData.targetMonth}
-                        onChange={(e) => setFormData({ ...formData, targetMonth: e.target.value })}
-                        className="w-full px-5 py-3 bg-white border border-gray-100 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold text-gray-900"
-                      />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </div>
           </div>
 

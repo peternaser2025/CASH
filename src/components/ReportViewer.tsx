@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   FileText, 
@@ -18,27 +18,8 @@ import {
   CheckCircle2, 
   AlertCircle,
   ChevronDown,
-  Info,
-  CalendarClock,
-  Edit2,
-  Trash2,
-  BarChart3,
-  PieChart as PieChartIcon,
-  X
+  Info
 } from 'lucide-react';
-import { 
-  PieChart, 
-  Pie, 
-  Cell, 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
-  ResponsiveContainer 
-} from 'recharts';
 import { gasService } from '../services/gasService';
 import { ReportFilter, ReportData, EmployeeBalance } from '../types';
 import { BRANCHES } from '../constants';
@@ -61,25 +42,6 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editingTransaction, setEditingTransaction] = useState<any | null>(null);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingTransaction || !editingTransaction.id) return;
-    
-    setIsUpdating(true);
-    const res = await gasService.updateTransaction(editingTransaction.id, editingTransaction);
-    setIsUpdating(false);
-    
-    if (res.success) {
-      setIsEditModalOpen(false);
-      handleGenerate(); // Re-fetch report
-    } else {
-      alert('خطأ في التحديث: ' + res.error);
-    }
-  };
   const [printSettings, setPrintSettings] = useState({
     margins: 'narrow' as 'none' | 'narrow' | 'normal' | 'wide',
     fontSize: 'normal' as 'small' | 'normal' | 'large',
@@ -564,79 +526,6 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
               ))}
             </div>
 
-            {/* Visual Analytics Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 border-b-2 border-gray-900 no-print">
-              <div className="p-8 border-l border-gray-900 bg-white">
-                <div className="flex items-center gap-3 mb-8">
-                  <div className="p-2 bg-rose-50 text-rose-600 rounded-xl border border-rose-100">
-                    <PieChartIcon size={20} />
-                  </div>
-                  <h3 className="text-[10px] font-black text-gray-900 uppercase tracking-[0.3em]">توزيع المصروفات حسب التصنيف</h3>
-                </div>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={Object.entries(
-                          report.rows.reduce((acc: Record<string, number>, row) => {
-                            const cat = String(row[4] || 'غير مصنف');
-                            const expense = parseFloat(String(row[6])) || 0;
-                            if (expense > 0) acc[cat] = (acc[cat] || 0) + expense;
-                            return acc;
-                          }, {} as Record<string, number>)
-                        ).map(([name, value]) => ({ name, value }))}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={5}
-                        dataKey="value"
-                      >
-                        {['#10b981', '#ef4444', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'].map((color, index) => (
-                          <Cell key={`cell-${index}`} fill={color} />
-                        ))}
-                      </Pie>
-                      <Tooltip 
-                        formatter={(value: number) => formatKWD(value)}
-                        contentStyle={{ borderRadius: '16px', border: '2px solid #111827', fontWeight: 'bold', fontSize: '10px' }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              <div className="p-8 bg-white">
-                <div className="flex items-center gap-3 mb-8">
-                  <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100">
-                    <BarChart3 size={20} />
-                  </div>
-                  <h3 className="text-[10px] font-black text-gray-900 uppercase tracking-[0.3em]">المصروفات حسب الفرع</h3>
-                </div>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={Object.entries(
-                      report.rows.reduce((acc: Record<string, number>, row) => {
-                        const branch = String(row[2] || 'عام');
-                        const expense = parseFloat(String(row[6])) || 0;
-                        if (expense > 0) acc[branch] = (acc[branch] || 0) + expense;
-                        return acc;
-                      }, {} as Record<string, number>)
-                    ).map(([name, value]) => ({ name, value }))}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 'bold' }} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 'bold' }} />
-                      <Tooltip 
-                        formatter={(value: number) => formatKWD(value)}
-                        contentStyle={{ borderRadius: '16px', border: '2px solid #111827', fontWeight: 'bold', fontSize: '10px' }}
-                      />
-                      <Bar dataKey="value" fill="#111827" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-
             <div className="px-10 py-10 overflow-x-auto print:overflow-visible print:px-0">
               <table className="w-full text-right border-collapse border-2 border-gray-900">
                 <thead>
@@ -647,8 +536,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                     <th className="px-6 py-5 font-black text-[10px] uppercase tracking-[0.2em] border-l border-white/10">البيان</th>
                     <th className="px-6 py-5 font-black text-[10px] uppercase tracking-[0.2em] border-l border-white/10 text-emerald-400">وارد (+)</th>
                     <th className="px-6 py-5 font-black text-[10px] uppercase tracking-[0.2em] border-l border-white/10 text-rose-400">صادر (-)</th>
-                    <th className="px-6 py-5 font-black text-[10px] uppercase tracking-[0.2em] border-l border-white/10">الرصيد</th>
-                    <th className="px-6 py-5 font-black text-[10px] uppercase tracking-[0.2em] no-print">إجراءات</th>
+                    <th className="px-6 py-5 font-black text-[10px] uppercase tracking-[0.2em] bg-white/10">الرصيد</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y-2 divide-gray-900">
@@ -664,10 +552,9 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                     </td>
                     <td className="px-6 py-4 text-center font-mono text-xs border-l border-gray-900 text-gray-300">0.000</td>
                     <td className="px-6 py-4 text-center font-mono text-xs border-l border-gray-900 text-gray-300">0.000</td>
-                    <td className="px-6 py-4 text-center bg-emerald-50/50 border-l border-gray-900">
+                    <td className="px-6 py-4 text-center bg-emerald-50/50">
                       <span className="font-black text-gray-900 font-mono text-sm">{formatKWD(report.openingBalance)}</span>
                     </td>
-                    <td className="px-6 py-4 text-center no-print">---</td>
                   </tr>
 
                   {report.rows.map((row, i) => {
@@ -678,8 +565,6 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                     const expense = parseFloat(row[6]) || 0;
                     const balance = row[7];
                     const description = row.length > 8 ? String(row[8] || '-') : '-';
-                    const targetMonth = row.length > 9 ? String(row[9] || '') : '';
-                    const rowId = row.length > 10 ? row[10] : null;
                     
                     const isIncome = income > 0;
 
@@ -687,13 +572,6 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                       <tr key={i} className="hover:bg-gray-50 transition-colors group">
                         <td className="px-6 py-4 text-center border-l border-gray-900">
                           <span className="font-mono font-bold text-gray-600 text-[11px]">{date}</span>
-                          {targetMonth && (
-                            <div className="mt-1">
-                              <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[8px] font-black rounded-full border border-blue-100 uppercase">
-                                يخص: {targetMonth}
-                              </span>
-                            </div>
-                          )}
                         </td>
                         <td className="px-6 py-4 text-center border-l border-gray-900">
                           <span className="font-black text-gray-400 text-[10px] uppercase tracking-tighter">{branch}</span>
@@ -720,51 +598,8 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                             {expense > 0 ? expense.toFixed(3) : '0.000'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-center bg-gray-50 group-hover:bg-emerald-50/30 transition-colors border-l border-gray-900">
+                        <td className="px-6 py-4 text-center bg-gray-50 group-hover:bg-emerald-50/30 transition-colors">
                           <span className="font-black text-gray-900 font-mono text-sm">{formatKWD(balance)}</span>
-                        </td>
-                        <td className="px-6 py-4 text-center no-print">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => {
-                                setEditingTransaction({
-                                  id: rowId,
-                                  date: date,
-                                  branch: branch,
-                                  category: category,
-                                  description: description,
-                                  amount: isIncome ? income : expense,
-                                  type: isIncome ? 'Income' : 'Expense',
-                                  targetMonth: targetMonth
-                                });
-                                setIsEditModalOpen(true);
-                              }}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="تعديل"
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                            <button
-                              onClick={async () => {
-                                if (window.confirm('هل أنت متأكد من حذف هذه العملية؟')) {
-                                  if (rowId) {
-                                    const res = await gasService.deleteTransaction(rowId);
-                                    if (res.success) {
-                                      handleGenerate();
-                                    } else {
-                                      alert('خطأ في الحذف: ' + res.error);
-                                    }
-                                  } else {
-                                    alert('لا يمكن حذف هذه العملية (ID مفقود)');
-                                  }
-                                }
-                              }}
-                              className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                              title="حذف"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
                         </td>
                       </tr>
                     );
@@ -774,7 +609,7 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
             </div>
 
             {/* Detailed Financial Analysis Section */}
-            <div className="px-10 pb-10 grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="px-10 pb-10 grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* Branch Analysis */}
               <div className="p-6 border-2 border-gray-900 rounded-3xl bg-gray-50/50">
                 <div className="flex items-center gap-3 mb-6">
@@ -840,49 +675,6 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                   ))}
                 </div>
               </div>
-
-              {/* Target Month Analysis */}
-              <div className="p-6 border-2 border-gray-900 rounded-3xl bg-gray-50/50">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center text-white">
-                    <CalendarClock size={16} />
-                  </div>
-                  <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">تحليل حسب شهر الاستحقاق</h3>
-                </div>
-                <div className="space-y-3">
-                  {(Object.entries(
-                    report.rows.reduce((acc: Record<string, { in: number, out: number }>, row) => {
-                      const targetMonth = row.length > 9 ? String(row[9] || '') : '';
-                      if (!targetMonth) return acc;
-                      
-                      const income = parseFloat(String(row[5])) || 0;
-                      const expense = parseFloat(String(row[6])) || 0;
-                      
-                      if (!acc[targetMonth]) acc[targetMonth] = { in: 0, out: 0 };
-                      acc[targetMonth].in += income;
-                      acc[targetMonth].out += expense;
-                      return acc;
-                    }, {} as Record<string, { in: number, out: number }>)
-                  ) as [string, { in: number, out: number }][]).sort((a, b) => b[0].localeCompare(a[0])).map(([month, totals]) => (
-                    <div key={month} className="p-3 bg-white border border-gray-200 rounded-xl space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-black text-blue-600 uppercase">{month}</span>
-                      </div>
-                      <div className="flex justify-between text-[9px] font-bold">
-                        <span className="text-emerald-600">وارد: {formatKWD(totals.in)}</span>
-                        <span className="text-rose-600">صادر: {formatKWD(totals.out)}</span>
-                      </div>
-                    </div>
-                  ))}
-                  {Object.keys(report.rows.reduce((acc: Record<string, any>, row) => {
-                    const targetMonth = row.length > 9 ? String(row[9] || '') : '';
-                    if (targetMonth) acc[targetMonth] = true;
-                    return acc;
-                  }, {})).length === 0 && (
-                    <p className="text-[10px] text-gray-400 italic text-center py-4">لا توجد عمليات مخصصة لشهور محددة</p>
-                  )}
-                </div>
-              </div>
             </div>
 
             {/* Redesigned Footer - Formal Bank Style */}
@@ -926,26 +718,6 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
                       ))}
                     </div>
                   </div>
-
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-black border-b-2 border-black pb-2">تحليل حسب شهر الاستحقاق</h3>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                      {(Object.entries(
-                        report.rows.reduce((acc: Record<string, number>, row) => {
-                          const targetMonth = row.length > 9 ? String(row[9] || '') : '';
-                          if (!targetMonth) return acc;
-                          const expense = parseFloat(String(row[6])) || 0;
-                          if (expense > 0) acc[targetMonth] = (acc[targetMonth] || 0) + expense;
-                          return acc;
-                        }, {} as Record<string, number>)
-                      ) as [string, number][]).sort((a, b) => b[0].localeCompare(a[0])).map(([month, total]) => (
-                        <div key={month} className="flex justify-between text-[9px] border-b border-gray-100 py-1">
-                          <span className="font-bold">{month}:</span>
-                          <span className="font-mono">{formatKWD(total)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-12 mt-8">
@@ -977,120 +749,6 @@ export default function ReportViewer({ employees, balances }: ReportViewerProps)
               </div>
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Edit Modal */}
-      <AnimatePresence>
-        {isEditModalOpen && editingTransaction && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm no-print">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden border-2 border-gray-900"
-            >
-              <div className="p-8 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
-                    <Edit2 size={24} />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-black text-gray-900">تعديل العملية</h2>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">تعديل بيانات الحركة المالية المسجلة</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setIsEditModalOpen(false)}
-                  className="p-2 hover:bg-white rounded-xl transition-colors border border-transparent hover:border-gray-200"
-                >
-                  <X size={20} className="text-gray-400" />
-                </button>
-              </div>
-
-              <form onSubmit={handleUpdate} className="p-8 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase">التاريخ</label>
-                    <input
-                      type="date"
-                      required
-                      value={editingTransaction.date}
-                      onChange={(e) => setEditingTransaction({ ...editingTransaction, date: e.target.value })}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase">المبلغ</label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      required
-                      value={editingTransaction.amount}
-                      onChange={(e) => setEditingTransaction({ ...editingTransaction, amount: parseFloat(e.target.value) })}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase">الفرع</label>
-                    <select
-                      value={editingTransaction.branch}
-                      onChange={(e) => setEditingTransaction({ ...editingTransaction, branch: e.target.value })}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                    >
-                      {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase">التصنيف</label>
-                    <input
-                      type="text"
-                      value={editingTransaction.category}
-                      onChange={(e) => setEditingTransaction({ ...editingTransaction, category: e.target.value })}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase">شهر الاستحقاق (اختياري)</label>
-                    <input
-                      type="month"
-                      value={editingTransaction.targetMonth || ''}
-                      onChange={(e) => setEditingTransaction({ ...editingTransaction, targetMonth: e.target.value })}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                    />
-                  </div>
-                  <div className="md:col-span-2 space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase">البيان</label>
-                    <textarea
-                      required
-                      rows={3}
-                      value={editingTransaction.description}
-                      onChange={(e) => setEditingTransaction({ ...editingTransaction, description: e.target.value })}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold resize-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-4 pt-4">
-                  <button
-                    type="submit"
-                    disabled={isUpdating}
-                    className="flex-1 bg-gray-900 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isUpdating ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
-                    حفظ التعديلات
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditModalOpen(false)}
-                    className="px-8 py-4 bg-gray-100 text-gray-500 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-gray-200 transition-all"
-                  >
-                    إلغاء
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
         )}
       </AnimatePresence>
     </div>
