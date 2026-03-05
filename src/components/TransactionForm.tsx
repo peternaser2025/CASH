@@ -3,15 +3,14 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Save, ArrowRightLeft, TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Calendar, Building2, User, Tag, Info, Coins, CalendarClock } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { TransactionType } from '../types';
+import { BRANCHES, CATEGORIES } from '../constants';
 
 interface TransactionFormProps {
   onComplete: () => void;
   employees: string[];
-  branches: string[];
-  categories: string[];
 }
 
-export default function TransactionForm({ onComplete, employees, branches, categories }: TransactionFormProps) {
+export default function TransactionForm({ onComplete, employees }: TransactionFormProps) {
   const [type, setType] = useState<TransactionType>('Expense');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
@@ -136,7 +135,7 @@ export default function TransactionForm({ onComplete, employees, branches, categ
                 className="w-full px-5 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none font-bold text-gray-900"
               >
                 <option value="">غير محدد / عام</option>
-                {branches.map(b => <option key={b} value={b}>{b}</option>)}
+                {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             </div>
 
@@ -202,7 +201,7 @@ export default function TransactionForm({ onComplete, employees, branches, categ
                     className="w-full px-5 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none font-bold text-gray-900"
                   >
                     <option value="">اختر التصنيف</option>
-                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
               </>

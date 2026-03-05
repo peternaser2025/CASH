@@ -41,16 +41,15 @@ import {
 } from 'recharts';
 import { gasService } from '../services/gasService';
 import { ReportFilter, ReportData, EmployeeBalance } from '../types';
+import { BRANCHES } from '../constants';
 import { formatKWD, isIncomeType, isExpenseType, isTransferType } from '../utils/format';
 
 interface ReportViewerProps {
   employees: string[];
   balances: EmployeeBalance[];
-  branches: string[];
-  categories: string[];
 }
 
-export default function ReportViewer({ employees, balances, branches, categories }: ReportViewerProps) {
+export default function ReportViewer({ employees, balances }: ReportViewerProps) {
   const [filters, setFilters] = useState<ReportFilter>({
     employee: '',
     branch: '',
@@ -71,20 +70,12 @@ export default function ReportViewer({ employees, balances, branches, categories
     if (!editingTransaction || !editingTransaction.id) return;
     
     setIsUpdating(true);
-    // Ensure amount is a number and targetMonth is cleaned
-    const updatedData = {
-      ...editingTransaction,
-      amount: parseFloat(String(editingTransaction.amount)),
-      targetMonth: editingTransaction.targetMonth || ''
-    };
-    
-    const res = await gasService.updateTransaction(editingTransaction.id, updatedData);
+    const res = await gasService.updateTransaction(editingTransaction.id, editingTransaction);
     setIsUpdating(false);
     
     if (res.success) {
       setIsEditModalOpen(false);
       handleGenerate(); // Re-fetch report
-      alert('تم تحديث العملية بنجاح');
     } else {
       alert('خطأ في التحديث: ' + res.error);
     }
@@ -331,7 +322,7 @@ export default function ReportViewer({ employees, balances, branches, categories
                 className="w-full bg-transparent font-black text-gray-900 outline-none cursor-pointer appearance-none"
               >
                 <option value="">كافة الفروع</option>
-                {branches.map(b => <option key={b} value={b}>{b}</option>)}
+                {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             </div>
 
@@ -540,26 +531,8 @@ export default function ReportViewer({ employees, balances, branches, categories
             <div className="grid grid-cols-1 md:grid-cols-4 gap-0 border-b-2 border-gray-900 no-print">
               {[
                 { label: 'الرصيد الافتتاحي', value: report.openingBalance, icon: Wallet, color: 'blue' },
-                { 
-                  label: 'إجمالي الوارد', 
-                  value: report.rows.reduce((acc, row) => {
-                    const type = String(row[3] || '');
-                    if (isTransferType(type)) return acc;
-                    return acc + (parseFloat(row[5]) || 0);
-                  }, 0), 
-                  icon: TrendingUp, 
-                  color: 'emerald' 
-                },
-                { 
-                  label: 'إجمالي الصادر', 
-                  value: report.rows.reduce((acc, row) => {
-                    const type = String(row[3] || '');
-                    if (isTransferType(type)) return acc;
-                    return acc + (parseFloat(row[6]) || 0);
-                  }, 0), 
-                  icon: TrendingDown, 
-                  color: 'rose' 
-                },
+                { label: 'إجمالي الوارد', value: report.rows.reduce((acc, row) => acc + (parseFloat(row[5]) || 0), 0), icon: TrendingUp, color: 'emerald' },
+                { label: 'إجمالي الصادر', value: report.rows.reduce((acc, row) => acc + (parseFloat(row[6]) || 0), 0), icon: TrendingDown, color: 'rose' },
                 { label: 'الرصيد الختامي', value: report.finalBalance, icon: CheckCircle2, color: parseFloat(report.finalBalance) >= 0 ? 'emerald' : 'rose', highlight: true }
               ].map((card, idx) => (
                 <div 
@@ -607,8 +580,6 @@ export default function ReportViewer({ employees, balances, branches, categories
                         data={Object.entries(
                           report.rows.reduce((acc: Record<string, number>, row) => {
                             const cat = String(row[4] || 'غير مصنف');
-                            const type = String(row[3] || '');
-                            if (isTransferType(type)) return acc;
                             const expense = parseFloat(String(row[6])) || 0;
                             if (expense > 0) acc[cat] = (acc[cat] || 0) + expense;
                             return acc;
@@ -647,8 +618,6 @@ export default function ReportViewer({ employees, balances, branches, categories
                     <BarChart data={Object.entries(
                       report.rows.reduce((acc: Record<string, number>, row) => {
                         const branch = String(row[2] || 'عام');
-                        const type = String(row[3] || '');
-                        if (isTransferType(type)) return acc;
                         const expense = parseFloat(String(row[6])) || 0;
                         if (expense > 0) acc[branch] = (acc[branch] || 0) + expense;
                         return acc;
@@ -705,17 +674,14 @@ export default function ReportViewer({ employees, balances, branches, categories
                     const date = String(row[0] || '');
                     const branch = String(row[2] || 'عام');
                     const category = String(row[4] || '');
-                    const type = String(row[3] || '');
                     const income = parseFloat(row[5]) || 0;
                     const expense = parseFloat(row[6]) || 0;
                     const balance = row[7];
                     const description = row.length > 8 ? String(row[8] || '-') : '-';
                     const targetMonth = row.length > 9 ? String(row[9] || '') : '';
                     const rowId = row.length > 10 ? row[10] : null;
-                    const employee = String(row[1] || '');
                     
-                    const isIncome = isIncomeType(type) || (income > 0 && !isTransferType(type));
-                    const isTransfer = isTransferType(type);
+                    const isIncome = income > 0;
 
                     return (
                       <tr key={i} className="hover:bg-gray-50 transition-colors group">
@@ -733,14 +699,11 @@ export default function ReportViewer({ employees, balances, branches, categories
                           <span className="font-black text-gray-400 text-[10px] uppercase tracking-tighter">{branch}</span>
                         </td>
                         <td className="px-6 py-4 border-l border-gray-900">
-                          <div className="flex flex-col">
-                            <span className={`text-[10px] font-black uppercase tracking-widest ${
-                              isTransfer ? 'text-blue-600' : isIncome ? 'text-emerald-600' : 'text-rose-600'
-                            }`}>
-                              {category || (isTransfer ? 'تحويل مالي' : '')}
-                            </span>
-                            <span className="text-[8px] font-bold text-gray-400">{employee}</span>
-                          </div>
+                          <span className={`text-[10px] font-black uppercase tracking-widest ${
+                            isIncome ? 'text-emerald-600' : 'text-rose-600'
+                          }`}>
+                            {category}
+                          </span>
                         </td>
                         <td className="px-6 py-4 border-l border-gray-900">
                           <p className="text-gray-900 font-bold text-xs leading-relaxed max-w-[320px]">
@@ -748,12 +711,12 @@ export default function ReportViewer({ employees, balances, branches, categories
                           </p>
                         </td>
                         <td className="px-6 py-4 text-center border-l border-gray-900">
-                          <span className={`font-black font-mono text-sm ${isIncome ? 'text-emerald-600' : isTransfer ? 'text-blue-400' : 'text-gray-200'}`}>
+                          <span className={`font-black font-mono text-sm ${isIncome ? 'text-emerald-600' : 'text-gray-200'}`}>
                             {income > 0 ? income.toFixed(3) : '0.000'}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-center border-l border-gray-900">
-                          <span className={`font-black font-mono text-sm ${(!isIncome && !isTransfer) ? 'text-rose-600' : isTransfer ? 'text-blue-400' : 'text-gray-200'}`}>
+                          <span className={`font-black font-mono text-sm ${expense > 0 ? 'text-rose-600' : 'text-gray-200'}`}>
                             {expense > 0 ? expense.toFixed(3) : '0.000'}
                           </span>
                         </td>
@@ -770,14 +733,9 @@ export default function ReportViewer({ employees, balances, branches, categories
                                   branch: branch,
                                   category: category,
                                   description: description,
-                                  amount: income > 0 ? income : expense,
-                                  type: isTransfer ? 'Transfer' : (isIncome ? 'Income' : 'Expense'),
-                                  targetMonth: targetMonth,
-                                  employee: employee,
-                                  // We don't have sender/receiver in the row directly, 
-                                  // but we can default them or handle them if they are in the description
-                                  sender: isTransfer ? employee : '',
-                                  receiver: '' 
+                                  amount: isIncome ? income : expense,
+                                  type: isIncome ? 'Income' : 'Expense',
+                                  targetMonth: targetMonth
                                 });
                                 setIsEditModalOpen(true);
                               }}
@@ -816,144 +774,70 @@ export default function ReportViewer({ employees, balances, branches, categories
             </div>
 
             {/* Detailed Financial Analysis Section */}
-            <div className="px-10 pb-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-              {/* Branch Analysis - Enhanced with Accruals */}
+            <div className="px-10 pb-10 grid grid-cols-1 md:grid-cols-3 gap-8">
+              {/* Branch Analysis */}
               <div className="p-6 border-2 border-gray-900 rounded-3xl bg-gray-50/50">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center text-white">
                     <Building2 size={16} />
                   </div>
-                  <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">تحليل الفروع (الحالي vs استحقاقات)</h3>
+                  <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">تحليل المصروفات حسب الفرع</h3>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {(Object.entries(
-                    report.rows.reduce((acc: Record<string, { current: number, accruals: number }>, row) => {
+                    report.rows.reduce((acc: Record<string, number>, row) => {
                       const branch = String(row[2] || 'عام');
-                      const type = String(row[3] || '');
-                      if (isTransferType(type)) return acc;
-                      
                       const expense = parseFloat(String(row[6])) || 0;
-                      if (expense === 0) return acc;
-
-                      const dateStr = String(row[0] || '');
-                      const targetMonth = row.length > 9 ? String(row[9] || '') : '';
-                      
-                      if (!acc[branch]) acc[branch] = { current: 0, accruals: 0 };
-                      
-                      // If targetMonth exists and is different from the transaction month, it's an accrual
-                      const transactionMonth = dateStr.slice(0, 7); // YYYY-MM
-                      if (targetMonth && targetMonth !== transactionMonth) {
-                        acc[branch].accruals += expense;
-                      } else {
-                        acc[branch].current += expense;
-                      }
-                      
+                      if (expense > 0) acc[branch] = (acc[branch] || 0) + expense;
                       return acc;
-                    }, {} as Record<string, { current: number, accruals: number }>)
-                  ) as [string, { current: number, accruals: number }][]).map(([branch, data]) => (
-                    <div key={branch} className="p-3 bg-white border border-gray-200 rounded-xl space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-black text-gray-900 uppercase">{branch}</span>
-                        <span className="font-mono font-black text-gray-900 text-xs">{formatKWD(data.current + data.accruals)}</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="flex flex-col">
-                          <span className="text-[8px] font-bold text-gray-400 uppercase">مصاريف الشهر</span>
-                          <span className="font-mono text-[10px] font-black text-emerald-600">{formatKWD(data.current)}</span>
-                        </div>
-                        <div className="flex flex-col text-left">
-                          <span className="text-[8px] font-bold text-gray-400 uppercase">سداد استحقاقات</span>
-                          <span className="font-mono text-[10px] font-black text-rose-600">{formatKWD(data.accruals)}</span>
-                        </div>
-                      </div>
+                    }, {} as Record<string, number>)
+                  ) as [string, number][]).map(([branch, total]) => (
+                    <div key={branch} className="flex justify-between items-center p-3 bg-white border border-gray-200 rounded-xl">
+                      <span className="text-[10px] font-black text-gray-500 uppercase">{branch}</span>
+                      <span className="font-mono font-black text-rose-600 text-xs">{formatKWD(total)}</span>
                     </div>
                   ))}
-                  {Object.keys(report.rows.filter(row => !isTransferType(String(row[3] || '')) && (parseFloat(row[6]) || 0) > 0)).length === 0 && (
+                  {Object.keys(report.rows.reduce((acc, row) => {
+                    const branch = String(row[2] || 'عام');
+                    const expense = parseFloat(row[6]) || 0;
+                    if (expense > 0) acc[branch] = (acc[branch] || 0) + expense;
+                    return acc;
+                  }, {} as Record<string, number>)).length === 0 && (
                     <p className="text-[10px] text-gray-400 italic text-center py-4">لا توجد مصروفات مسجلة</p>
                   )}
                 </div>
               </div>
 
-              {/* Category Analysis - Enhanced with Accruals */}
+              {/* Category Analysis */}
               <div className="p-6 border-2 border-gray-900 rounded-3xl bg-gray-50/50">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center text-white">
                     <Filter size={16} />
                   </div>
-                  <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">تحليل البنود (الحالي vs استحقاقات)</h3>
-                </div>
-                <div className="space-y-4">
-                  {(Object.entries(
-                    report.rows.reduce((acc: Record<string, { current: number, accruals: number }>, row) => {
-                      const cat = String(row[4] || 'غير مصنف');
-                      const type = String(row[3] || '');
-                      if (isTransferType(type)) return acc;
-                      
-                      const expense = parseFloat(String(row[6])) || 0;
-                      if (expense === 0) return acc;
-
-                      const dateStr = String(row[0] || '');
-                      const targetMonth = row.length > 9 ? String(row[9] || '') : '';
-                      
-                      if (!acc[cat]) acc[cat] = { current: 0, accruals: 0 };
-                      
-                      const transactionMonth = dateStr.slice(0, 7);
-                      if (targetMonth && targetMonth !== transactionMonth) {
-                        acc[cat].accruals += expense;
-                      } else {
-                        acc[cat].current += expense;
-                      }
-                      
-                      return acc;
-                    }, {} as Record<string, { current: number, accruals: number }>)
-                  ) as [string, { current: number, accruals: number }][]).map(([cat, data]) => (
-                    <div key={cat} className="p-3 bg-white border border-gray-200 rounded-xl space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-black text-gray-900 uppercase">{cat}</span>
-                        <span className="font-mono font-black text-gray-900 text-xs">{formatKWD(data.current + data.accruals)}</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="flex flex-col">
-                          <span className="text-[8px] font-bold text-gray-400 uppercase">فعلي</span>
-                          <span className="font-mono text-[10px] font-black text-emerald-600">{formatKWD(data.current)}</span>
-                        </div>
-                        <div className="flex flex-col text-left">
-                          <span className="text-[8px] font-bold text-gray-400 uppercase">استحقاق</span>
-                          <span className="font-mono text-[10px] font-black text-rose-600">{formatKWD(data.accruals)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Transfer Analysis */}
-              <div className="p-6 border-2 border-gray-900 rounded-3xl bg-gray-50/50">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
-                    <ArrowRightLeft size={16} />
-                  </div>
-                  <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">تحليل التحويلات المالية</h3>
+                  <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">تحليل العمليات حسب التصنيف</h3>
                 </div>
                 <div className="space-y-3">
                   {(Object.entries(
-                    report.rows.reduce((acc: Record<string, number>, row) => {
-                      const type = String(row[3] || '');
-                      if (!isTransferType(type)) return acc;
-                      const employee = String(row[1] || 'غير محدد');
-                      const amount = parseFloat(String(row[5])) || parseFloat(String(row[6])) || 0;
-                      acc[employee] = (acc[employee] || 0) + amount;
+                    report.rows.reduce((acc: Record<string, { in: number, out: number }>, row) => {
+                      const cat = String(row[4] || 'غير مصنف');
+                      const income = parseFloat(String(row[5])) || 0;
+                      const expense = parseFloat(String(row[6])) || 0;
+                      if (!acc[cat]) acc[cat] = { in: 0, out: 0 };
+                      acc[cat].in += income;
+                      acc[cat].out += expense;
                       return acc;
-                    }, {} as Record<string, number>)
-                  ) as [string, number][]).map(([emp, total]) => (
-                    <div key={emp} className="flex justify-between items-center p-3 bg-white border border-gray-200 rounded-xl">
-                      <span className="text-[10px] font-black text-gray-500 uppercase">{emp}</span>
-                      <span className="font-mono font-black text-blue-600 text-xs">{formatKWD(total)}</span>
+                    }, {} as Record<string, { in: number, out: number }>)
+                  ) as [string, { in: number, out: number }][]).map(([cat, totals]) => (
+                    <div key={cat} className="p-3 bg-white border border-gray-200 rounded-xl space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black text-gray-900 uppercase">{cat}</span>
+                      </div>
+                      <div className="flex justify-between text-[9px] font-bold">
+                        <span className="text-emerald-600">وارد: {formatKWD(totals.in)}</span>
+                        <span className="text-rose-600">صادر: {formatKWD(totals.out)}</span>
+                      </div>
                     </div>
                   ))}
-                  {Object.keys(report.rows.filter(row => isTransferType(String(row[3] || '')))).length === 0 && (
-                    <p className="text-[10px] text-gray-400 italic text-center py-4">لا توجد تحويلات مسجلة</p>
-                  )}
                 </div>
               </div>
 
@@ -1011,29 +895,11 @@ export default function ReportViewer({ employees, balances, branches, categories
                     <div className="space-y-2">
                       <div className="flex justify-between text-[10px] font-bold">
                         <span>إجمالي المدين (وارد):</span>
-                        <span className="font-mono">{formatKWD(report.rows.reduce((acc, row) => {
-                          const type = String(row[3] || '');
-                          if (isTransferType(type)) return acc;
-                          return acc + (parseFloat(row[5]) || 0);
-                        }, 0))}</span>
+                        <span className="font-mono">{formatKWD(report.rows.reduce((acc, row) => acc + (parseFloat(row[5]) || 0), 0))}</span>
                       </div>
                       <div className="flex justify-between text-[10px] font-bold">
                         <span>إجمالي الدائن (صادر):</span>
-                        <span className="font-mono">{formatKWD(report.rows.reduce((acc, row) => {
-                          const type = String(row[3] || '');
-                          if (isTransferType(type)) return acc;
-                          return acc + (parseFloat(row[6]) || 0);
-                        }, 0))}</span>
-                      </div>
-                      <div className="flex justify-between text-[10px] font-bold text-blue-600">
-                        <span>إجمالي التحويلات:</span>
-                        <span className="font-mono">{formatKWD(report.rows.reduce((acc, row) => {
-                          const type = String(row[3] || '');
-                          if (isTransferType(type)) {
-                            return acc + (parseFloat(row[5]) || parseFloat(row[6]) || 0);
-                          }
-                          return acc;
-                        }, 0))}</span>
+                        <span className="font-mono">{formatKWD(report.rows.reduce((acc, row) => acc + (parseFloat(row[6]) || 0), 0))}</span>
                       </div>
                       <div className="pt-2 border-t border-black flex justify-between text-xs font-black">
                         <span>الرصيد النهائي:</span>
@@ -1142,28 +1008,7 @@ export default function ReportViewer({ employees, balances, branches, categories
                 </button>
               </div>
 
-              <form onSubmit={handleUpdate} className="p-8 space-y-6 max-h-[80vh] overflow-y-auto">
-                <div className="flex p-1 bg-gray-100 rounded-2xl mb-6">
-                  {[
-                    { id: 'Expense', label: 'مصروف', color: 'rose' },
-                    { id: 'Income', label: 'توريد', color: 'emerald' },
-                    { id: 'Transfer', label: 'تحويل', color: 'blue' }
-                  ].map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => setEditingTransaction({ ...editingTransaction, type: t.id })}
-                      className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
-                        editingTransaction.type === t.id 
-                          ? `bg-white text-${t.color}-600 shadow-sm` 
-                          : 'text-gray-400 hover:text-gray-600'
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-
+              <form onSubmit={handleUpdate} className="p-8 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase">التاريخ</label>
@@ -1186,63 +1031,6 @@ export default function ReportViewer({ employees, balances, branches, categories
                       className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
                     />
                   </div>
-                  
-                  {editingTransaction.type === 'Transfer' ? (
-                    <>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase">المرسل (من)</label>
-                        <select
-                          required
-                          value={editingTransaction.sender || ''}
-                          onChange={(e) => setEditingTransaction({ ...editingTransaction, sender: e.target.value })}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                        >
-                          <option value="">اختر الموظف</option>
-                          {employees.map(e => <option key={e} value={e}>{e}</option>)}
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase">المستلم (إلى)</label>
-                        <select
-                          required
-                          value={editingTransaction.receiver || ''}
-                          onChange={(e) => setEditingTransaction({ ...editingTransaction, receiver: e.target.value })}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                        >
-                          <option value="">اختر الموظف</option>
-                          {employees.map(e => <option key={e} value={e}>{e}</option>)}
-                        </select>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase">الموظف المسؤول</label>
-                        <select
-                          required
-                          value={editingTransaction.employee || ''}
-                          onChange={(e) => setEditingTransaction({ ...editingTransaction, employee: e.target.value })}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                        >
-                          <option value="">اختر الموظف</option>
-                          {employees.map(e => <option key={e} value={e}>{e}</option>)}
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase">التصنيف</label>
-                        <select
-                          required
-                          value={editingTransaction.category || ''}
-                          onChange={(e) => setEditingTransaction({ ...editingTransaction, category: e.target.value })}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                        >
-                          <option value="">اختر التصنيف</option>
-                          {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                    </>
-                  )}
-
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase">الفرع</label>
                     <select
@@ -1250,11 +1038,18 @@ export default function ReportViewer({ employees, balances, branches, categories
                       onChange={(e) => setEditingTransaction({ ...editingTransaction, branch: e.target.value })}
                       className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
                     >
-                      <option value="">غير محدد / عام</option>
-                      {branches.map(b => <option key={b} value={b}>{b}</option>)}
+                      {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
                     </select>
                   </div>
-                  
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase">التصنيف</label>
+                    <input
+                      type="text"
+                      value={editingTransaction.category}
+                      onChange={(e) => setEditingTransaction({ ...editingTransaction, category: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
+                    />
+                  </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase">شهر الاستحقاق (اختياري)</label>
                     <input
