@@ -3,7 +3,7 @@ import { Transaction, ReportFilter, EmployeeBalance, ReportData } from '../types
 // Standard Vite env variable access
 const VITE_GAS_URL = (import.meta as any).env.VITE_GAS_URL;
 // Fallback to the known URL if the env variable is missing
-const GAS_URL = VITE_GAS_URL || 'https://script.google.com/macros/s/AKfycbzwLl6_FqoVW1j1YbQFqEyopHKvYI1qEY6vu4svLDpd98lpZJOW8E-ldQRQGnnm5W7qPw/exec';
+const GAS_URL = VITE_GAS_URL || 'https://script.google.com/macros/s/AKfycbwFEmOuT2zpaXd3eltQLf0GOkllzHjMUQCcYxxiyYpvA0VtCY5L9nZVPm3grJ3x9852iQ/exec';
 
 export const gasService = {
   async getBalances(): Promise<EmployeeBalance[]> {
