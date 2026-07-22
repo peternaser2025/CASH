@@ -11,6 +11,7 @@ export interface Transaction {
   description: string;
   sender?: string;
   receiver?: string;
+  targetMonth?: string;
 }
 
 export interface ReportFilter {

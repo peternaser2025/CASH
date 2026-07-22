@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         request.auth.token.email == "daralsalam2factory@gmail.com");
+    }
+
+    function isValidTransaction(data) {
+      return data.amount is number && data.amount >= 0 &&
+             data.employee is string && data.employee.size() > 0 &&
+             data.branch is string &&
+             data.type in ["Income", "Expense", "Transfer-In", "Transfer-Out", "Accrual-Receivable", "Accrual-Payable"];
+    }
+
+    function isValidEmployee(data) {
+      return data.name is string && data.name.size() > 0 &&
+             data.balance is number;
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidTransaction(request.resource.data);
+      allow update: if isAuthenticated() && isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /employees/{employeeId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidEmployee(request.resource.data);
+      allow update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
+    }
+  }
+}

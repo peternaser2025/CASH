@@ -189,7 +189,21 @@ export default function EmployeeManager({ balances, onRefresh }: EmployeeManager
                         </div>
                       </td>
                       <td className="px-8 py-6 text-left">
-                        <button className="p-2 text-gray-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
+                        <button 
+                          onClick={async () => {
+                            if (window.confirm(`هل أنت متأكد من حذف الموظف ${emp.name}؟ سيتم حذف كافة بياناته!`)) {
+                              setLoading(true);
+                              const res = await gasService.deleteEmployee(emp.name);
+                              if (res.success) {
+                                onRefresh();
+                              } else {
+                                alert('خطأ في الحذف: ' + res.error);
+                              }
+                              setLoading(false);
+                            }
+                          }}
+                          className="p-2 text-gray-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                        >
                           <Trash2 size={18} />
                         </button>
                       </td>
