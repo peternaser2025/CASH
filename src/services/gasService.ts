@@ -6,6 +6,10 @@ const VITE_GAS_URL = (import.meta as any).env.VITE_GAS_URL;
 const GAS_URL = VITE_GAS_URL || 'https://script.google.com/macros/s/AKfycbwFEmOuT2zpaXd3eltQLf0GOkllzHjMUQCcYxxiyYpvA0VtCY5L9nZVPm3grJ3x9852iQ/exec';
 
 export const gasService = {
+  getGasUrl(): string {
+    return GAS_URL;
+  },
+
   async getBalances(): Promise<EmployeeBalance[]> {
     if (!GAS_URL || GAS_URL.includes('...')) return [];
     try {

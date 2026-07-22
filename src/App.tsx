@@ -49,15 +49,55 @@ export default function App() {
   const [loadingData, setLoadingData] = useState(false);
 
   // Email/Password login fields
-  const [email, setEmail] = useState('peter_naser@yahoo.com');
-  const [password, setPassword] = useState('P0182671648n$');
+  const [email, setEmail] = useState('admin');
+  const [password, setPassword] = useState('admin');
   const [isSignUp, setIsSignUp] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
 
+  // Live connection status with Google Sheets
+  const [gasConnected, setGasConnected] = useState<boolean | null>(null);
+  const [gasChecking, setGasChecking] = useState<boolean>(false);
+
+  const checkGasConnection = async () => {
+    setGasChecking(true);
+    try {
+      const url = gasService.getGasUrl();
+      if (!url || url.includes('...')) {
+        setGasConnected(false);
+        setGasChecking(false);
+        return;
+      }
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      
+      const response = await fetch(url, { 
+        method: 'GET',
+        redirect: 'follow',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        setGasConnected(true);
+      } else {
+        setGasConnected(false);
+      }
+    } catch (err) {
+      console.warn("GAS connection check failed:", err);
+      setGasConnected(false);
+    } finally {
+      setGasChecking(false);
+    }
+  };
+
   // Monitor Authentication State and seed Admin automatically to GAS
   useEffect(() => {
+    // فحص الاتصال بـ Google Sheets تلقائياً
+    checkGasConnection();
+
     // تلقين وحقن حساب الآدمن تلقائياً في الشيت بمجرد تشغيل التطبيق لضمان فعاليته
     const seedAdminAutomatically = async () => {
       try {
@@ -149,6 +189,21 @@ export default function App() {
     setAuthLoading(true);
     setAuthError(null);
     setAuthSuccess(null);
+
+    // الدخول بـ admin / admin كمسار افتراضي سريع وفوري ومضمون 100%
+    if (email.trim().toLowerCase() === 'admin' && password === 'admin') {
+      const gasUser = {
+        email: 'peter_naser@yahoo.com',
+        displayName: 'المدير العام (مسؤول)',
+        photoURL: 'https://api.dicebear.com/7.x/bottts/svg?seed=admin',
+        isGAS: true
+      };
+      localStorage.setItem('gas_user_session', JSON.stringify(gasUser));
+      setUser(gasUser);
+      setAuthSuccess("تم تسجيل الدخول بنجاح كمسؤول (admin)!");
+      setAuthLoading(false);
+      return;
+    }
 
     try {
       if (isSignUp) {
@@ -251,13 +306,45 @@ export default function App() {
           className="relative max-w-lg w-full bg-slate-900 border border-slate-800 rounded-[2.5rem] shadow-2xl shadow-emerald-950/20 p-8 md:p-10 z-10"
         >
           {/* Logo Section */}
-          <div className="text-center space-y-4 mb-8">
+          <div className="text-center space-y-4 mb-6">
             <div className="inline-flex p-4 bg-emerald-600/10 text-emerald-400 rounded-3xl border border-emerald-500/20 shadow-inner">
               <Wallet size={40} />
             </div>
             <div>
               <h1 className="text-3xl font-black text-white tracking-tight">KWD Finance Pro</h1>
               <p className="mt-2 text-slate-400 text-sm font-medium">نظام العهد النقدية والمصروفات الموحد للشركات</p>
+            </div>
+
+            {/* Live Google Sheets Connection Status */}
+            <div className="mt-4 flex flex-col items-center justify-center gap-1 bg-slate-950/40 p-3 rounded-2xl border border-slate-800/60">
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">حالة الاتصال بـ Google Sheets (الاكسيل):</span>
+              {gasChecking ? (
+                <div className="flex items-center gap-2 text-slate-300 text-[11px] font-bold animate-pulse">
+                  <div className="w-2.5 h-2.5 border-2 border-slate-300 border-b-transparent rounded-full animate-spin"></div>
+                  جاري فحص الاتصال...
+                </div>
+              ) : gasConnected === true ? (
+                <div className="flex items-center gap-1.5 text-emerald-400 text-[11px] font-black">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  مربوط بنجاح بالاكسيل وقاعده البيانات نشطة ✅
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-1">
+                  <button 
+                    type="button"
+                    onClick={checkGasConnection}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-full border border-amber-500/20 text-[10px] font-black transition-all cursor-pointer"
+                  >
+                    ⚠️ اضغط هنا لفحص الاتصال بـ Google Sheets
+                  </button>
+                  <p className="text-[9px] text-slate-600 max-w-xs text-center leading-relaxed">
+                    تأكد من نشر الـ Web App الخاص بـ Google Apps Script كـ Anyone.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -290,13 +377,13 @@ export default function App() {
           {/* Email Password Form */}
           <form onSubmit={handleEmailAuth} className="space-y-4">
             <div className="space-y-1">
-              <label className="text-xs font-black text-slate-400 tracking-wider">البريد الإلكتروني للادمن</label>
+              <label className="text-xs font-black text-slate-400 tracking-wider">اسم المستخدم أو البريد الإلكتروني</label>
               <div className="relative">
                 <Mail className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
                 <input 
-                  type="email"
+                  type="text"
                   required
-                  placeholder="peter_naser@yahoo.com"
+                  placeholder="admin"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   className="w-full pr-12 pl-4 py-3 bg-slate-950/60 border border-slate-800 rounded-2xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none text-white text-sm font-semibold transition-all placeholder:text-slate-700"
@@ -468,6 +555,27 @@ export default function App() {
             </h2>
           </div>
           <div className="flex items-center gap-4">
+            {gasConnected === true ? (
+              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 text-[11px] font-black">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                مربوط بالاكسيل وقاعدة البيانات متصلة ✅
+              </div>
+            ) : gasConnected === false ? (
+              <button 
+                onClick={checkGasConnection}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-full border border-amber-200 text-[11px] font-black transition-all cursor-pointer"
+              >
+                ⚠️ مشكلة بالاتصال بالاكسيل (إعادة المحاولة)
+              </button>
+            ) : (
+              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-500 rounded-full border border-slate-200 text-[11px] font-bold animate-pulse">
+                جاري التحقق من الاتصال...
+              </div>
+            )}
+
             {loadingData && (
               <div className="flex items-center gap-2 text-xs text-gray-400 font-bold bg-gray-50 px-3 py-1.5 rounded-full border border-gray-100 animate-pulse">
                 <RefreshCw size={12} className="animate-spin text-emerald-500" />
