@@ -46,8 +46,8 @@ export default function App() {
   const [loadingData, setLoadingData] = useState(false);
 
   // Email/Password login fields
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('peter_naser@yahoo.com');
+  const [password, setPassword] = useState('P0182671648n$');
   const [isSignUp, setIsSignUp] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
@@ -145,7 +145,7 @@ export default function App() {
   // Direct bypass for preview testing (iframe compatibility)
   const handleBypassLogin = () => {
     setUser({
-      email: 'daralsalam2factory@gmail.com',
+      email: 'peter_naser@yahoo.com',
       displayName: 'المدير العام (مسؤول)',
       photoURL: 'https://api.dicebear.com/7.x/bottts/svg?seed=admin'
     });
@@ -226,7 +226,7 @@ export default function App() {
                 <input 
                   type="email"
                   required
-                  placeholder="daralsalam2factory@gmail.com"
+                  placeholder="peter_naser@yahoo.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   className="w-full pr-12 pl-4 py-3 bg-slate-950/60 border border-slate-800 rounded-2xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none text-white text-sm font-semibold transition-all placeholder:text-slate-700"
