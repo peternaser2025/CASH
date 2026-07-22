@@ -25,7 +25,7 @@ import {
   PieChart
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
-import { formatKWD } from '../utils/format';
+import { formatKWD, isTransferType, isIncomeType, isExpenseType } from '../utils/format';
 
 interface CostControlProps {
   branches: string[];
@@ -169,7 +169,14 @@ export default function CostControl({ branches, categories, onRefresh }: CostCon
           const income = parseFloat(String(getRowValue(row, 5, 'income') || 0)) || 0;
           const expense = parseFloat(String(getRowValue(row, 6, 'expense') || 0)) || 0;
 
-          if (type.includes('إيراد') || type.toLowerCase().includes('income') || income > 0) {
+          // Exclude transfers / employee custody movements (تحويل عهدة / Transfer)
+          if (isTransferType(type, category)) {
+            return;
+          }
+
+          if (isIncomeType(type, category) || ((type.includes('إيراد') || type.toLowerCase().includes('income')) && income > 0)) {
+            totalBranchSales += income;
+          } else if (income > 0 && !isExpenseType(type, category)) {
             totalBranchSales += income;
           }
 
@@ -258,8 +265,9 @@ export default function CostControl({ branches, categories, onRefresh }: CostCon
     saveTasksToStorage(updated);
   };
 
-  // Analytics Calculations
-  const allCategories = Array.from(new Set([...categories, ...Object.keys(budgets), ...Object.keys(actualExpenses)]));
+  // Analytics Calculations (excluding transfer categories)
+  const allCategories = Array.from(new Set([...categories, ...Object.keys(budgets), ...Object.keys(actualExpenses)]))
+    .filter(cat => !isTransferType('', cat) && cat !== 'Transfer' && cat !== 'تحويل' && cat !== 'تحويل عهدة');
 
   let totalActualExpenses = 0;
   let totalBudgetCeiling = 0;

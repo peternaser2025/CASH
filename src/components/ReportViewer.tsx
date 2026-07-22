@@ -187,13 +187,15 @@ export default function ReportViewer({ employees, balances, branches, categories
 
   const filteredIn = filteredRows.reduce((acc, row) => {
     const type = String(row[3] || '');
-    if (isTransferType(type)) return acc;
+    const category = String(row[4] || '');
+    if (isTransferType(type, category)) return acc;
     return acc + (parseFloat(row[5]) || 0);
   }, 0);
 
   const filteredOut = filteredRows.reduce((acc, row) => {
     const type = String(row[3] || '');
-    if (isTransferType(type)) return acc;
+    const category = String(row[4] || '');
+    if (isTransferType(type, category)) return acc;
     return acc + (parseFloat(row[6]) || 0);
   }, 0);
 
@@ -692,7 +694,7 @@ export default function ReportViewer({ employees, balances, branches, categories
                           filteredRows.reduce((acc: Record<string, number>, row) => {
                             const cat = String(row[4] || 'غير مصنف');
                             const type = String(row[3] || '');
-                            if (isTransferType(type)) return acc;
+                            if (isTransferType(type, cat)) return acc;
                             const expense = parseFloat(String(row[6])) || 0;
                             if (expense > 0) acc[cat] = (acc[cat] || 0) + expense;
                             return acc;
@@ -732,7 +734,8 @@ export default function ReportViewer({ employees, balances, branches, categories
                       filteredRows.reduce((acc: Record<string, number>, row) => {
                         const branch = String(row[2] || 'عام');
                         const type = String(row[3] || '');
-                        if (isTransferType(type)) return acc;
+                        const cat = String(row[4] || '');
+                        if (isTransferType(type, cat)) return acc;
                         const expense = parseFloat(String(row[6])) || 0;
                         if (expense > 0) acc[branch] = (acc[branch] || 0) + expense;
                         return acc;

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
-import { formatKWD } from '../utils/format';
+import { formatKWD, isTransferType } from '../utils/format';
 
 interface ProfitLossProps {
   branches: string[];
@@ -129,11 +129,15 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
       let totalExpenses = 0;
       let totalPurchases = 0;
 
-      // Classify expenses and purchases
+      // Classify expenses and purchases (excluding transfers / employee custody movements)
       reportData.rows.forEach((row: any) => {
         const type = String(getRowValue(row, 3, 'type') || '').trim();
         const category = String(getRowValue(row, 4, 'category') || '').trim();
         const expenseAmount = parseFloat(String(getRowValue(row, 6, 'expense') || 0)) || 0;
+
+        if (isTransferType(type, category)) {
+          return;
+        }
 
         if (expenseAmount > 0) {
           // If category contains "مشتريات" or "شراء", count as Purchase, otherwise as general Branch Expense
