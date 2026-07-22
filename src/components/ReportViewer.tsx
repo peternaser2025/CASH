@@ -65,6 +65,7 @@ export default function ReportViewer({ employees, balances, branches, categories
   const [editingTransaction, setEditingTransaction] = useState<any | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [accrualFilter, setAccrualFilter] = useState<'All' | 'Due' | 'Paid'>('All');
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,6 +157,45 @@ export default function ReportViewer({ employees, balances, branches, categories
   const handlePrint = () => {
     window.print();
   };
+
+  const filteredRows = report ? report.rows.filter(row => {
+    const category = String(row[4] || '');
+    const description = row.length > 8 ? String(row[8] || '') : '';
+    
+    const isTransactionAccrued = 
+      category.includes('مستحق') || 
+      category.includes('مستحقة') || 
+      category.includes('آجل') || 
+      category.includes('مؤجل') || 
+      category.includes('رواتب مستحقة') ||
+      description.includes('مستحق') || 
+      description.includes('مستحقة') || 
+      description.includes('آجل') || 
+      description.includes('مؤجل') || 
+      description.includes('غير مسدد') || 
+      description.includes('لم يسدد') || 
+      description.includes('دين') ||
+      category.toLowerCase().includes('due') ||
+      category.toLowerCase().includes('accrued') ||
+      description.toLowerCase().includes('due') ||
+      description.toLowerCase().includes('accrued');
+
+    if (accrualFilter === 'Due') return isTransactionAccrued;
+    if (accrualFilter === 'Paid') return !isTransactionAccrued;
+    return true;
+  }) : [];
+
+  const filteredIn = filteredRows.reduce((acc, row) => {
+    const type = String(row[3] || '');
+    if (isTransferType(type)) return acc;
+    return acc + (parseFloat(row[5]) || 0);
+  }, 0);
+
+  const filteredOut = filteredRows.reduce((acc, row) => {
+    const type = String(row[3] || '');
+    if (isTransferType(type)) return acc;
+    return acc + (parseFloat(row[6]) || 0);
+  }, 0);
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-20">
@@ -302,7 +342,7 @@ export default function ReportViewer({ employees, balances, branches, categories
       <div className="relative no-print">
         <div className="absolute -top-4 -right-4 w-24 h-24 bg-emerald-500/5 rounded-full blur-3xl"></div>
         <div className="bg-white border-2 border-gray-900 rounded-[2rem] overflow-hidden shadow-2xl shadow-gray-200/50">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-gray-900">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-gray-900">
             <div className="p-6 space-y-3">
               <label className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">
                 <User size={12} className="text-emerald-500" />
@@ -349,6 +389,22 @@ export default function ReportViewer({ employees, balances, branches, categories
                 <option value="Expense">مصروفات</option>
                 <option value="Income">توريدات</option>
                 <option value="Transfer">تحويلات</option>
+              </select>
+            </div>
+
+            <div className="p-6 space-y-3">
+              <label className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                <Filter size={12} className="text-emerald-500" />
+                حالة الاستحقاق
+              </label>
+              <select
+                value={accrualFilter}
+                onChange={(e) => setAccrualFilter(e.target.value as 'All' | 'Due' | 'Paid')}
+                className="w-full bg-transparent font-black text-gray-900 outline-none cursor-pointer appearance-none"
+              >
+                <option value="All">كافة الحالات</option>
+                <option value="Due">مستحقة ⚠️</option>
+                <option value="Paid">مسددة ✅</option>
               </select>
             </div>
 
@@ -572,25 +628,23 @@ export default function ReportViewer({ employees, balances, branches, categories
                 { label: 'الرصيد الافتتاحي', value: report.openingBalance, icon: Wallet, color: 'blue' },
                 { 
                   label: 'إجمالي الوارد', 
-                  value: report.rows.reduce((acc, row) => {
-                    const type = String(row[3] || '');
-                    if (isTransferType(type)) return acc;
-                    return acc + (parseFloat(row[5]) || 0);
-                  }, 0), 
+                  value: filteredIn, 
                   icon: TrendingUp, 
                   color: 'emerald' 
                 },
                 { 
                   label: 'إجمالي الصادر', 
-                  value: report.rows.reduce((acc, row) => {
-                    const type = String(row[3] || '');
-                    if (isTransferType(type)) return acc;
-                    return acc + (parseFloat(row[6]) || 0);
-                  }, 0), 
+                  value: filteredOut, 
                   icon: TrendingDown, 
                   color: 'rose' 
                 },
-                { label: 'الرصيد الختامي', value: report.finalBalance, icon: CheckCircle2, color: parseFloat(report.finalBalance) >= 0 ? 'emerald' : 'rose', highlight: true }
+                { 
+                  label: 'الرصيد الختامي', 
+                  value: accrualFilter === 'All' ? report.finalBalance : (parseFloat(report.openingBalance) + filteredIn - filteredOut), 
+                  icon: CheckCircle2, 
+                  color: (accrualFilter === 'All' ? parseFloat(report.finalBalance) : (parseFloat(report.openingBalance) + filteredIn - filteredOut)) >= 0 ? 'emerald' : 'rose', 
+                  highlight: true 
+                }
               ].map((card, idx) => (
                 <div 
                   key={idx}
@@ -635,7 +689,7 @@ export default function ReportViewer({ employees, balances, branches, categories
                     <PieChart>
                       <Pie
                         data={Object.entries(
-                          report.rows.reduce((acc: Record<string, number>, row) => {
+                          filteredRows.reduce((acc: Record<string, number>, row) => {
                             const cat = String(row[4] || 'غير مصنف');
                             const type = String(row[3] || '');
                             if (isTransferType(type)) return acc;
@@ -675,7 +729,7 @@ export default function ReportViewer({ employees, balances, branches, categories
                 <div className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={Object.entries(
-                      report.rows.reduce((acc: Record<string, number>, row) => {
+                      filteredRows.reduce((acc: Record<string, number>, row) => {
                         const branch = String(row[2] || 'عام');
                         const type = String(row[3] || '');
                         if (isTransferType(type)) return acc;
@@ -706,6 +760,7 @@ export default function ReportViewer({ employees, balances, branches, categories
                     <th className="px-6 py-5 font-black text-[10px] uppercase tracking-[0.2em] border-l border-white/10">الفرع</th>
                     <th className="px-6 py-5 font-black text-[10px] uppercase tracking-[0.2em] border-l border-white/10">التصنيف</th>
                     <th className="px-6 py-5 font-black text-[10px] uppercase tracking-[0.2em] border-l border-white/10">البيان</th>
+                    <th className="px-6 py-5 font-black text-[10px] uppercase tracking-[0.2em] border-l border-white/10">حالة الاستحقاق</th>
                     <th className="px-6 py-5 font-black text-[10px] uppercase tracking-[0.2em] border-l border-white/10 text-emerald-400">وارد (+)</th>
                     <th className="px-6 py-5 font-black text-[10px] uppercase tracking-[0.2em] border-l border-white/10 text-rose-400">صادر (-)</th>
                     <th className="px-6 py-5 font-black text-[10px] uppercase tracking-[0.2em] border-l border-white/10">الرصيد</th>
@@ -723,6 +778,7 @@ export default function ReportViewer({ employees, balances, branches, categories
                     <td className="px-6 py-4 border-l border-gray-900">
                       <p className="text-gray-500 text-[11px] font-bold italic">الرصيد المرحل من الفترات السابقة</p>
                     </td>
+                    <td className="px-6 py-4 text-center text-gray-400 text-[10px] border-l border-gray-900">---</td>
                     <td className="px-6 py-4 text-center font-mono text-xs border-l border-gray-900 text-gray-300">0.000</td>
                     <td className="px-6 py-4 text-center font-mono text-xs border-l border-gray-900 text-gray-300">0.000</td>
                     <td className="px-6 py-4 text-center bg-emerald-50/50 border-l border-gray-900">
@@ -731,7 +787,7 @@ export default function ReportViewer({ employees, balances, branches, categories
                     <td className="px-6 py-4 text-center no-print">---</td>
                   </tr>
 
-                  {report.rows.map((row, i) => {
+                  {filteredRows.map((row, i) => {
                     const date = String(row[0] || '');
                     const branch = String(row[2] || 'عام');
                     const category = String(row[4] || '');
@@ -746,6 +802,24 @@ export default function ReportViewer({ employees, balances, branches, categories
                     
                     const isIncome = isIncomeType(type) || (income > 0 && !isTransferType(type));
                     const isTransfer = isTransferType(type);
+
+                    const isTransactionAccrued = 
+                      category.includes('مستحق') || 
+                      category.includes('مستحقة') || 
+                      category.includes('آجل') || 
+                      category.includes('مؤجل') || 
+                      category.includes('رواتب مستحقة') ||
+                      description.includes('مستحق') || 
+                      description.includes('مستحقة') || 
+                      description.includes('آجل') || 
+                      description.includes('مؤجل') || 
+                      description.includes('غير مسدد') || 
+                      description.includes('لم يسدد') || 
+                      description.includes('دين') ||
+                      category.toLowerCase().includes('due') ||
+                      category.toLowerCase().includes('accrued') ||
+                      description.toLowerCase().includes('due') ||
+                      description.toLowerCase().includes('accrued');
 
                     return (
                       <tr key={i} className="hover:bg-gray-50 transition-colors group">
@@ -776,6 +850,24 @@ export default function ReportViewer({ employees, balances, branches, categories
                           <p className="text-gray-900 font-bold text-xs leading-relaxed max-w-[320px]">
                             {description}
                           </p>
+                        </td>
+                        <td className="px-6 py-4 text-center border-l border-gray-900">
+                          {isTransactionAccrued ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-full border border-amber-200 text-[10px] font-black animate-pulse">
+                              <span className="relative flex h-1.5 w-1.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
+                              </span>
+                              مستحقة ⚠️
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 text-[10px] font-black">
+                              <span className="relative flex h-1.5 w-1.5">
+                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                              </span>
+                              مسددة ✅
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-center border-l border-gray-900">
                           <span className={`font-black font-mono text-sm ${isIncome ? 'text-emerald-600' : isTransfer ? 'text-blue-400' : 'text-gray-200'}`}>
