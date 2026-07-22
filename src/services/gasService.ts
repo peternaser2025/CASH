@@ -221,5 +221,32 @@ export const gasService = {
       console.error('Error updating settings:', error);
       return { success: false, error: 'خطأ في الاتصال' };
     }
+  },
+
+  async checkLogin(email: string, password: string): Promise<{ success: boolean; displayName?: string; error?: string }> {
+    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({ action: 'login', email, password }),
+      });
+      const text = await response.text();
+      if (!text || text.trim() === '') {
+        return { success: false, error: 'لم يتم تفعيل دالة تسجيل الدخول في سكريبت جوجل شيت بعد' };
+      }
+      try {
+        return JSON.parse(text);
+      } catch (parseErr) {
+        console.warn('Parsing GAS login response failed, likely action not supported yet:', parseErr);
+        return { success: false, error: 'لم يتم تفعيل دالة تسجيل الدخول في سكريبت جوجل شيت بعد' };
+      }
+    } catch (error) {
+      console.error('Error in GAS login:', error);
+      return { success: false, error: 'خطأ في الاتصال بالسيرفر' };
+    }
   }
 };

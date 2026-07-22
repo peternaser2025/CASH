@@ -55,8 +55,21 @@ export default function App() {
 
   // Monitor Authentication State
   useEffect(() => {
+    const savedGASUser = localStorage.getItem('gas_user_session');
+    if (savedGASUser) {
+      try {
+        setUser(JSON.parse(savedGASUser));
+        setLoading(false);
+        return;
+      } catch (e) {
+        localStorage.removeItem('gas_user_session');
+      }
+    }
+
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
+      if (!localStorage.getItem('gas_user_session')) {
+        setUser(u);
+      }
       setLoading(false);
     });
     return unsubscribe;
@@ -120,7 +133,36 @@ export default function App() {
         await createUserWithEmailAndPassword(auth, email, password);
         setAuthSuccess("تم إنشاء الحساب بنجاح وتجهيز النظام!");
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        // Try to authenticate via Google Sheets first
+        let gasSuccess = false;
+        try {
+          const gasResult = await gasService.checkLogin(email, password);
+          if (gasResult && gasResult.success) {
+            const gasUser = {
+              email,
+              displayName: gasResult.displayName || 'المدير العام (مسؤول)',
+              photoURL: 'https://api.dicebear.com/7.x/bottts/svg?seed=admin',
+              isGAS: true
+            };
+            localStorage.setItem('gas_user_session', JSON.stringify(gasUser));
+            setUser(gasUser);
+            setAuthSuccess("تم تسجيل الدخول بنجاح عبر قاعدة بيانات Excel (جوجل شيت)!");
+            gasSuccess = true;
+          } else if (gasResult && gasResult.error && gasResult.error.includes("غير صحيحة")) {
+            // If GAS explicitly rejected the credentials (wrong username or password), display it and return.
+            setAuthError(gasResult.error);
+            return;
+          } else {
+            console.warn("GAS login check indicated not active or failed, falling back to Firebase Auth", gasResult ? gasResult.error : "Unknown");
+          }
+        } catch (gasErr) {
+          console.warn("GAS login check failed, falling back to Firebase Auth", gasErr);
+        }
+
+        if (!gasSuccess) {
+          // Fallback to standard Firebase Authentication
+          await signInWithEmailAndPassword(auth, email, password);
+        }
       }
     } catch (error: any) {
       console.error("Email auth failed", error);
@@ -152,6 +194,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('gas_user_session');
     signOut(auth).then(() => {
       setUser(null);
     }).catch(() => {

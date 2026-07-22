@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { UserPlus, Users, CheckCircle2, AlertCircle, Loader2, ShieldCheck, UserCheck, Search, Trash2 } from 'lucide-react';
+import { UserPlus, Users, CheckCircle2, AlertCircle, Loader2, ShieldCheck, UserCheck, Search, Trash2, Key, Copy, Check } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
 
@@ -14,6 +14,49 @@ export default function EmployeeManager({ balances, onRefresh }: EmployeeManager
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const gasScriptCode = `// 1. أضف هذا الجزء داخل دالة doPost(e) في سكريبت جوجل شيت الخاص بك:
+// if (request.action === "login") {
+//   return ContentService.createTextOutput(JSON.stringify(checkUserLogin(request.email, request.password))).setMimeType(ContentService.MimeType.JSON);
+// }
+
+// 2. وأضف هذه الدالة كاملة في أسفل ملف السكريبت:
+function checkUserLogin(email, password) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName("Users");
+    
+    // إنشاء ورقة العمل والمستخدم الافتراضي تلقائياً إن لم تكن موجودة
+    if (!sheet) {
+      sheet = ss.insertSheet("Users");
+      sheet.appendRow(["Email", "Password", "DisplayName", "Role"]);
+      sheet.appendRow(["peter_naser@yahoo.com", "P0182671648n$", "المدير العام (مسؤول)", "admin"]);
+      sheet.getRange("A1:D2").setFontWeight("bold");
+    }
+    
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      var dbEmail = String(data[i][0]).trim().toLowerCase();
+      var dbPassword = String(data[i][1]).trim();
+      var dbDisplayName = data[i][2] || "مسؤول النظام";
+      var dbRole = data[i][3] || "user";
+      
+      if (dbEmail === String(email).trim().toLowerCase() && dbPassword === String(password).trim()) {
+        return { success: true, displayName: dbDisplayName, role: dbRole };
+      }
+    }
+    return { success: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
+  } catch (err) {
+    return { success: false, error: "فشل استعلام تسجيل الدخول: " + err.message };
+  }
+}`;
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(gasScriptCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 3000);
+  };
 
   const filteredBalances = balances.filter(emp => 
     emp.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -121,6 +164,54 @@ export default function EmployeeManager({ balances, onRefresh }: EmployeeManager
                   تنبيه: سيتم إنشاء ورقة عمل (Sheet) جديدة لهذا الموظف تلقائياً في النظام لمتابعة حركته المالية.
                 </p>
               </div>
+            </div>
+          </motion.div>
+
+          {/* Excel Users Database Instruction Guide */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="mt-6 bg-slate-900 text-slate-100 p-8 rounded-[2.5rem] border border-slate-800 shadow-xl space-y-6"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
+                <Key size={24} />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-white">إدارة الدخول عبر Excel</h3>
+                <p className="text-xs font-bold text-slate-400">إعداد صفحة الايميلات والباسورد</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              لقد قمنا بربط نظام تسجيل الدخول بقاعدة البيانات الخاصة بك في جوجل شيت (Excel). 
+              سيقوم النظام بإنشاء ورقة عمل باسم <code className="bg-slate-950 px-2 py-1 rounded text-emerald-400 font-bold">Users</code> تلقائياً وتجهيز حساب الأدمن <code className="bg-slate-950 px-2 py-1 rounded text-emerald-400 font-bold">peter_naser@yahoo.com</code>.
+            </p>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs font-black text-slate-400 px-1">
+                <span>الكود المطلوب إضافته في Google Apps Script:</span>
+                <button 
+                  onClick={handleCopyCode}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all active:scale-95"
+                >
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                  {copied ? "تم النسخ!" : "نسخ الكود البرمجي"}
+                </button>
+              </div>
+
+              <div className="relative">
+                <pre className="bg-slate-950 p-4 rounded-2xl text-[10px] font-mono text-emerald-400 overflow-x-auto max-h-60 leading-relaxed border border-slate-800">
+                  {gasScriptCode}
+                </pre>
+              </div>
+            </div>
+
+            <div className="p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/10">
+              <span className="text-[10px] font-bold text-emerald-400 leading-relaxed block">
+                💡 بمجرد حفظ هذا الكود ونشره كـ (Web App)، يمكنك فتح ملف Excel وستجد ورقة عمل جديدة تسمى "Users" تتيح لك إضافة أي إيميل وباسورد وتحديد صلاحياته ليعمل في النظام فوراً!
+              </span>
             </div>
           </motion.div>
         </div>
