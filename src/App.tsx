@@ -56,8 +56,19 @@ export default function App() {
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
 
-  // Monitor Authentication State
+  // Monitor Authentication State and seed Admin automatically to GAS
   useEffect(() => {
+    // تلقين وحقن حساب الآدمن تلقائياً في الشيت بمجرد تشغيل التطبيق لضمان فعاليته
+    const seedAdminAutomatically = async () => {
+      try {
+        await gasService.addUser('peter_naser@yahoo.com', 'P0182671648n$', 'المدير العام (مسؤول)', 'admin');
+        console.log("Admin account fed to GAS automatically on mount!");
+      } catch (err) {
+        console.warn("Could not automatically seed admin account on mount:", err);
+      }
+    };
+    seedAdminAutomatically();
+
     const savedGASUser = localStorage.getItem('gas_user_session');
     if (savedGASUser) {
       try {
