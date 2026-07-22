@@ -16,41 +16,513 @@ export default function EmployeeManager({ balances, onRefresh }: EmployeeManager
   const [searchTerm, setSearchTerm] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const gasScriptCode = `// 1. أضف هذا الجزء داخل دالة doPost(e) في سكريبت جوجل شيت الخاص بك:
-// if (request.action === "login") {
-//   return ContentService.createTextOutput(JSON.stringify(checkUserLogin(request.email, request.password))).setMimeType(ContentService.MimeType.JSON);
-// }
+  const gasScriptCode = `/*
+  ========================================================================
+  كود الـ Google Apps Script الكامل والحديث للنظام المالي (إصدار متكامل تلقائي)
+  ========================================================================
+  1. افتح ملف Google Sheet (الاكسيل الخاص بك)
+  2. اضغط على "Extensions" (الإضافات) ثم اختر "Apps Script"
+  3. احذف أي كود قديم موجود هناك تماماً
+  4. الصق هذا الكود بالكامل ومباشرة
+  5. اضغط على زر الحفظ (أيقونة الديسك)
+  6. اضغط على زر "Deploy" ثم "New Deployment"
+  7. اختر نوع التثبيت "Web app"
+  8. اضبط الخيارات التالية:
+     - Execute as: "Me (بريدك الإلكتروني)"
+     - Who has access: "Anyone"
+  9. اضغط "Deploy" ووافق على الصلاحيات، ثم انسخ رابط الـ Web App وضعه في إعدادات النظام!
+*/
 
-// 2. وأضف هذه الدالة كاملة في أسفل ملف السكريبت:
-function checkUserLogin(email, password) {
+function doGet(e) {
+  return handleRequest(e, "GET");
+}
+
+function doPost(e) {
+  return handleRequest(e, "POST");
+}
+
+function handleRequest(e, method) {
+  var headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "86400"
+  };
+  
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName("Users");
     
-    // إنشاء ورقة العمل والمستخدم الافتراضي تلقائياً إن لم تكن موجودة
-    if (!sheet) {
-      sheet = ss.insertSheet("Users");
-      sheet.appendRow(["Email", "Password", "DisplayName", "Role"]);
-      sheet.appendRow(["peter_naser@yahoo.com", "P0182671648n$", "المدير العام (مسؤول)", "admin"]);
-      sheet.getRange("A1:D2").setFontWeight("bold");
+    // تهيئة الجداول الرئيسية تلقائياً إن لم تكن موجودة
+    getOrCreateBalancesSheet(ss);
+    getOrCreateUsersSheet(ss);
+    getOrCreateSettingsSheet(ss);
+    
+    if (method === "GET") {
+      // إرجاع أرصدة الموظفين
+      var balances = fetchBalances(ss);
+      return ContentService.createTextOutput(JSON.stringify(balances))
+        .setMimeType(ContentService.MimeType.JSON)
+        .setHeaders(headers);
     }
     
-    var data = sheet.getDataRange().getValues();
-    for (var i = 1; i < data.length; i++) {
-      var dbEmail = String(data[i][0]).trim().toLowerCase();
-      var dbPassword = String(data[i][1]).trim();
-      var dbDisplayName = data[i][2] || "مسؤول النظام";
-      var dbRole = data[i][3] || "user";
+    // POST request
+    var requestData = JSON.parse(e.postData.contents);
+    var action = requestData.action;
+    var result = { success: false, error: "عملية غير معروفة" };
+    
+    if (action === "login") {
+      result = checkUserLogin(ss, requestData.email, requestData.password);
+    } else if (action === "addUser") {
+      result = addUser(ss, requestData.email, requestData.password, requestData.displayName, requestData.role);
+    } else if (action === "addEmployee") {
+      result = addEmployee(ss, requestData.name);
+    } else if (action === "deleteEmployee") {
+      result = deleteEmployee(ss, requestData.name);
+    } else if (action === "add") {
+      result = addTransaction(ss, requestData.data);
+    } else if (action === "update") {
+      result = updateTransaction(ss, requestData.id, requestData.data);
+    } else if (action === "delete") {
+      result = deleteTransaction(ss, requestData.id);
+    } else if (action === "report") {
+      result = generateReport(ss, requestData.filters);
+    } else if (action === "getSettings") {
+      result = getSettings(ss);
+    } else if (action === "updateSettings") {
+      result = updateSettings(ss, requestData.branches, requestData.categories);
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeaders(headers);
       
-      if (dbEmail === String(email).trim().toLowerCase() && dbPassword === String(password).trim()) {
-        return { success: true, displayName: dbDisplayName, role: dbRole };
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeaders(headers);
+  }
+}
+
+// إنشاء وتجهيز جدول المستخدمين تلقائياً
+function getOrCreateUsersSheet(ss) {
+  var sheet = ss.getSheetByName("Users");
+  if (!sheet) {
+    sheet = ss.insertSheet("Users");
+    sheet.appendRow(["Email", "Password", "DisplayName", "Role"]);
+    sheet.appendRow(["peter_naser@yahoo.com", "P0182671648n$", "المدير العام (مسؤول)", "admin"]);
+    sheet.getRange("A1:D1").setFontWeight("bold").setBackground("#D5E8D4");
+    sheet.setGridlinesActive(true);
+  }
+  return sheet;
+}
+
+// إنشاء وتجهيز جدول الأرصدة تلقائياً
+function getOrCreateBalancesSheet(ss) {
+  var sheet = ss.getSheetByName("Balances");
+  if (!sheet) {
+    sheet = ss.insertSheet("Balances");
+    sheet.appendRow(["Employee", "Balance"]);
+    sheet.getRange("A1:B1").setFontWeight("bold").setBackground("#D5E8D4");
+    sheet.setGridlinesActive(true);
+  }
+  return sheet;
+}
+
+// إنشاء وتجهيز جدول الإعدادات تلقائياً
+function getOrCreateSettingsSheet(ss) {
+  var sheet = ss.getSheetByName("Settings");
+  if (!sheet) {
+    sheet = ss.insertSheet("Settings");
+    sheet.appendRow(["Key", "Value"]);
+    sheet.appendRow(["Branches", "المكتب الرئيسي,فرع السالمية,فرع حولي,فرع الفروانية,فرع الأحمدي"]);
+    sheet.appendRow(["Categories", "سلفة عهدة,تسوية مصروفات,تغذية نقدية,مشتريات مكتبية,صيانة,أخرى"]);
+    sheet.getRange("A1:B1").setFontWeight("bold").setBackground("#D5E8D4");
+    sheet.setGridlinesActive(true);
+  }
+  return sheet;
+}
+
+// دالة التحقق من تسجيل الدخول
+function checkUserLogin(ss, email, password) {
+  var sheet = ss.getSheetByName("Users");
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    var dbEmail = String(data[i][0]).trim().toLowerCase();
+    var dbPassword = String(data[i][1]).trim();
+    var dbDisplayName = data[i][2] || "مسؤول النظام";
+    var dbRole = data[i][3] || "user";
+    
+    if (dbEmail === String(email).trim().toLowerCase() && dbPassword === String(password).trim()) {
+      return { success: true, displayName: dbDisplayName, role: dbRole };
+    }
+  }
+  return { success: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
+}
+
+// إضافة مستخدم جديد للنظام من لوحة التحكم تلقائياً
+function addUser(ss, email, password, displayName, role) {
+  var sheet = ss.getSheetByName("Users");
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).trim().toLowerCase() === String(email).trim().toLowerCase()) {
+      sheet.getRange(i + 1, 2).setValue(password);
+      sheet.getRange(i + 1, 3).setValue(displayName);
+      sheet.getRange(i + 1, 4).setValue(role);
+      return { success: true, updated: true };
+    }
+  }
+  sheet.appendRow([email, password, displayName, role]);
+  return { success: true };
+}
+
+// دالة جلب الأرصدة وقائمة الموظفين
+function fetchBalances(ss) {
+  var sheet = ss.getSheetByName("Balances");
+  var data = sheet.getDataRange().getValues();
+  var list = [];
+  for (var i = 1; i < data.length; i++) {
+    var name = String(data[i][0]).trim();
+    var bal = parseFloat(data[i][1]) || 0;
+    if (name) {
+      list.push([name, bal]);
+    }
+  }
+  return list;
+}
+
+// دالة جلب الإعدادات (الفروع والتصنيفات)
+function getSettings(ss) {
+  var sheet = ss.getSheetByName("Settings");
+  var data = sheet.getDataRange().getValues();
+  var branches = [];
+  var categories = [];
+  for (var i = 1; i < data.length; i++) {
+    var key = String(data[i][0]).trim();
+    var val = String(data[i][1]).trim();
+    if (key === "Branches") {
+      branches = val.split(",").map(function(s) { return s.trim(); });
+    } else if (key === "Categories") {
+      categories = val.split(",").map(function(s) { return s.trim(); });
+    }
+  }
+  return { branches: branches, categories: categories };
+}
+
+// تحديث الإعدادات
+function updateSettings(ss, branches, categories) {
+  var sheet = ss.getSheetByName("Settings");
+  var data = sheet.getDataRange().getValues();
+  var branchesStr = branches.join(",");
+  var categoriesStr = categories.join(",");
+  
+  var branchFound = false;
+  var catFound = false;
+  
+  for (var i = 1; i < data.length; i++) {
+    var key = String(data[i][0]).trim();
+    if (key === "Branches") {
+      sheet.getRange(i + 1, 2).setValue(branchesStr);
+      branchFound = true;
+    } else if (key === "Categories") {
+      sheet.getRange(i + 1, 2).setValue(categoriesStr);
+      catFound = true;
+    }
+  }
+  
+  if (!branchFound) sheet.appendRow(["Branches", branchesStr]);
+  if (!catFound) sheet.appendRow(["Categories", categoriesStr]);
+  
+  return { success: true };
+}
+
+// دالة إضافة موظف جديد وإنشاء التب الخاص به تلقائياً في ثوانٍ!
+function addEmployee(ss, name) {
+  name = String(name).trim();
+  if (!name) return { success: false, error: "الاسم فارغ" };
+  
+  // إنشاء التب الخاص بالموظف تلقائياً
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    // إضافة ترويسة الجدول المتوافقة تماماً مع الكشوفات والتقارير
+    sheet.appendRow(["ID", "التاريخ", "الفرع", "البند", "البيان", "دائن (وارد)", "مدين (مصروف)", "الرصيد", "يخص شهر", "اسم الموظف"]);
+    sheet.getRange("A1:J1").setFontWeight("bold").setBackground("#D5E8D4").setHorizontalAlignment("center");
+    sheet.setGridlinesActive(true);
+  }
+  
+  // إضافة الموظف إلى جدول الأرصدة بقيمة 0 إن لم يكن موجوداً
+  var balancesSheet = ss.getSheetByName("Balances");
+  var data = balancesSheet.getDataRange().getValues();
+  var found = false;
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).trim().toLowerCase() === name.toLowerCase()) {
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    balancesSheet.appendRow([name, 0]);
+  }
+  
+  return { success: true };
+}
+
+// دالة حذف الموظف وتبويبه
+function deleteEmployee(ss, name) {
+  name = String(name).trim();
+  var sheet = ss.getSheetByName(name);
+  if (sheet) {
+    ss.deleteSheet(sheet);
+  }
+  
+  var balancesSheet = ss.getSheetByName("Balances");
+  var data = balancesSheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).trim().toLowerCase() === name.toLowerCase()) {
+      balancesSheet.deleteRow(i + 1);
+      break;
+    }
+  }
+  return { success: true };
+}
+
+// دالة إضافة حركة مالية وتحديث رصيد الموظف
+function addTransaction(ss, data) {
+  var name = String(data.employee).trim();
+  var sheet = ss.getSheetByName(name);
+  
+  // إذا لم يكن تب الموظف موجوداً، نقوم بإنشائه فوراً وتلقائياً!
+  if (!sheet) {
+    addEmployee(ss, name);
+    sheet = ss.getSheetByName(name);
+  }
+  
+  var id = new Date().getTime(); // رقم العملية الفريد
+  var date = data.date || new Date().toISOString().split('T')[0];
+  var branch = data.branch || "";
+  var category = data.category || "";
+  var description = data.description || "";
+  var type = data.type || "Expense";
+  var amount = parseFloat(data.amount) || 0;
+  var targetMonth = data.targetMonth || "";
+  
+  var income = (type === "Income") ? amount : 0;
+  var expense = (type === "Expense") ? amount : 0;
+  
+  // حساب الرصيد الجديد التراكمي للموظف
+  var currentBalance = 0;
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    currentBalance = parseFloat(sheet.getRange(lastRow, 8).getValue()) || 0;
+  }
+  
+  var newBalance = currentBalance + income - expense;
+  
+  // إضافة الحركة في سطر جديد
+  sheet.appendRow([id, date, branch, category, description, income, expense, newBalance, targetMonth, name]);
+  sheet.setGridlinesActive(true);
+  
+  // تحديث جدول الأرصدة الرئيسي
+  updateEmployeeBalanceInSheet(ss, name, newBalance);
+  
+  return { success: true, id: id };
+}
+
+// دالة تحديث الرصيد للموظف في جدول Balances
+function updateEmployeeBalanceInSheet(ss, name, balance) {
+  var balancesSheet = ss.getSheetByName("Balances");
+  var data = balancesSheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).trim().toLowerCase() === name.toLowerCase()) {
+      balancesSheet.getRange(i + 1, 2).setValue(balance);
+      return;
+    }
+  }
+  // إن لم يكن بالجدول نلحقه
+  balancesSheet.appendRow([name, balance]);
+}
+
+// دالة تعديل حركة مالية مسجلة مسبقاً
+function updateTransaction(ss, id, data) {
+  var name = String(data.employee).trim();
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) return { success: false, error: "ورقة العمل غير موجودة" };
+  
+  var rows = sheet.getDataRange().getValues();
+  var targetRow = -1;
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(id)) {
+      targetRow = i + 1;
+      break;
+    }
+  }
+  
+  if (targetRow === -1) return { success: false, error: "لم يتم العثور على العملية للتحديث" };
+  
+  var type = data.type || "Expense";
+  var amount = parseFloat(data.amount) || 0;
+  var income = (type === "Income") ? amount : 0;
+  var expense = (type === "Expense") ? amount : 0;
+  
+  // تعديل السطر المحدد
+  sheet.getRange(targetRow, 2).setValue(data.date);
+  sheet.getRange(targetRow, 3).setValue(data.branch);
+  sheet.getRange(targetRow, 4).setValue(data.category);
+  sheet.getRange(targetRow, 5).setValue(data.description);
+  sheet.getRange(targetRow, 6).setValue(income);
+  sheet.getRange(targetRow, 7).setValue(expense);
+  sheet.getRange(targetRow, 9).setValue(data.targetMonth || "");
+  
+  // إعادة حساب كافة الأرصدة التراكمية في التب من البداية للنهاية لضمان سلامة الحسابات!
+  recalculateSheetBalances(ss, name);
+  
+  return { success: true };
+}
+
+// دالة حذف حركة مالية
+function deleteTransaction(ss, id) {
+  // نبحث في جميع أوراق العمل عن الحركة بهذا الـ ID
+  var sheets = ss.getSheets();
+  var found = false;
+  var empName = "";
+  
+  for (var k = 0; k < sheets.length; k++) {
+    var sheet = sheets[k];
+    var name = sheet.getName();
+    if (["Users", "Balances", "Settings", "Dashboard"].indexOf(name) !== -1) continue;
+    
+    var rows = sheet.getDataRange().getValues();
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) === String(id)) {
+        sheet.deleteRow(i + 1);
+        empName = name;
+        found = true;
+        break;
       }
     }
-    return { success: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
-  } catch (err) {
-    return { success: false, error: "فشل استعلام تسجيل الدخول: " + err.message };
+    if (found) break;
   }
-}`;
+  
+  if (found && empName) {
+    // إعادة حساب الأرصدة
+    recalculateSheetBalances(ss, empName);
+    return { success: true };
+  }
+  
+  return { success: false, error: "العملية غير موجودة" };
+}
+
+// دالة إعادة حساب الرصيد التراكمي لكافة العمليات وتحديث الرصيد الإجمالي
+function recalculateSheetBalances(ss, name) {
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) return;
+  
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    updateEmployeeBalanceInSheet(ss, name, 0);
+    return;
+  }
+  
+  var range = sheet.getRange(2, 6, lastRow - 1, 3); // دائن، مدين، الرصيد
+  var values = range.getValues();
+  var balance = 0;
+  
+  for (var i = 0; i < values.length; i++) {
+    var inc = parseFloat(values[i][0]) || 0;
+    var exp = parseFloat(values[i][1]) || 0;
+    balance = balance + inc - exp;
+    sheet.getRange(i + 2, 8).setValue(balance); // حفظ الرصيد في العمود الثامن
+  }
+  
+  updateEmployeeBalanceInSheet(ss, name, balance);
+}
+
+// دالة توليد كشف الحساب والتقارير المالية
+function generateReport(ss, filters) {
+  var name = String(filters.employee || "").trim();
+  var branch = String(filters.branch || "").trim();
+  
+  var rowsList = [];
+  var totalIncome = 0;
+  var totalExpense = 0;
+  
+  var targetSheets = [];
+  if (name) {
+    var s = ss.getSheetByName(name);
+    if (s) targetSheets.push(s);
+  } else {
+    // إذا لم يحدد موظف، نبحث في كافة صفحات الموظفين
+    var allSheets = ss.getSheets();
+    for (var k = 0; k < allSheets.length; k++) {
+      var n = allSheets[k].getName();
+      if (["Users", "Balances", "Settings", "Dashboard"].indexOf(n) === -1) {
+        targetSheets.push(allSheets[k]);
+      }
+    }
+  }
+  
+  var filterStart = filters.startDate ? new Date(filters.startDate) : null;
+  var filterEnd = filters.endDate ? new Date(filters.endDate) : null;
+  if (filterEnd) filterEnd.setHours(23, 59, 59, 999);
+  
+  for (var sIdx = 0; sIdx < targetSheets.length; sIdx++) {
+    var curSheet = targetSheets[sIdx];
+    var data = curSheet.getDataRange().getValues();
+    var empName = curSheet.getName();
+    
+    for (var i = 1; i < data.length; i++) {
+      var rowId = data[i][0];
+      var rowDateStr = data[i][1];
+      var rowBranch = String(data[i][2]).trim();
+      var rowCategory = String(data[i][3]).trim();
+      var rowDesc = String(data[i][4]).trim();
+      var rowInc = parseFloat(data[i][5]) || 0;
+      var rowExp = parseFloat(data[i][6]) || 0;
+      var rowBal = parseFloat(data[i][7]) || 0;
+      var rowMonth = data[i][8] || "";
+      
+      var rowDate = new Date(rowDateStr);
+      
+      // تطبيق الفلاتر
+      if (filterStart && rowDate < filterStart) continue;
+      if (filterEnd && rowDate > filterEnd) continue;
+      if (branch && rowBranch.toLowerCase() !== branch.toLowerCase()) continue;
+      if (filters.type === "Income" && rowInc === 0) continue;
+      if (filters.type === "Expense" && rowExp === 0) continue;
+      
+      totalIncome += rowInc;
+      totalExpense += rowExp;
+      
+      rowsList.push({
+        id: rowId,
+        date: Utilities.formatDate(rowDate, Session.getScriptTimeZone(), "yyyy-MM-dd"),
+        branch: rowBranch,
+        category: rowCategory,
+        description: rowDesc,
+        income: rowInc,
+        expense: rowExp,
+        balance: rowBal,
+        targetMonth: rowMonth,
+        employee: empName
+      });
+    }
+  }
+  
+  // ترتيب العمليات حسب التاريخ تصاعدياً
+  rowsList.sort(function(a, b) {
+    return new Date(a.date) - new Date(b.date);
+  });
+  
+  return {
+    rows: rowsList,
+    summary: {
+      totalIncome: totalIncome,
+      totalExpense: totalExpense,
+      netBalance: totalIncome - totalExpense
+    }
+  };
+}
+`;
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(gasScriptCode);

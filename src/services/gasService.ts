@@ -223,6 +223,29 @@ export const gasService = {
     }
   },
 
+  async addUser(email: string, password: string, displayName: string, role: string = 'admin'): Promise<{ success: boolean; error?: string }> {
+    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({ action: 'addUser', email, password, displayName, role }),
+      });
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        return { success: false, error: 'خطأ في معالجة البيانات من السيرفر' };
+      }
+    } catch (error) {
+      console.error('Error adding user to GAS:', error);
+      return { success: false, error: 'خطأ في الاتصال بالسيرفر' };
+    }
+  },
+
   async checkLogin(email: string, password: string): Promise<{ success: boolean; displayName?: string; error?: string }> {
     if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
     try {

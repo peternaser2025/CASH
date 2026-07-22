@@ -142,7 +142,12 @@ export default function App() {
     try {
       if (isSignUp) {
         await createUserWithEmailAndPassword(auth, email, password);
-        setAuthSuccess("تم إنشاء الحساب بنجاح وتجهيز النظام!");
+        try {
+          await gasService.addUser(email, password, 'المدير العام (مسؤول)', 'admin');
+        } catch (gasErr) {
+          console.warn("Failed to write credentials to Google Sheet", gasErr);
+        }
+        setAuthSuccess("تم إنشاء الحساب بنجاح وتجهيز النظام وربطه بـ Google Sheets!");
       } else {
         // Try to authenticate via Google Sheets first
         let gasSuccess = false;
