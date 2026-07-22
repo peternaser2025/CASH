@@ -55,7 +55,6 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
-  const [gasUrlInput, setGasUrlInput] = useState(localStorage.getItem('gas_web_app_url') || '');
 
   // Monitor Authentication State and seed Admin automatically to GAS
   useEffect(() => {
@@ -290,28 +289,6 @@ export default function App() {
 
           {/* Email Password Form */}
           <form onSubmit={handleEmailAuth} className="space-y-4">
-            <div className="space-y-1 bg-slate-950/40 p-4 rounded-2xl border border-emerald-500/10 mb-2">
-              <label className="text-xs font-black text-emerald-400 tracking-wider flex items-center gap-1.5 mb-1">
-                <Cloud size={14} className="animate-pulse" />
-                رابط الـ Web App لـ Google Sheets (Excel)
-              </label>
-              <input 
-                type="url"
-                required
-                placeholder="https://script.google.com/macros/s/.../exec"
-                value={gasUrlInput}
-                onChange={e => {
-                  const val = e.target.value.trim();
-                  setGasUrlInput(val);
-                  localStorage.setItem('gas_web_app_url', val);
-                }}
-                className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none text-white text-[11px] font-mono transition-all placeholder:text-slate-700"
-              />
-              <p className="text-[9px] text-slate-500 font-bold leading-relaxed mt-1">
-                * هام جداً: الصق رابط الـ Web App المنشور من سكريبت الـ Excel لربط الدخول والموظفين بملفك الخاص مباشرة.
-              </p>
-            </div>
-
             <div className="space-y-1">
               <label className="text-xs font-black text-slate-400 tracking-wider">البريد الإلكتروني للادمن</label>
               <div className="relative">

@@ -1,21 +1,15 @@
 import { Transaction, ReportFilter, EmployeeBalance, ReportData } from '../types';
 
-// الحصول على رابط Google Apps Script النشط (يفضل المخزن محلياً ثم المتغير البيئي ثم الرابط الافتراضي)
-export const getGasUrl = (): string => {
-  const saved = localStorage.getItem('gas_web_app_url');
-  if (saved && saved.trim()) {
-    return saved.trim();
-  }
-  const VITE_GAS_URL = (import.meta as any).env.VITE_GAS_URL;
-  return VITE_GAS_URL || 'https://script.google.com/macros/s/AKfycbwFEmOuT2zpaXd3eltQLf0GOkllzHjMUQCcYxxiyYpvA0VtCY5L9nZVPm3grJ3x9852iQ/exec';
-};
+// Standard Vite env variable access
+const VITE_GAS_URL = (import.meta as any).env.VITE_GAS_URL;
+// Fallback to the known URL if the env variable is missing
+const GAS_URL = VITE_GAS_URL || 'https://script.google.com/macros/s/AKfycbwFEmOuT2zpaXd3eltQLf0GOkllzHjMUQCcYxxiyYpvA0VtCY5L9nZVPm3grJ3x9852iQ/exec';
 
 export const gasService = {
   async getBalances(): Promise<EmployeeBalance[]> {
-    const activeUrl = getGasUrl();
-    if (!activeUrl || activeUrl.includes('...')) return [];
+    if (!GAS_URL || GAS_URL.includes('...')) return [];
     try {
-      const response = await fetch(activeUrl, { 
+      const response = await fetch(GAS_URL, { 
         method: 'GET',
         redirect: 'follow'
       });
@@ -23,7 +17,7 @@ export const gasService = {
       const data = await response.json();
       
       // Filter out non-employee names
-      const ignoreSheets = ['Balances', 'Settings', 'Sheet1', 'الرئيسية', 'عمليات', 'employee', 'البيانات', 'Dashboard', 'Sheet2', 'Sheet3', 'Users'];
+      const ignoreSheets = ['Balances', 'Settings', 'Sheet1', 'الرئيسية', 'عمليات', 'employee', 'البيانات', 'Dashboard', 'Sheet2', 'Sheet3'];
       
       return data
         .filter(([name]: [string, any]) => name && !ignoreSheets.includes(name))
@@ -35,10 +29,9 @@ export const gasService = {
   },
 
   async addTransaction(transaction: any): Promise<{ success: boolean; id?: number; error?: string }> {
-    const activeUrl = getGasUrl();
-    if (!activeUrl || activeUrl.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
     try {
-      const response = await fetch(activeUrl, {
+      const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
         headers: {
@@ -59,10 +52,9 @@ export const gasService = {
   },
 
   async getReport(filters: ReportFilter): Promise<ReportData | null> {
-    const activeUrl = getGasUrl();
-    if (!activeUrl || activeUrl.includes('...')) return null;
+    if (!GAS_URL || GAS_URL.includes('...')) return null;
     try {
-      const response = await fetch(activeUrl, {
+      const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
         redirect: 'follow',
@@ -106,10 +98,9 @@ export const gasService = {
   },
 
   async addEmployee(name: string): Promise<{ success: boolean; error?: string }> {
-    const activeUrl = getGasUrl();
-    if (!activeUrl || activeUrl.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
     try {
-      const response = await fetch(activeUrl, {
+      const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
         headers: {
@@ -130,10 +121,9 @@ export const gasService = {
   },
 
   async deleteEmployee(name: string): Promise<{ success: boolean; error?: string }> {
-    const activeUrl = getGasUrl();
-    if (!activeUrl || activeUrl.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
     try {
-      const response = await fetch(activeUrl, {
+      const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
         headers: {
@@ -150,10 +140,9 @@ export const gasService = {
   },
 
   async updateTransaction(id: number, transaction: any): Promise<{ success: boolean; error?: string }> {
-    const activeUrl = getGasUrl();
-    if (!activeUrl || activeUrl.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
     try {
-      const response = await fetch(activeUrl, {
+      const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
         headers: {
@@ -174,10 +163,9 @@ export const gasService = {
   },
 
   async deleteTransaction(id: number): Promise<{ success: boolean; error?: string }> {
-    const activeUrl = getGasUrl();
-    if (!activeUrl || activeUrl.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
     try {
-      const response = await fetch(activeUrl, {
+      const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
         headers: {
@@ -198,10 +186,9 @@ export const gasService = {
   },
 
   async getSettings(): Promise<{ branches: string[], categories: string[] }> {
-    const activeUrl = getGasUrl();
-    if (!activeUrl || activeUrl.includes('...')) return { branches: [], categories: [] };
+    if (!GAS_URL || GAS_URL.includes('...')) return { branches: [], categories: [] };
     try {
-      const response = await fetch(activeUrl, {
+      const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
         headers: {
@@ -218,10 +205,9 @@ export const gasService = {
   },
 
   async updateSettings(branches: string[], categories: string[]): Promise<{ success: boolean; error?: string }> {
-    const activeUrl = getGasUrl();
-    if (!activeUrl || activeUrl.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
     try {
-      const response = await fetch(activeUrl, {
+      const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
         headers: {
@@ -238,10 +224,9 @@ export const gasService = {
   },
 
   async addUser(email: string, password: string, displayName: string, role: string = 'admin'): Promise<{ success: boolean; error?: string }> {
-    const activeUrl = getGasUrl();
-    if (!activeUrl || activeUrl.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
     try {
-      const response = await fetch(activeUrl, {
+      const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
         headers: {
@@ -262,10 +247,9 @@ export const gasService = {
   },
 
   async checkLogin(email: string, password: string): Promise<{ success: boolean; displayName?: string; error?: string }> {
-    const activeUrl = getGasUrl();
-    if (!activeUrl || activeUrl.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
     try {
-      const response = await fetch(activeUrl, {
+      const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
         headers: {
