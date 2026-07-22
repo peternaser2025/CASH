@@ -12,7 +12,8 @@ import {
   AlertCircle,
   CheckCircle2,
   Key,
-  Cloud
+  Cloud,
+  TrendingUp
 } from 'lucide-react';
 import { 
   onAuthStateChanged, 
@@ -36,11 +37,12 @@ import TransactionForm from './components/TransactionForm';
 import ReportViewer from './components/ReportViewer';
 import EmployeeManager from './components/EmployeeManager';
 import GoogleTools from './components/GoogleTools';
+import ProfitLoss from './components/ProfitLoss';
 
 export default function App() {
   const [user, setUser] = useState<User | any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'reports' | 'employees' | 'google-tools'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'reports' | 'employees' | 'google-tools' | 'profit-loss'>('dashboard');
 
   // App Data State
   const [balances, setBalances] = useState<EmployeeBalance[]>([]);
@@ -510,6 +512,12 @@ export default function App() {
             onClick={() => setActiveTab('employees')} 
           />
           <SidebarItem 
+            icon={<TrendingUp size={20} />} 
+            label="الأرباح والخسائر" 
+            active={activeTab === 'profit-loss'} 
+            onClick={() => setActiveTab('profit-loss')} 
+          />
+          <SidebarItem 
             icon={<Cloud size={20} />} 
             label="أدوات Google" 
             active={activeTab === 'google-tools'} 
@@ -551,6 +559,7 @@ export default function App() {
               {activeTab === 'new-transaction' && 'تسجيل حركة مالية جديدة'}
               {activeTab === 'reports' && 'تقارير وكشوف الحسابات'}
               {activeTab === 'employees' && 'إدارة الموظفين وصلاحيات العهد'}
+              {activeTab === 'profit-loss' && 'حساب ومطابقة الأرباح والخسائر للفروع'}
               {activeTab === 'google-tools' && 'أدوات ومستندات Google Workspace السحابية'}
             </h2>
           </div>
@@ -630,6 +639,14 @@ export default function App() {
               )}
               {activeTab === 'employees' && (
                 <EmployeeManager 
+                  balances={balances} 
+                  onRefresh={fetchData} 
+                />
+              )}
+              {activeTab === 'profit-loss' && (
+                <ProfitLoss 
+                  branches={branches} 
+                  categories={categories} 
                   balances={balances} 
                   onRefresh={fetchData} 
                 />
