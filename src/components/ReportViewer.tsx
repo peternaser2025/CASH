@@ -433,8 +433,8 @@ export default function ReportViewer({ employees, balances, branches, categories
                 body {
                   background: white !important;
                   color: black !important;
-                  -webkit-print-color-adjust: exact;
-                  print-color-adjust: exact;
+                  -webkit-print-color-adjust: economy;
+                  print-color-adjust: economy;
                   font-family: "Inter", sans-serif !important;
                 }
                 #printable-report {
@@ -447,27 +447,45 @@ export default function ReportViewer({ employees, balances, branches, categories
                   box-shadow: none !important;
                   border: none !important;
                   zoom: ${printSettings.scale}%;
+                  -moz-transform: scale(${printSettings.scale / 100});
+                  -moz-transform-origin: top center;
                 }
                 table {
                   border-collapse: collapse !important;
                   width: 100% !important;
+                  margin: 0 auto !important;
                   border: 2px solid #000 !important;
+                  background-color: #fff !important;
+                }
+                tr {
+                  page-break-inside: avoid !important;
+                  break-inside: avoid !important;
+                  background-color: #fff !important;
                 }
                 th, td {
                   border: 1px solid #000 !important;
-                  padding: 8px 10px !important;
+                  padding: 4px 6px !important;
                   text-align: right !important;
-                  font-size: 10px !important;
+                  font-size: 9px !important;
+                  background-color: #fff !important;
+                  color: #000 !important;
                 }
                 th {
-                  background-color: #f1f5f9 !important;
                   font-weight: 900 !important;
                   text-transform: uppercase !important;
                   letter-spacing: 0.05em !important;
+                  background-color: #fff !important;
                 }
                 .no-print { display: none !important; }
                 .print-only { display: block !important; }
                 .font-mono { font-family: "JetBrains Mono", monospace !important; }
+                /* Remove colored backgrounds for print as requested */
+                .bg-emerald-50, .bg-emerald-50\\/30, .bg-emerald-50\\/50, 
+                .bg-rose-50, .bg-blue-50, .bg-gray-50, .bg-gray-50\\/50 {
+                  background-color: #fff !important;
+                  background: none !important;
+                  color: #000 !important;
+                }
               }
             ` }} />
             {/* Professional Header - Bank Statement Style */}
