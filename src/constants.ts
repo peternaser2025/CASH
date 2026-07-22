@@ -12,6 +12,9 @@ export const BRANCHES = [
 ];
 
 export const CATEGORIES = [
+  'مبيعات',
+  'مبيعات نقدية',
+  'مبيعات كي نت (KNET)',
   'مشتريات',
   'رواتب',
   'إيجار',
