@@ -11,7 +11,8 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle2,
-  Key
+  Key,
+  Cloud
 } from 'lucide-react';
 import { 
   onAuthStateChanged, 
@@ -27,17 +28,19 @@ import { motion, AnimatePresence } from 'motion/react';
 import { gasService } from './services/gasService';
 import { BRANCHES, CATEGORIES } from './constants';
 import { EmployeeBalance } from './types';
+import { workspaceService } from './services/workspaceService';
 
 // Importing beautiful Arabic sub-components
 import Dashboard from './components/Dashboard';
 import TransactionForm from './components/TransactionForm';
 import ReportViewer from './components/ReportViewer';
 import EmployeeManager from './components/EmployeeManager';
+import GoogleTools from './components/GoogleTools';
 
 export default function App() {
   const [user, setUser] = useState<User | any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'reports' | 'employees'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'reports' | 'employees' | 'google-tools'>('dashboard');
 
   // App Data State
   const [balances, setBalances] = useState<EmployeeBalance[]>([]);
@@ -106,8 +109,16 @@ export default function App() {
     setAuthLoading(true);
     setAuthError(null);
     const provider = new GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/spreadsheets');
+    provider.addScope('https://www.googleapis.com/auth/drive');
+    provider.addScope('https://www.googleapis.com/auth/documents');
+    provider.addScope('https://www.googleapis.com/auth/tasks');
     try {
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        workspaceService.setAccessToken(credential.accessToken);
+      }
     } catch (error: any) {
       console.error("Google login failed", error);
       if (error.code === 'auth/popup-blocked') {
@@ -395,6 +406,12 @@ export default function App() {
             active={activeTab === 'employees'} 
             onClick={() => setActiveTab('employees')} 
           />
+          <SidebarItem 
+            icon={<Cloud size={20} />} 
+            label="أدوات Google" 
+            active={activeTab === 'google-tools'} 
+            onClick={() => setActiveTab('google-tools')} 
+          />
         </nav>
 
         {/* User profile & Logout */}
@@ -431,6 +448,7 @@ export default function App() {
               {activeTab === 'new-transaction' && 'تسجيل حركة مالية جديدة'}
               {activeTab === 'reports' && 'تقارير وكشوف الحسابات'}
               {activeTab === 'employees' && 'إدارة الموظفين وصلاحيات العهد'}
+              {activeTab === 'google-tools' && 'أدوات ومستندات Google Workspace السحابية'}
             </h2>
           </div>
           <div className="flex items-center gap-4">
@@ -488,6 +506,12 @@ export default function App() {
               )}
               {activeTab === 'employees' && (
                 <EmployeeManager 
+                  balances={balances} 
+                  onRefresh={fetchData} 
+                />
+              )}
+              {activeTab === 'google-tools' && (
+                <GoogleTools 
                   balances={balances} 
                   onRefresh={fetchData} 
                 />
