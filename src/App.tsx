@@ -13,7 +13,8 @@ import {
   CheckCircle2,
   Key,
   Cloud,
-  TrendingUp
+  TrendingUp,
+  ShieldAlert
 } from 'lucide-react';
 import { 
   onAuthStateChanged, 
@@ -38,11 +39,12 @@ import ReportViewer from './components/ReportViewer';
 import EmployeeManager from './components/EmployeeManager';
 import GoogleTools from './components/GoogleTools';
 import ProfitLoss from './components/ProfitLoss';
+import CostControl from './components/CostControl';
 
 export default function App() {
   const [user, setUser] = useState<User | any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'reports' | 'employees' | 'google-tools' | 'profit-loss'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'reports' | 'employees' | 'google-tools' | 'profit-loss' | 'cost-control'>('dashboard');
 
   // App Data State
   const [balances, setBalances] = useState<EmployeeBalance[]>([]);
@@ -518,6 +520,12 @@ export default function App() {
             onClick={() => setActiveTab('profit-loss')} 
           />
           <SidebarItem 
+            icon={<ShieldAlert size={20} />} 
+            label="رادار ضبط التكاليف" 
+            active={activeTab === 'cost-control'} 
+            onClick={() => setActiveTab('cost-control')} 
+          />
+          <SidebarItem 
             icon={<Cloud size={20} />} 
             label="أدوات Google" 
             active={activeTab === 'google-tools'} 
@@ -560,6 +568,7 @@ export default function App() {
               {activeTab === 'reports' && 'تقارير وكشوف الحسابات'}
               {activeTab === 'employees' && 'إدارة الموظفين وصلاحيات العهد'}
               {activeTab === 'profit-loss' && 'حساب ومطابقة الأرباح والخسائر للفروع'}
+              {activeTab === 'cost-control' && 'رادار ضبط التكاليف وكشف الهدر المالي'}
               {activeTab === 'google-tools' && 'أدوات ومستندات Google Workspace السحابية'}
             </h2>
           </div>
@@ -648,6 +657,13 @@ export default function App() {
                   branches={branches} 
                   categories={categories} 
                   balances={balances} 
+                  onRefresh={fetchData} 
+                />
+              )}
+              {activeTab === 'cost-control' && (
+                <CostControl 
+                  branches={branches} 
+                  categories={categories} 
                   onRefresh={fetchData} 
                 />
               )}
