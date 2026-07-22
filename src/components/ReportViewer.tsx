@@ -426,6 +426,18 @@ export default function ReportViewer({ employees, balances, branches, categories
           >
             <style dangerouslySetInnerHTML={{ __html: `
               @media print {
+                /* Reset height and overflow of all parent containers to allow natural pagination */
+                html, body, #root, .flex.h-screen, main, [dir="rtl"] {
+                  height: auto !important;
+                  min-height: 0 !important;
+                  max-height: none !important;
+                  overflow: visible !important;
+                  display: block !important;
+                  position: static !important;
+                }
+                aside, header, .no-print {
+                  display: none !important;
+                }
                 @page {
                   margin: ${getPageMargins()};
                   size: A4 ${printSettings.orientation};
