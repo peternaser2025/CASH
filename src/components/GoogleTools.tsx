@@ -33,6 +33,7 @@ export default function GoogleTools({ balances, onRefresh }: GoogleToolsProps) {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [activeSubTab, setActiveSubTab] = useState<'sheets' | 'drive' | 'docs' | 'tasks' | 'chat'>('sheets');
+  const [gasUrl, setGasUrl] = useState(localStorage.getItem('gas_web_app_url') || '');
 
   // Google Sheets states
   const [spreadsheets, setSpreadsheets] = useState<any[]>([]);
@@ -414,6 +415,68 @@ export default function GoogleTools({ balances, onRefresh }: GoogleToolsProps) {
 
   return (
     <div className="space-y-8" dir="rtl">
+      {/* Excel Connection Settings Card */}
+      <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-2xl shadow-gray-200/20 space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-50 pb-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-emerald-500/10 text-emerald-600 rounded-2xl flex items-center justify-center">
+              <FileSpreadsheet size={24} />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-gray-900">ربط وتفعيل ملف الـ Excel الخاص بك (Google Sheets)</h3>
+              <p className="text-xs text-gray-400 font-bold mt-0.5">يربط هذا الرابط جميع عمليات الدخول، الموظفين، الحركات، والتقارير بملفك الفعلي مباشرة</p>
+            </div>
+          </div>
+          <div className="text-left">
+            <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100">
+              قاعدة البيانات النشطة
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-4 items-stretch">
+          <input 
+            type="url"
+            placeholder="مثال: https://script.google.com/macros/s/AKfycb.../exec"
+            value={gasUrl}
+            onChange={(e) => {
+              const val = e.target.value.trim();
+              setGasUrl(val);
+              localStorage.setItem('gas_web_app_url', val);
+            }}
+            className="flex-1 px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none text-xs font-mono text-gray-900 transition-all placeholder:text-gray-300"
+          />
+          <button 
+            onClick={() => {
+              if (gasUrl) {
+                localStorage.setItem('gas_web_app_url', gasUrl);
+                alert('تم حفظ رابط الـ Web App بنجاح وتوجيه قاعدة البيانات لملف Excel الخاص بك! جاري مزامنة البيانات...');
+                onRefresh();
+              } else {
+                alert('يرجى لصق رابط الـ Web App أولاً');
+              }
+            }}
+            className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl transition-all shadow-lg active:scale-95 text-xs flex items-center gap-2 justify-center shrink-0"
+          >
+            <RefreshCw size={14} />
+            حفظ وتفعيل الاتصال بالـ Excel
+          </button>
+        </div>
+
+        <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 text-xs text-amber-800 font-bold leading-relaxed flex items-start gap-3">
+          <span className="text-lg mt-[-2px]">💡</span>
+          <div>
+            أنت تستخدم التطبيق بملف Excel مخصص لك بالكامل. لتفعيله:
+            <ol className="list-decimal list-inside mt-1 space-y-1 font-semibold text-[11px] text-amber-700">
+              <li>اذهب لصفحة <span className="underline">إدارة الموظفين</span> وانسخ كود الـ Google Apps Script المرفق هناك.</li>
+              <li>افتح ملف Google Sheets (Excel) الخاص بك، واذهب إلى Extensions ثم Apps Script.</li>
+              <li>الصق الكود البرمجي هناك، اضغط Save، ثم اضغط Deploy واصنع New Deployment كـ Web App.</li>
+              <li>اجعل خيار الوصول لـ Anyone (مهم جداً!)، ثم انسخ رابط الـ Web App والصقه في الحقل بالأعلى لتتحكم وتدير شركتك بشكل مستقل وآمن تماماً.</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
       {/* Intro Header */}
       <div className="bg-gradient-to-r from-emerald-600 to-teal-700 rounded-[2.5rem] p-8 text-white shadow-xl relative overflow-hidden">
         <div className="absolute top-0 left-0 w-64 h-64 bg-white/5 rounded-full blur-2xl -translate-x-20 -translate-y-20"></div>
