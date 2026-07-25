@@ -66,6 +66,8 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
   // Autopulled calculations from transactions
   const [pulledExpenses, setPulledExpenses] = useState<number>(0);
   const [pulledPurchases, setPulledPurchases] = useState<number>(0);
+  const [pulledUnpaidExpenses, setPulledUnpaidExpenses] = useState<number>(0);
+  const [pulledUnpaidPurchases, setPulledUnpaidPurchases] = useState<number>(0);
   const [loadingPulled, setLoadingPulled] = useState<boolean>(false);
   const [pullError, setPullError] = useState<string | null>(null);
 
@@ -123,16 +125,21 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
       if (!reportData || !reportData.rows) {
         setPulledExpenses(0);
         setPulledPurchases(0);
+        setPulledUnpaidExpenses(0);
+        setPulledUnpaidPurchases(0);
         return;
       }
 
       let totalExpenses = 0;
       let totalPurchases = 0;
+      let unpaidExpenses = 0;
+      let unpaidPurchases = 0;
 
       // Classify expenses and purchases (excluding transfers / employee custody movements)
       reportData.rows.forEach((row: any) => {
         const type = String(getRowValue(row, 3, 'type') || '').trim();
         const category = String(getRowValue(row, 4, 'category') || '').trim();
+        const description = String(getRowValue(row, 7, 'description') || '').trim();
         const expenseAmount = parseFloat(String(getRowValue(row, 6, 'expense') || 0)) || 0;
 
         if (isTransferType(type, category)) {
@@ -140,17 +147,27 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
         }
 
         if (expenseAmount > 0) {
+          const isAccrual = category.includes('آجل') || category.includes('مستحق') || description.includes('آجل') || description.includes('مستحق') || description.includes('[مستحق/آجل]');
+
           // If category contains "مشتريات" or "شراء", count as Purchase, otherwise as general Branch Expense
           if (category.includes('مشتريات') || category.includes('شراء') || category.toLowerCase().includes('purchase')) {
             totalPurchases += expenseAmount;
+            if (isAccrual) {
+              unpaidPurchases += expenseAmount;
+            }
           } else {
             totalExpenses += expenseAmount;
+            if (isAccrual) {
+              unpaidExpenses += expenseAmount;
+            }
           }
         }
       });
 
       setPulledExpenses(totalExpenses);
       setPulledPurchases(totalPurchases);
+      setPulledUnpaidExpenses(unpaidExpenses);
+      setPulledUnpaidPurchases(unpaidPurchases);
 
     } catch (err) {
       console.error('Error pulling branch P&L data:', err);
@@ -169,13 +186,22 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
   const sales = parseFloat(salesInput) || 0;
   const openingBalance = parseFloat(openingBalanceInput) || 0;
   const closingBalance = parseFloat(closingBalanceInput) || 0;
+
+  // Unpaid/Accrued amounts (آجل / مستحق)
+  const totalUnpaidCosts = pulledUnpaidExpenses + pulledUnpaidPurchases;
+
+  // Total costs accrued in P&L = All Expenses + All Purchases
   const totalCosts = pulledExpenses + pulledPurchases;
-  
+
+  // Paid cash costs = Total Costs - Unpaid/Accrued Costs
+  const totalCashCosts = Math.max(0, totalCosts - totalUnpaidCosts);
+
   // صافي الأرباح والخسائر = المبيعات - (المصاريف + المشتريات)
   const netProfit = sales - totalCosts;
 
-  // رصيد الخزنة الدفتري المحتسب = رصيد أول الشهر + المبيعات - المصاريف - المشتريات
-  const calculatedEnding = openingBalance + sales - totalCosts;
+  // رصيد الخزنة الدفتري المحتسب = رصيد أول الشهر + المبيعات - التكاليف المدفوعة نقداً
+  // (لأن المصاريف والمشتريات الآجلة غير المدفوعة لا تُخصم من الخزنة نقداً)
+  const calculatedEnding = openingBalance + sales - totalCashCosts;
 
   // الفارق الفعلي والمطابقة = رصيد آخر الشهر الفعلي - رصيد الخزنة الدفتري المحتسب
   const variance = closingBalance - calculatedEnding;
@@ -360,10 +386,17 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
               />
             </div>
 
-            {/* Pulled Expenses (Read Only but highlighted) */}
+            {/* Pulled Expenses & Purchases with Accrual Indicators */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-[11px] font-black text-gray-500">مصاريف الفرع (مسحوبة)</label>
+                <div className="flex justify-between items-center">
+                  <label className="text-[11px] font-black text-gray-500">مصاريف الفرع (مسحوبة)</label>
+                  {pulledUnpaidExpenses > 0 && (
+                    <span className="text-[9px] font-black text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded-md border border-amber-200">
+                      منها {formatKWD(pulledUnpaidExpenses)} آجل
+                    </span>
+                  )}
+                </div>
                 <div className="px-4 py-3 bg-red-50/50 border-2 border-red-100 rounded-2xl font-mono font-bold text-sm text-red-600 flex justify-between items-center">
                   <span>{formatKWD(pulledExpenses)}</span>
                   <span className="text-[10px] text-red-400">KWD</span>
@@ -371,13 +404,36 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-black text-gray-500">مشتريات الفرع (مسحوبة)</label>
+                <div className="flex justify-between items-center">
+                  <label className="text-[11px] font-black text-gray-500">مشتريات الفرع (مسحوبة)</label>
+                  {pulledUnpaidPurchases > 0 && (
+                    <span className="text-[9px] font-black text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded-md border border-amber-200">
+                      منها {formatKWD(pulledUnpaidPurchases)} آجل
+                    </span>
+                  )}
+                </div>
                 <div className="px-4 py-3 bg-amber-50/50 border-2 border-amber-100 rounded-2xl font-mono font-bold text-sm text-amber-700 flex justify-between items-center">
                   <span>{formatKWD(pulledPurchases)}</span>
                   <span className="text-[10px] text-amber-400">KWD</span>
                 </div>
               </div>
             </div>
+
+            {/* Unpaid / Accrued Costs Highlight Banner */}
+            {totalUnpaidCosts > 0 && (
+              <div className="p-3.5 bg-amber-50/80 border-2 border-amber-200/80 rounded-2xl text-xs font-bold text-amber-950 flex items-center justify-between shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-1.5 bg-amber-400 text-white rounded-xl font-black text-sm shadow-xs">🧾</span>
+                  <div>
+                    <p className="font-black text-amber-950">التزامات ومشتريات غير مدفوعة نقداً (آجل/مستحق)</p>
+                    <p className="text-[10px] text-amber-800 font-medium">مدرجة بالأرباح والخسائر، ولم تُخصم من السيولة النقدية بالصندوق</p>
+                  </div>
+                </div>
+                <span className="font-mono font-black text-amber-900 text-sm dir-ltr bg-white px-2.5 py-1 rounded-xl border border-amber-200">
+                  {formatKWD(totalUnpaidCosts)} KWD
+                </span>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               {/* Opening Balance */}
@@ -541,15 +597,44 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                       <td className="px-6 py-4 text-center font-mono text-emerald-600 font-black">{formatKWD(sales)}</td>
                     </tr>
                     <tr>
-                      <td className="px-6 py-4 bg-gray-50/50 border-l border-gray-100">مصاريف التشغيل والفرع (-)</td>
+                      <td className="px-6 py-4 bg-gray-50/50 border-l border-gray-100">
+                        <div className="flex flex-col">
+                          <span>مصاريف التشغيل والفرع (-)</span>
+                          {pulledUnpaidExpenses > 0 && (
+                            <span className="text-[10px] font-bold text-amber-800 mt-0.5">
+                              • مدفوع نقداً: {formatKWD(pulledExpenses - pulledUnpaidExpenses)} | غير مدفوع (آجل): {formatKWD(pulledUnpaidExpenses)}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-6 py-4 text-center font-mono text-red-600">{formatKWD(pulledExpenses)}</td>
                     </tr>
                     <tr>
-                      <td className="px-6 py-4 bg-gray-50/50 border-l border-gray-100">مشتريات الفرع والمخزون (-)</td>
+                      <td className="px-6 py-4 bg-gray-50/50 border-l border-gray-100">
+                        <div className="flex flex-col">
+                          <span>مشتريات الفرع والمخزون (-)</span>
+                          {pulledUnpaidPurchases > 0 && (
+                            <span className="text-[10px] font-bold text-amber-800 mt-0.5">
+                              • مدفوع نقداً: {formatKWD(pulledPurchases - pulledUnpaidPurchases)} | غير مدفوع (آجل): {formatKWD(pulledUnpaidPurchases)}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-6 py-4 text-center font-mono text-amber-700">{formatKWD(pulledPurchases)}</td>
                     </tr>
+                    {totalUnpaidCosts > 0 && (
+                      <tr className="bg-amber-50/80 font-bold text-amber-950 border-y border-amber-200">
+                        <td className="px-6 py-3 border-l border-amber-200 text-xs">
+                          <span className="font-black">🔖 إجمالي المشتريات والمصاريف الآجلة (الغير مدفوعة نقداً):</span>
+                          <span className="block text-[10px] font-medium text-amber-800">مدرجة في التكاليف لحساب الربح المحاسبي، واستُثنيت من الصندوق النقدى لعدم السداد الفعلي</span>
+                        </td>
+                        <td className="px-6 py-3 text-center font-mono font-black text-amber-900 text-sm">
+                          {formatKWD(totalUnpaidCosts)}
+                        </td>
+                      </tr>
+                    )}
                     <tr className="bg-gray-50 font-black text-gray-900 border-t-2 border-gray-200">
-                      <td className="px-6 py-4 border-l border-gray-100">رصيد الصندوق الدفتري المحتسب</td>
+                      <td className="px-6 py-4 border-l border-gray-100">رصيد الصندوق الدفتري المحتسب (النقدية)</td>
                       <td className="px-6 py-4 text-center font-mono text-gray-900">{formatKWD(calculatedEnding)}</td>
                     </tr>
                     <tr>
