@@ -142,7 +142,7 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
       reportData.rows.forEach((row: any) => {
         const type = String(getRowValue(row, 3, 'type') || '').trim();
         const category = String(getRowValue(row, 4, 'category') || '').trim();
-        const description = String(getRowValue(row, 7, 'description') || '').trim();
+        const description = String(getRowValue(row, 8, 'description') || getRowValue(row, 7, 'description') || '').trim();
         const expenseAmount = parseFloat(String(getRowValue(row, 6, 'expense') || 0)) || 0;
 
         if (isTransferType(type, category)) {

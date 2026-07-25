@@ -857,7 +857,9 @@ export default function ReportViewer({ employees, balances, branches, categories
                     const balance = row[7];
                     const description = row.length > 8 ? String(row[8] || '-') : '-';
                     const targetMonth = row.length > 9 ? String(row[9] || '') : '';
-                    const rowId = row.length > 10 ? row[10] : null;
+                    const rawRowId = row.length > 10 && row[10] !== undefined && row[10] !== null && row[10] !== '' ? row[10] : null;
+                    const originalIndex = report ? report.rows.indexOf(row) : -1;
+                    const calculatedRowId = rawRowId !== null ? rawRowId : (originalIndex !== -1 ? originalIndex + 2 : i + 2);
                     const employee = String(row[1] || '');
                     
                     const isIncome = isIncomeType(type) || (income > 0 && !isTransferType(type));
@@ -950,7 +952,7 @@ export default function ReportViewer({ employees, balances, branches, categories
                             <button
                               onClick={() => {
                                 setEditingTransaction({
-                                  id: rowId,
+                                  id: calculatedRowId,
                                   date: date,
                                   branch: branch,
                                   category: category,
@@ -959,8 +961,6 @@ export default function ReportViewer({ employees, balances, branches, categories
                                   type: isTransfer ? 'Transfer' : (isIncome ? 'Income' : 'Expense'),
                                   targetMonth: targetMonth,
                                   employee: employee,
-                                  // We don't have sender/receiver in the row directly, 
-                                  // but we can default them or handle them if they are in the description
                                   sender: isTransfer ? employee : '',
                                   receiver: '' 
                                 });
@@ -974,15 +974,18 @@ export default function ReportViewer({ employees, balances, branches, categories
                             <button
                               onClick={async () => {
                                 if (window.confirm('هل أنت متأكد من حذف هذه العملية؟')) {
-                                  if (rowId) {
-                                    const res = await gasService.deleteTransaction(rowId);
-                                    if (res.success) {
-                                      handleGenerate();
-                                    } else {
-                                      alert('خطأ في الحذف: ' + res.error);
-                                    }
+                                  const res = await gasService.deleteTransaction(calculatedRowId, {
+                                    date,
+                                    employee,
+                                    branch,
+                                    category,
+                                    amount: income > 0 ? income : expense,
+                                    description
+                                  });
+                                  if (res && res.success) {
+                                    handleGenerate();
                                   } else {
-                                    alert('لا يمكن حذف هذه العملية (ID مفقود)');
+                                    alert('تنبيه: ' + (res?.error || 'تعذر العثور على المعرف في السيرفر'));
                                   }
                                 }
                               }}

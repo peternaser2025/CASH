@@ -178,7 +178,7 @@ export const gasService = {
     }
   },
 
-  async updateTransaction(id: number, transaction: any): Promise<{ success: boolean; error?: string }> {
+  async updateTransaction(id: number | string, transaction: any): Promise<{ success: boolean; error?: string }> {
     if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
     try {
       const response = await fetch(GAS_URL, {
@@ -187,9 +187,16 @@ export const gasService = {
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
-        body: JSON.stringify({ action: 'update', id, data: transaction }),
+        body: JSON.stringify({ 
+          action: 'update', 
+          id, 
+          rowId: id, 
+          rowIndex: id, 
+          data: { ...transaction, id, rowId: id, rowIndex: id } 
+        }),
       });
       const text = await response.text();
+      this.clearCache();
       try {
         return JSON.parse(text);
       } catch (e) {
@@ -201,7 +208,7 @@ export const gasService = {
     }
   },
 
-  async deleteTransaction(id: number): Promise<{ success: boolean; error?: string }> {
+  async deleteTransaction(id: number | string, extraMeta?: any): Promise<{ success: boolean; error?: string }> {
     if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
     try {
       const response = await fetch(GAS_URL, {
@@ -210,9 +217,16 @@ export const gasService = {
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
-        body: JSON.stringify({ action: 'delete', id }),
+        body: JSON.stringify({ 
+          action: 'delete', 
+          id, 
+          rowId: id, 
+          rowIndex: id, 
+          ...extraMeta 
+        }),
       });
       const text = await response.text();
+      this.clearCache();
       try {
         return JSON.parse(text);
       } catch (e) {
