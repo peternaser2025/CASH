@@ -69,8 +69,6 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
   const [pulledUnpaidExpenses, setPulledUnpaidExpenses] = useState<number>(0);
   const [pulledUnpaidPurchases, setPulledUnpaidPurchases] = useState<number>(0);
   const [pulledSettlementPayments, setPulledSettlementPayments] = useState<number>(0);
-  const [pulledTransfersIn, setPulledTransfersIn] = useState<number>(0);
-  const [pulledTransfersOut, setPulledTransfersOut] = useState<number>(0);
   const [loadingPulled, setLoadingPulled] = useState<boolean>(false);
   const [pullError, setPullError] = useState<string | null>(null);
 
@@ -130,8 +128,6 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
         setPulledUnpaidExpenses(0);
         setPulledUnpaidPurchases(0);
         setPulledSettlementPayments(0);
-        setPulledTransfersIn(0);
-        setPulledTransfersOut(0);
         return;
       }
 
@@ -140,21 +136,16 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
       let unpaidExpenses = 0;
       let unpaidPurchases = 0;
       let totalSettlements = 0;
-      let totalTransfersIn = 0;
-      let totalTransfersOut = 0;
 
-      // Classify expenses, purchases, accrual settlements, and transfers/custody
+      // Classify expenses, purchases, and accrual settlements (excluding transfers / custody)
       reportData.rows.forEach((row: any) => {
         const type = String(getRowValue(row, 3, 'type') || '').trim();
         const category = String(getRowValue(row, 4, 'category') || '').trim();
         const description = String(getRowValue(row, 8, 'description') || getRowValue(row, 7, 'description') || '').trim();
-        const incomeAmount = parseFloat(String(getRowValue(row, 5, 'income') || 0)) || 0;
         const expenseAmount = parseFloat(String(getRowValue(row, 6, 'expense') || 0)) || 0;
 
         if (isTransferType(type, category)) {
-          // Cash transfer or custody movement
-          totalTransfersIn += incomeAmount;
-          totalTransfersOut += expenseAmount;
+          // Internal cash transfers/custody are NOT part of P&L or P&L cash box
           return;
         }
 
@@ -173,7 +164,7 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
           }
 
           // New Accrual / Credit Purchase (مشتريات/مصاريف غير مدفوعة نقداً في شهر النشوء)
-          const isAccrual = /آجل|اجل|مستحق|مستحقه|دين|دائن|مورد|deferred|accrual|credit/i.test(`${category} ${description}`);
+          const isAccrual = /آجل|اجل|مستحق|مستحقة|مستحقه|رواتب مستحقة|دين|دائن|مورد|مؤجل|غير مسدد|لم يسدد|deferred|accrual|credit|due/i.test(`${category} ${description}`);
 
           // If category contains "مشتريات" or "شراء", count as Purchase, otherwise as general Branch Expense
           if (category.includes('مشتريات') || category.includes('شراء') || category.toLowerCase().includes('purchase')) {
@@ -195,8 +186,6 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
       setPulledUnpaidExpenses(unpaidExpenses);
       setPulledUnpaidPurchases(unpaidPurchases);
       setPulledSettlementPayments(totalSettlements);
-      setPulledTransfersIn(totalTransfersIn);
-      setPulledTransfersOut(totalTransfersOut);
 
     } catch (err) {
       console.error('Error pulling branch P&L data:', err);
@@ -706,46 +695,6 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                       </td>
                     </tr>
 
-                    {/* Transfers In Row */}
-                    {pulledTransfersIn > 0 && (
-                      <tr className="bg-sky-50/80 font-black text-sky-950 border-y border-sky-200">
-                        <td className="px-6 py-3 border-l border-sky-200 text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="text-base">📥</span>
-                            <div>
-                              <span className="font-black text-sky-950">(+) تحويلات نقدية واردة / تغذية عهدة (دخلت الصندوق):</span>
-                              <span className="block text-[10px] font-bold text-sky-800 mt-0.5">
-                                سيولة نقدية دخلت للخزنة من الرئيسي/الفروع الأخرى (لا تُحسب كمبيعات/إيراد بالنشاط)
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-3 text-center font-mono font-black text-sky-900 text-base">
-                          +{formatKWD(pulledTransfersIn)}
-                        </td>
-                      </tr>
-                    )}
-
-                    {/* Transfers Out Row */}
-                    {pulledTransfersOut > 0 && (
-                      <tr className="bg-amber-50/80 font-black text-amber-950 border-y border-amber-200">
-                        <td className="px-6 py-3 border-l border-amber-200 text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="text-base">📤</span>
-                            <div>
-                              <span className="font-black text-amber-950">(-) تحويلات نقدية صادرة / سحب عهدة (خرجت من الصندوق):</span>
-                              <span className="block text-[10px] font-bold text-amber-800 mt-0.5">
-                                سيولة نقدية تم تحويلها خارج الخزنة لفرع آخر أو عهدة فرعية (لا تُحسب كمصروف بالنشاط)
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-3 text-center font-mono font-black text-amber-900 text-base">
-                          -{formatKWD(pulledTransfersOut)}
-                        </td>
-                      </tr>
-                    )}
-
                     {/* Settled Past Accruals Row (Cash Box Deduction Only - No Double Counting in P&L) */}
                     {pulledSettlementPayments > 0 && (
                       <tr className="bg-purple-50/80 font-black text-purple-950 border-y-2 border-purple-200">
@@ -770,7 +719,7 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                       <td className="px-6 py-4 border-l border-white/20">
                         <span>رصيد الصندوق الدفتري المحتسب (السيولة النقدية المتوقعة بالخزنة)</span>
                         <span className="block text-[10px] text-gray-300 font-normal mt-0.5">
-                          = رصيد أول ({formatKWD(openingBalance)}) + مبيعات ({formatKWD(sales)}) {pulledTransfersIn > 0 ? `+ تحويلات واردة (${formatKWD(pulledTransfersIn)}) ` : ''}{pulledTransfersOut > 0 ? `- تحويلات صادرة (${formatKWD(pulledTransfersOut)}) ` : ''}- تكاليف نقدية ({formatKWD(totalCashCosts)}) {pulledSettlementPayments > 0 ? `- سداد ديون سابقة (${formatKWD(pulledSettlementPayments)})` : ''}
+                          = رصيد أول ({formatKWD(openingBalance)}) + مبيعات نقدية ({formatKWD(sales)}) - تكاليف نقدية مدفوعة من الصندوق ({formatKWD(totalCashCosts)}) {pulledSettlementPayments > 0 ? `- سداد ديون سابقة (${formatKWD(pulledSettlementPayments)})` : ''}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center font-mono text-emerald-400 font-black text-base">{formatKWD(calculatedEnding)}</td>
