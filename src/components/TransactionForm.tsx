@@ -260,28 +260,37 @@ export default function TransactionForm({ onComplete, employees, branches, categ
               />
             </div>
 
-            {/* Accrued / Credit Purchase Toggle Card */}
-            <div className="md:col-span-2 p-6 bg-amber-50/50 border border-amber-200/60 rounded-3xl space-y-4">
-              <div className="flex items-center justify-between">
+            {/* Accrued / Credit Purchase Toggle Card - The Golden Key */}
+            <div className="md:col-span-2 p-6 bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 border-2 border-amber-300/80 rounded-3xl space-y-4 shadow-sm shadow-amber-500/10 relative overflow-hidden">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-amber-500 text-white rounded-xl shadow-sm font-black">
-                    🧾
+                  <div className="p-3 bg-gradient-to-br from-amber-400 to-yellow-600 text-white rounded-2xl shadow-md shadow-amber-500/20 font-black text-xl flex items-center justify-center">
+                    🔑
                   </div>
                   <div>
-                    <h4 className="text-sm font-black text-amber-900">عملية آجلة / مشتريات بالدين / مصاريف مستحقة</h4>
-                    <p className="text-[10px] font-bold text-amber-700">تفعيل هذا الخيار يحول العملية تلقائياً لدفتر المشتريات الآجلة والالتزامات لمتابعة السداد</p>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-base font-black text-amber-950">المفتاح الذهبي: عملية آجلة / مشتريات بالدين / مصاريف مستحقة</h4>
+                      <span className="px-2.5 py-0.5 text-[10px] font-black bg-amber-200/80 text-amber-900 rounded-full border border-amber-300">
+                        آجل / مستحق
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold text-amber-800/80 mt-0.5">
+                      تفعيل هذا المفتاح يحول العملية تلقائياً لدفتر المشتريات الآجلة والالتزامات لمتابعة السداد دون تأخير
+                    </p>
                   </div>
                 </div>
+
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, isAccrual: !formData.isAccrual })}
-                  className={`w-12 h-6 rounded-full transition-all relative ${
-                    formData.isAccrual ? 'bg-amber-600' : 'bg-gray-200'
+                  className={`px-5 py-3 rounded-2xl transition-all duration-300 font-black text-xs flex items-center gap-2.5 shrink-0 border shadow-sm ${
+                    formData.isAccrual 
+                      ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white border-amber-400 shadow-amber-500/30 scale-105 ring-4 ring-amber-400/20' 
+                      : 'bg-white text-amber-900 border-amber-300 hover:bg-amber-100/60'
                   }`}
                 >
-                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${
-                    formData.isAccrual ? 'right-7' : 'right-1'
-                  }`} />
+                  <span className="text-base">{formData.isAccrual ? '⚡' : '🔒'}</span>
+                  <span>{formData.isAccrual ? 'مُفعّل: عملية آجلة (دين)' : 'تفعيل المفتاح الذهبي (آجل)'}</span>
                 </button>
               </div>
 
@@ -291,16 +300,21 @@ export default function TransactionForm({ onComplete, employees, branches, categ
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden pt-4 border-t border-amber-200/60"
+                    className="overflow-hidden pt-4 border-t border-amber-200/80 space-y-3"
                   >
-                    <label className="block text-xs font-black text-amber-900 mb-1.5">اسم المورد / الجهة الدائنة (اختياري)</label>
-                    <input
-                      type="text"
-                      placeholder="مثال: شركة التوريدات الكويتية..."
-                      value={formData.vendorName}
-                      onChange={(e) => setFormData({ ...formData, vendorName: e.target.value })}
-                      className="w-full px-5 py-3 bg-white border border-amber-300 rounded-2xl focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500 outline-none transition-all font-bold text-gray-900 text-xs"
-                    />
+                    <div className="flex items-center gap-2 text-xs font-black text-amber-950">
+                      <span>✨ البيانات الخاصة بالعملية الآجلة</span>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black text-amber-900 mb-1.5">اسم المورد / الجهة الدائنة (اختياري)</label>
+                      <input
+                        type="text"
+                        placeholder="مثال: شركة التوريدات الكويتية / مصنع السلام..."
+                        value={formData.vendorName}
+                        onChange={(e) => setFormData({ ...formData, vendorName: e.target.value })}
+                        className="w-full px-5 py-3 bg-white border border-amber-300 rounded-2xl focus:ring-4 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition-all font-bold text-gray-900 text-xs shadow-inner"
+                      />
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
