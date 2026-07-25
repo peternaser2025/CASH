@@ -69,6 +69,8 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
   const [pulledUnpaidExpenses, setPulledUnpaidExpenses] = useState<number>(0);
   const [pulledUnpaidPurchases, setPulledUnpaidPurchases] = useState<number>(0);
   const [pulledSettlementPayments, setPulledSettlementPayments] = useState<number>(0);
+  const [pulledTransfersIn, setPulledTransfersIn] = useState<number>(0);
+  const [pulledTransfersOut, setPulledTransfersOut] = useState<number>(0);
   const [loadingPulled, setLoadingPulled] = useState<boolean>(false);
   const [pullError, setPullError] = useState<string | null>(null);
 
@@ -115,12 +117,11 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
       const lastDay = new Date(yearNum, monthNum + 1, 0).getDate();
       const endDate = `${year}-${monthStr}-${String(lastDay).padStart(2, '0')}`;
 
-      // Call generateReport for this branch
+      // Call generateReport for this branch (all transaction types)
       const reportData = await gasService.getReport({
         branch: selectedBranch,
         startDate,
-        endDate,
-        type: 'Expense' // only expenses
+        endDate
       });
 
       if (!reportData || !reportData.rows) {
@@ -129,6 +130,8 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
         setPulledUnpaidExpenses(0);
         setPulledUnpaidPurchases(0);
         setPulledSettlementPayments(0);
+        setPulledTransfersIn(0);
+        setPulledTransfersOut(0);
         return;
       }
 
@@ -137,15 +140,21 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
       let unpaidExpenses = 0;
       let unpaidPurchases = 0;
       let totalSettlements = 0;
+      let totalTransfersIn = 0;
+      let totalTransfersOut = 0;
 
-      // Classify expenses, purchases, and accrual settlements (excluding transfers / custody)
+      // Classify expenses, purchases, accrual settlements, and transfers/custody
       reportData.rows.forEach((row: any) => {
         const type = String(getRowValue(row, 3, 'type') || '').trim();
         const category = String(getRowValue(row, 4, 'category') || '').trim();
         const description = String(getRowValue(row, 8, 'description') || getRowValue(row, 7, 'description') || '').trim();
+        const incomeAmount = parseFloat(String(getRowValue(row, 5, 'income') || 0)) || 0;
         const expenseAmount = parseFloat(String(getRowValue(row, 6, 'expense') || 0)) || 0;
 
         if (isTransferType(type, category)) {
+          // Cash transfer or custody movement
+          totalTransfersIn += incomeAmount;
+          totalTransfersOut += expenseAmount;
           return;
         }
 
@@ -186,6 +195,8 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
       setPulledUnpaidExpenses(unpaidExpenses);
       setPulledUnpaidPurchases(unpaidPurchases);
       setPulledSettlementPayments(totalSettlements);
+      setPulledTransfersIn(totalTransfersIn);
+      setPulledTransfersOut(totalTransfersOut);
 
     } catch (err) {
       console.error('Error pulling branch P&L data:', err);
@@ -695,6 +706,46 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                       </td>
                     </tr>
 
+                    {/* Transfers In Row */}
+                    {pulledTransfersIn > 0 && (
+                      <tr className="bg-sky-50/80 font-black text-sky-950 border-y border-sky-200">
+                        <td className="px-6 py-3 border-l border-sky-200 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">📥</span>
+                            <div>
+                              <span className="font-black text-sky-950">(+) تحويلات نقدية واردة / تغذية عهدة (دخلت الصندوق):</span>
+                              <span className="block text-[10px] font-bold text-sky-800 mt-0.5">
+                                سيولة نقدية دخلت للخزنة من الرئيسي/الفروع الأخرى (لا تُحسب كمبيعات/إيراد بالنشاط)
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-3 text-center font-mono font-black text-sky-900 text-base">
+                          +{formatKWD(pulledTransfersIn)}
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* Transfers Out Row */}
+                    {pulledTransfersOut > 0 && (
+                      <tr className="bg-amber-50/80 font-black text-amber-950 border-y border-amber-200">
+                        <td className="px-6 py-3 border-l border-amber-200 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">📤</span>
+                            <div>
+                              <span className="font-black text-amber-950">(-) تحويلات نقدية صادرة / سحب عهدة (خرجت من الصندوق):</span>
+                              <span className="block text-[10px] font-bold text-amber-800 mt-0.5">
+                                سيولة نقدية تم تحويلها خارج الخزنة لفرع آخر أو عهدة فرعية (لا تُحسب كمصروف بالنشاط)
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-3 text-center font-mono font-black text-amber-900 text-base">
+                          -{formatKWD(pulledTransfersOut)}
+                        </td>
+                      </tr>
+                    )}
+
                     {/* Settled Past Accruals Row (Cash Box Deduction Only - No Double Counting in P&L) */}
                     {pulledSettlementPayments > 0 && (
                       <tr className="bg-purple-50/80 font-black text-purple-950 border-y-2 border-purple-200">
@@ -710,7 +761,7 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                           </div>
                         </td>
                         <td className="px-6 py-3.5 text-center font-mono font-black text-purple-900 text-base">
-                          {formatKWD(pulledSettlementPayments)}
+                          -{formatKWD(pulledSettlementPayments)}
                         </td>
                       </tr>
                     )}
@@ -719,7 +770,7 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                       <td className="px-6 py-4 border-l border-white/20">
                         <span>رصيد الصندوق الدفتري المحتسب (السيولة النقدية المتوقعة بالخزنة)</span>
                         <span className="block text-[10px] text-gray-300 font-normal mt-0.5">
-                          = رصيد أول الشهر + المبيعات - التكاليف المدفوعة نقداً {pulledSettlementPayments > 0 ? `- سداد المستحقات القديمة (${formatKWD(pulledSettlementPayments)})` : ''}
+                          = رصيد أول ({formatKWD(openingBalance)}) + مبيعات ({formatKWD(sales)}) {pulledTransfersIn > 0 ? `+ تحويلات واردة (${formatKWD(pulledTransfersIn)}) ` : ''}{pulledTransfersOut > 0 ? `- تحويلات صادرة (${formatKWD(pulledTransfersOut)}) ` : ''}- تكاليف نقدية ({formatKWD(totalCashCosts)}) {pulledSettlementPayments > 0 ? `- سداد ديون سابقة (${formatKWD(pulledSettlementPayments)})` : ''}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center font-mono text-emerald-400 font-black text-base">{formatKWD(calculatedEnding)}</td>
@@ -757,10 +808,10 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                   </div>
                   <p className="text-[11px] font-bold opacity-85 leading-relaxed mt-1">
                     {variance === 0 || Math.abs(variance) < 0.005
-                      ? 'تمت المطابقة بنجاح! الرصيد الفعلي المجرود يطابق تماماً الرصيد الدفتري المسجل للحركات.'
+                      ? 'تمت المطابقة بنجاح! الرصيد الفعلي المجرود يطابق تماماً الرصيد الدفتري المسجل لكافة الحركات والتحويلات النقدية.'
                       : variance > 0
-                      ? 'يوجد زيادة غير مبررة في الصندوق الفعلي مقارنة بالدفتري (زيادة نقدية).'
-                      : 'تحذير: يوجد عجز مالي مكتشف بالصندوق الفعلي مقارنة بالدفتري المسجل!'}
+                      ? 'فائض نقدي بالصندوق (+): الرصيد الفعلي المجرود بالصندوق أعلى من المحتسب الدفتري بمقدار ' + formatKWD(variance) + ' د.ك. (قد يرجع ذلك لإيرادات نقدية إضافية أو فروق إيداع).'
+                      : 'عجز نقدي بالصندوق (-): الرصيد الفعلي المجرود بالصندوق أقل من المحتسب الدفتري بمقدار ' + formatKWD(Math.abs(variance)) + ' د.ك. (يرجى مراجعة المصروفات النقدية المسددة).'}
                   </p>
                 </div>
                 
