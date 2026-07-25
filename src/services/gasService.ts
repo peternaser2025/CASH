@@ -5,13 +5,33 @@ const VITE_GAS_URL = (import.meta as any).env.VITE_GAS_URL;
 // Fallback to the known URL if the env variable is missing
 const GAS_URL = VITE_GAS_URL || 'https://script.google.com/macros/s/AKfycbwFEmOuT2zpaXd3eltQLf0GOkllzHjMUQCcYxxiyYpvA0VtCY5L9nZVPm3grJ3x9852iQ/exec';
 
+// Smart Cache Store
+const reportCache: Map<string, { data: ReportData; timestamp: number }> = new Map();
+let balancesCache: { data: EmployeeBalance[]; timestamp: number } | null = null;
+const CACHE_TTL_MS = 30000; // 30 seconds fresh cache
+
 export const gasService = {
   getGasUrl(): string {
     return GAS_URL;
   },
 
-  async getBalances(): Promise<EmployeeBalance[]> {
+  clearCache() {
+    reportCache.clear();
+    balancesCache = null;
+    try {
+      sessionStorage.removeItem('kwd_balances_cache');
+      sessionStorage.removeItem('kwd_report_cache');
+    } catch (e) {}
+  },
+
+  async getBalances(forceRefresh: boolean = false): Promise<EmployeeBalance[]> {
     if (!GAS_URL || GAS_URL.includes('...')) return [];
+
+    const now = Date.now();
+    if (!forceRefresh && balancesCache && (now - balancesCache.timestamp < CACHE_TTL_MS)) {
+      return balancesCache.data;
+    }
+
     try {
       const response = await fetch(GAS_URL, { 
         method: 'GET',
@@ -23,12 +43,15 @@ export const gasService = {
       // Filter out non-employee names
       const ignoreSheets = ['Balances', 'Settings', 'Sheet1', 'الرئيسية', 'عمليات', 'employee', 'البيانات', 'Dashboard', 'Sheet2', 'Sheet3'];
       
-      return data
+      const parsedBalances = data
         .filter(([name]: [string, any]) => name && !ignoreSheets.includes(name))
         .map(([name, balance]: [string, number]) => ({ name, balance }));
+
+      balancesCache = { data: parsedBalances, timestamp: now };
+      return parsedBalances;
     } catch (error) {
       console.error('Error fetching balances:', error);
-      return [];
+      return balancesCache ? balancesCache.data : [];
     }
   },
 
@@ -44,6 +67,7 @@ export const gasService = {
         body: JSON.stringify({ action: 'add', data: transaction }),
       });
       const text = await response.text();
+      this.clearCache(); // Invalidate cache on write
       try {
         return JSON.parse(text);
       } catch (e) {
@@ -55,8 +79,19 @@ export const gasService = {
     }
   },
 
-  async getReport(filters: ReportFilter): Promise<ReportData | null> {
+  async getReport(filters: ReportFilter, forceRefresh: boolean = false): Promise<ReportData | null> {
     if (!GAS_URL || GAS_URL.includes('...')) return null;
+
+    const cacheKey = JSON.stringify(filters);
+    const now = Date.now();
+
+    if (!forceRefresh && reportCache.has(cacheKey)) {
+      const cached = reportCache.get(cacheKey)!;
+      if (now - cached.timestamp < CACHE_TTL_MS) {
+        return cached.data;
+      }
+    }
+
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
@@ -74,10 +109,9 @@ export const gasService = {
 
       const text = await response.text();
       
-      // Check if the response is HTML (often an error page from Google)
       if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
         console.error('Received HTML instead of JSON from GAS:', text.substring(0, 200));
-        return null;
+        return reportCache.has(cacheKey) ? reportCache.get(cacheKey)!.data : null;
       }
 
       try {
@@ -86,18 +120,19 @@ export const gasService = {
           console.error('GAS Error:', data.error);
           return null;
         }
-        // Ensure rows exists even if empty
         if (data && !data.rows) {
           data.rows = [];
         }
+
+        reportCache.set(cacheKey, { data, timestamp: now });
         return data;
       } catch (e) {
         console.error('Failed to parse report JSON:', text);
-        return null;
+        return reportCache.has(cacheKey) ? reportCache.get(cacheKey)!.data : null;
       }
     } catch (error) {
       console.error('Error fetching report:', error);
-      return null;
+      return reportCache.has(cacheKey) ? reportCache.get(cacheKey)!.data : null;
     }
   },
 

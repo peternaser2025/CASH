@@ -14,7 +14,9 @@ import {
   Key,
   Cloud,
   TrendingUp,
-  ShieldAlert
+  ShieldAlert,
+  Search,
+  Receipt
 } from 'lucide-react';
 import { 
   onAuthStateChanged, 
@@ -40,11 +42,13 @@ import EmployeeManager from './components/EmployeeManager';
 import GoogleTools from './components/GoogleTools';
 import ProfitLoss from './components/ProfitLoss';
 import CostControl from './components/CostControl';
+import AccrualLedger from './components/AccrualLedger';
+import GlobalSearch from './components/GlobalSearch';
 
 export default function App() {
   const [user, setUser] = useState<User | any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'reports' | 'employees' | 'google-tools' | 'profit-loss' | 'cost-control'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'reports' | 'employees' | 'google-tools' | 'profit-loss' | 'cost-control' | 'accruals' | 'global-search'>('dashboard');
 
   // App Data State
   const [balances, setBalances] = useState<EmployeeBalance[]>([]);
@@ -526,6 +530,18 @@ export default function App() {
             onClick={() => setActiveTab('cost-control')} 
           />
           <SidebarItem 
+            icon={<Receipt size={20} />} 
+            label="المشتريات الآجلة والالتزامات" 
+            active={activeTab === 'accruals'} 
+            onClick={() => setActiveTab('accruals')} 
+          />
+          <SidebarItem 
+            icon={<Search size={20} />} 
+            label="محرك البحث والتدقيق" 
+            active={activeTab === 'global-search'} 
+            onClick={() => setActiveTab('global-search')} 
+          />
+          <SidebarItem 
             icon={<Cloud size={20} />} 
             label="أدوات Google" 
             active={activeTab === 'google-tools'} 
@@ -569,6 +585,8 @@ export default function App() {
               {activeTab === 'employees' && 'إدارة الموظفين وصلاحيات العهد'}
               {activeTab === 'profit-loss' && 'حساب ومطابقة الأرباح والخسائر للفروع'}
               {activeTab === 'cost-control' && 'رادار ضبط التكاليف وكشف الهدر المالي'}
+              {activeTab === 'accruals' && 'دفتر المشتريات الآجلة والالتزامات المستحقة'}
+              {activeTab === 'global-search' && 'محرك البحث والتدقيق المالي الشامل'}
               {activeTab === 'google-tools' && 'أدوات ومستندات Google Workspace السحابية'}
             </h2>
           </div>
@@ -665,6 +683,21 @@ export default function App() {
                   branches={branches} 
                   categories={categories} 
                   onRefresh={fetchData} 
+                />
+              )}
+              {activeTab === 'accruals' && (
+                <AccrualLedger 
+                  branches={branches} 
+                  categories={categories} 
+                  employees={employeeNames} 
+                  onRefresh={fetchData} 
+                />
+              )}
+              {activeTab === 'global-search' && (
+                <GlobalSearch 
+                  branches={branches} 
+                  categories={categories} 
+                  employees={employeeNames} 
                 />
               )}
               {activeTab === 'google-tools' && (

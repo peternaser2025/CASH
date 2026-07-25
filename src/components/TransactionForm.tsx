@@ -26,7 +26,9 @@ export default function TransactionForm({ onComplete, employees, branches, categ
     sender: '',
     receiver: '',
     hasTargetMonth: false,
-    targetMonth: new Date().toISOString().slice(0, 7) // YYYY-MM
+    targetMonth: new Date().toISOString().slice(0, 7), // YYYY-MM
+    isAccrual: false,
+    vendorName: ''
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -34,8 +36,20 @@ export default function TransactionForm({ onComplete, employees, branches, categ
     setLoading(true);
     setStatus(null);
 
+    let finalCategory = formData.category;
+    let finalDescription = formData.description;
+
+    if (formData.isAccrual) {
+      if (!finalCategory.includes('آجل') && !finalCategory.includes('مستحق')) {
+        finalCategory = `${finalCategory} (آجل/مستحق)`;
+      }
+      finalDescription = `[مستحق/آجل] ${finalDescription} ${formData.vendorName ? '- المورد: ' + formData.vendorName : ''}`;
+    }
+
     const data = {
       ...formData,
+      category: finalCategory,
+      description: finalDescription,
       type,
       amount: parseFloat(formData.amount),
       targetMonth: formData.hasTargetMonth ? formData.targetMonth : undefined
@@ -244,6 +258,52 @@ export default function TransactionForm({ onComplete, employees, branches, categ
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none resize-none font-medium text-gray-900"
               />
+            </div>
+
+            {/* Accrued / Credit Purchase Toggle Card */}
+            <div className="md:col-span-2 p-6 bg-amber-50/50 border border-amber-200/60 rounded-3xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-500 text-white rounded-xl shadow-sm font-black">
+                    🧾
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-amber-900">عملية آجلة / مشتريات بالدين / مصاريف مستحقة</h4>
+                    <p className="text-[10px] font-bold text-amber-700">تفعيل هذا الخيار يحول العملية تلقائياً لدفتر المشتريات الآجلة والالتزامات لمتابعة السداد</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, isAccrual: !formData.isAccrual })}
+                  className={`w-12 h-6 rounded-full transition-all relative ${
+                    formData.isAccrual ? 'bg-amber-600' : 'bg-gray-200'
+                  }`}
+                >
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${
+                    formData.isAccrual ? 'right-7' : 'right-1'
+                  }`} />
+                </button>
+              </div>
+
+              <AnimatePresence>
+                {formData.isAccrual && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden pt-4 border-t border-amber-200/60"
+                  >
+                    <label className="block text-xs font-black text-amber-900 mb-1.5">اسم المورد / الجهة الدائنة (اختياري)</label>
+                    <input
+                      type="text"
+                      placeholder="مثال: شركة التوريدات الكويتية..."
+                      value={formData.vendorName}
+                      onChange={(e) => setFormData({ ...formData, vendorName: e.target.value })}
+                      className="w-full px-5 py-3 bg-white border border-amber-300 rounded-2xl focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500 outline-none transition-all font-bold text-gray-900 text-xs"
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Target Month Feature */}
