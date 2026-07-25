@@ -304,6 +304,16 @@ export default function TransactionForm({ onComplete, employees, branches, categ
                     exit={{ opacity: 0, height: 0 }}
                     className="overflow-hidden pt-4 border-t border-amber-200/80 space-y-3"
                   >
+                    <div className="p-3 bg-amber-100/90 border border-amber-300 rounded-2xl text-amber-950 text-xs font-bold flex items-start gap-2.5 shadow-sm">
+                      <span className="text-lg leading-none">🛡️</span>
+                      <div>
+                        <p className="font-black text-amber-950 mb-0.5">تأكيد محاسبي لسلامة الصندوق والخزنة:</p>
+                        <p className="text-[11px] font-bold text-amber-900 leading-relaxed">
+                          هذه المشتريات الآجلة تُسجل كالتزام بدفتر الديون والأرباح والخسائر (أساس الاستحقاق)، <strong>وتم ضبط النظام تماماً لعدم خصمها إطلاقاً من الصندوق أو السيولة النقدية</strong>، ولن يتم خصم نقدية من الخزنة إلا في تاريخ سداد المورد لاحقاً.
+                        </p>
+                      </div>
+                    </div>
+
                     <div className="flex items-center gap-2 text-xs font-black text-amber-950">
                       <span>✨ البيانات الخاصة بالعملية الآجلة</span>
                     </div>

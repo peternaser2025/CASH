@@ -185,6 +185,32 @@ export default function ReportViewer({ employees, balances, branches, categories
     return true;
   }) : [];
 
+  const isUnpaidAccrualRow = (row: any) => {
+    const category = String(row[4] || '');
+    const description = row.length > 8 ? String(row[8] || '') : '';
+    const isSettlement = /سداد|تسوية/i.test(`${category} ${description}`);
+    if (isSettlement) return false;
+
+    return (
+      category.includes('مستحق') || 
+      category.includes('مستحقة') || 
+      category.includes('آجل') || 
+      category.includes('مؤجل') || 
+      category.includes('رواتب مستحقة') ||
+      description.includes('مستحق') || 
+      description.includes('مستحقة') || 
+      description.includes('آجل') || 
+      description.includes('مؤجل') || 
+      description.includes('غير مسدد') || 
+      description.includes('لم يسدد') || 
+      description.includes('دين') ||
+      category.toLowerCase().includes('due') ||
+      category.toLowerCase().includes('accrued') ||
+      description.toLowerCase().includes('due') ||
+      description.toLowerCase().includes('accrued')
+    );
+  };
+
   const filteredIn = filteredRows.reduce((acc, row) => {
     const type = String(row[3] || '');
     const category = String(row[4] || '');
@@ -192,12 +218,29 @@ export default function ReportViewer({ employees, balances, branches, categories
     return acc + (parseFloat(row[5]) || 0);
   }, 0);
 
-  const filteredOut = filteredRows.reduce((acc, row) => {
+  // Actual cash paid out from treasury/box (EXCLUDES unpaid credit purchases)
+  const filteredCashOut = filteredRows.reduce((acc, row) => {
     const type = String(row[3] || '');
     const category = String(row[4] || '');
     if (isTransferType(type, category)) return acc;
+    if (isUnpaidAccrualRow(row)) return acc; // DO NOT deduct unpaid accruals from cash outflow!
     return acc + (parseFloat(row[6]) || 0);
   }, 0);
+
+  // Unpaid credit accruals (tracked separately - no cash impact)
+  const filteredUnpaidAccruals = filteredRows.reduce((acc, row) => {
+    const type = String(row[3] || '');
+    const category = String(row[4] || '');
+    if (isTransferType(type, category)) return acc;
+    if (isUnpaidAccrualRow(row)) return acc + (parseFloat(row[6]) || 0);
+    return acc;
+  }, 0);
+
+  // Total costs accrued (cash + unpaid accruals) for accrual context
+  const filteredTotalCosts = filteredCashOut + filteredUnpaidAccruals;
+
+  // Actual Cash Box Balance (السيولة النقدية المتوفرة بالخزنة)
+  const cashEndingBalance = (parseFloat(report?.openingBalance || '0') || 0) + filteredIn - filteredCashOut;
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-20">
@@ -625,48 +668,62 @@ export default function ReportViewer({ employees, balances, branches, categories
             </div>
 
             {/* Redesigned Summary Cards - Hardware/Widget Style */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-0 border-b-2 border-gray-900 no-print">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-0 border-b-2 border-gray-900 no-print">
               {[
                 { label: 'الرصيد الافتتاحي', value: report.openingBalance, icon: Wallet, color: 'blue' },
                 { 
-                  label: 'إجمالي الوارد', 
+                  label: 'المقبوضات النقدية (+)', 
                   value: filteredIn, 
                   icon: TrendingUp, 
                   color: 'emerald' 
                 },
                 { 
-                  label: 'إجمالي الصادر', 
-                  value: filteredOut, 
+                  label: 'المدفوعات النقدية (-)', 
+                  value: filteredCashOut, 
                   icon: TrendingDown, 
-                  color: 'rose' 
+                  color: 'rose',
+                  sub: 'صرف نقدي من الخزنة'
                 },
                 { 
-                  label: 'الرصيد الختامي', 
-                  value: accrualFilter === 'All' ? report.finalBalance : (parseFloat(report.openingBalance) + filteredIn - filteredOut), 
+                  label: 'مشتريات وآجل غير مدفوع', 
+                  value: filteredUnpaidAccruals, 
+                  icon: Info, 
+                  color: 'amber',
+                  sub: '⚠️ لم تُخصم من الصندوق'
+                },
+                { 
+                  label: 'رصيد السيولة بالصندوق', 
+                  value: cashEndingBalance, 
                   icon: CheckCircle2, 
-                  color: (accrualFilter === 'All' ? parseFloat(report.finalBalance) : (parseFloat(report.openingBalance) + filteredIn - filteredOut)) >= 0 ? 'emerald' : 'rose', 
-                  highlight: true 
+                  color: cashEndingBalance >= 0 ? 'emerald' : 'rose', 
+                  highlight: true,
+                  sub: '= افتتاحي + توريد - مدفوع نقداً'
                 }
               ].map((card, idx) => (
                 <div 
                   key={idx}
-                  className={`p-8 flex flex-col justify-between border-l last:border-l-0 border-gray-900 relative overflow-hidden group ${
+                  className={`p-6 flex flex-col justify-between border-l last:border-l-0 border-gray-900 relative overflow-hidden group ${
                     card.highlight ? 'bg-gray-900 text-white' : 'bg-white'
                   }`}
                 >
                   <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-6">
-                      <p className={`text-[10px] font-black uppercase tracking-[0.3em] ${card.highlight ? 'text-emerald-400' : 'text-gray-400'}`}>
+                    <div className="flex items-center justify-between mb-4">
+                      <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${card.highlight ? 'text-emerald-400' : 'text-gray-500'}`}>
                         {card.label}
                       </p>
-                      <card.icon size={16} className={card.highlight ? 'text-white/20' : 'text-gray-200'} />
+                      <card.icon size={16} className={card.highlight ? 'text-emerald-400' : card.color === 'amber' ? 'text-amber-500' : 'text-gray-300'} />
                     </div>
                     <div className="flex items-baseline gap-2">
-                      <span className={`text-4xl font-black font-mono tracking-tighter ${card.highlight ? 'text-white' : 'text-gray-900'}`}>
+                      <span className={`text-3xl font-black font-mono tracking-tighter ${card.highlight ? 'text-emerald-400' : card.color === 'amber' ? 'text-amber-600' : 'text-gray-900'}`}>
                         {formatKWD(card.value)}
                       </span>
-                      <span className={`text-xs font-bold ${card.highlight ? 'text-white/40' : 'text-gray-400'}`}>KWD</span>
+                      <span className={`text-[10px] font-bold ${card.highlight ? 'text-white/40' : 'text-gray-400'}`}>د.ك</span>
                     </div>
+                    {card.sub && (
+                      <p className={`text-[9px] font-bold mt-2 ${card.highlight ? 'text-emerald-200/70' : card.color === 'amber' ? 'text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md inline-block border border-amber-200' : 'text-gray-400'}`}>
+                        {card.sub}
+                      </p>
+                    )}
                   </div>
                   
                   {/* Decorative Grid Pattern for Highlight Card */}
@@ -856,19 +913,22 @@ export default function ReportViewer({ employees, balances, branches, categories
                         </td>
                         <td className="px-6 py-4 text-center border-l border-gray-900">
                           {isTransactionAccrued ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-full border border-amber-200 text-[10px] font-black animate-pulse">
-                              <span className="relative flex h-1.5 w-1.5">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
-                              </span>
-                              مستحقة ⚠️
+                            <span className="inline-flex flex-col items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-800 rounded-xl border border-amber-200 text-[10px] font-black">
+                              <div className="flex items-center gap-1.5">
+                                <span className="relative flex h-1.5 w-1.5">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
+                                </span>
+                                <span>آجل / غير مدفوع ⚠️</span>
+                              </div>
+                              <span className="text-[8px] font-bold text-amber-700">لم يُخصم من الصندوق</span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 text-[10px] font-black">
                               <span className="relative flex h-1.5 w-1.5">
                                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
                               </span>
-                              مسددة ✅
+                              نقدي / مسدد ✅
                             </span>
                           )}
                         </td>
