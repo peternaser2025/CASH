@@ -107,7 +107,26 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
 
       if (reportData && reportData.rows) {
         const accruals: AccrualItem[] = [];
+        const sheetsSettlements: Record<string, number> = {};
 
+        // Pass 1: Identify all settlement transactions in Google Sheets and map their payments
+        reportData.rows.forEach((row: any) => {
+          const category = String(row[4] || '');
+          const expense = parseFloat(String(row[6])) || 0;
+          const description = row.length > 8 ? String(row[8] || '') : '';
+
+          const isSettlement = /سداد|تسوية/i.test(`${category} ${description}`);
+          if (isSettlement && expense > 0) {
+            // Extract embedded ACCRUAL_REF ID if present
+            const refMatch = description.match(/ACCRUAL_REF:(row_[^\s\]]+)/) || description.match(/REF:(row_[^\s\]]+)/);
+            if (refMatch && refMatch[1]) {
+              const refId = refMatch[1];
+              sheetsSettlements[refId] = (sheetsSettlements[refId] || 0) + expense;
+            }
+          }
+        });
+
+        // Pass 2: Identify original Accrual / Deferred / Credit items (excluding settlements)
         reportData.rows.forEach((row: any, index: number) => {
           const date = String(row[0] || '');
           const branch = String(row[2] || 'عام');
@@ -120,6 +139,10 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
 
           // Skip transfers
           if (isTransferType(type, category)) return;
+
+          // IMPORTANT: Skip settlement rows (sadaad / taswaya) so paying a debt doesn't create a new debt!
+          const isSettlement = /سداد|تسوية/i.test(`${category} ${description}`);
+          if (isSettlement) return;
 
           // Check if this row represents an Accrual or Credit Purchase (آجل / مستحق)
           const isAccrued = 
@@ -143,8 +166,10 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
             const originalAmount = expense > 0 ? expense : income;
             const itemId = `row_${index}_${date}_${originalAmount}`;
             
-            // Check if user previously settled part or full amount locally or via linked payments
-            const paidAmount = settledHistory[itemId] || 0;
+            // Sum paid amounts from both Google Sheets settlement rows and local storage memory
+            const paidFromSheets = sheetsSettlements[itemId] || 0;
+            const paidFromLocal = settledHistory[itemId] || 0;
+            const paidAmount = Math.max(paidFromSheets, paidFromLocal);
             const remainingAmount = Math.max(0, originalAmount - paidAmount);
 
             let status: 'Due' | 'PartiallyPaid' | 'Paid' = 'Due';
@@ -215,7 +240,7 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
         category: 'سداد مشتريات آجلة ومستحقات (تسوية التزامات)',
         employee: selectedItemForSettlement.employee,
         amount: payVal,
-        description: `[سداد مستحقات/آجل سابق - تخص شهر ${originalMonth}] سداد ${settlementMethod} للبند: [${selectedItemForSettlement.category}] - ${selectedItemForSettlement.description}. ${settlementNotes ? 'ملاحظة: ' + settlementNotes : ''}`
+        description: `[سداد مستحقات/آجل - ACCRUAL_REF:${selectedItemForSettlement.id}] [تخص شهر ${originalMonth}] سداد ${settlementMethod} للبند: [${selectedItemForSettlement.category}] - ${selectedItemForSettlement.description}. ${settlementNotes ? 'ملاحظة: ' + settlementNotes : ''}`
       };
 
       const res = await gasService.addTransaction(newPaymentTrans);
