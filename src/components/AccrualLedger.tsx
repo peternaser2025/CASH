@@ -207,14 +207,15 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
 
     try {
       // 1. Record payment transaction in Google Sheets
+      const originalMonth = selectedItemForSettlement.date ? selectedItemForSettlement.date.slice(0, 7) : '';
       const newPaymentTrans = {
         date: new Date().toISOString().split('T')[0],
         type: 'Expense',
         branch: selectedItemForSettlement.branch,
-        category: 'سداد مشتريات آجلة ومستحقات',
+        category: 'سداد مشتريات آجلة ومستحقات (تسوية التزامات)',
         employee: selectedItemForSettlement.employee,
         amount: payVal,
-        description: `سداد ${settlementMethod} للبند: [${selectedItemForSettlement.category}] - ${selectedItemForSettlement.description}. ${settlementNotes ? 'ملاحظة: ' + settlementNotes : ''}`
+        description: `[سداد مستحقات/آجل سابق - تخص شهر ${originalMonth}] سداد ${settlementMethod} للبند: [${selectedItemForSettlement.category}] - ${selectedItemForSettlement.description}. ${settlementNotes ? 'ملاحظة: ' + settlementNotes : ''}`
       };
 
       const res = await gasService.addTransaction(newPaymentTrans);
