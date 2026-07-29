@@ -41,7 +41,7 @@ import {
 } from 'recharts';
 import { gasService } from '../services/gasService';
 import { ReportFilter, ReportData, EmployeeBalance } from '../types';
-import { formatKWD, isIncomeType, isExpenseType, isTransferType } from '../utils/format';
+import { formatKWD, isIncomeType, isExpenseType, isTransferType, isAccrualType } from '../utils/format';
 
 interface ReportViewerProps {
   employees: string[];
@@ -159,26 +159,11 @@ export default function ReportViewer({ employees, balances, branches, categories
   };
 
   const filteredRows = report ? report.rows.filter(row => {
+    const type = String(row[3] || '');
     const category = String(row[4] || '');
     const description = row.length > 8 ? String(row[8] || '') : '';
     
-    const isTransactionAccrued = 
-      category.includes('مستحق') || 
-      category.includes('مستحقة') || 
-      category.includes('آجل') || 
-      category.includes('مؤجل') || 
-      category.includes('رواتب مستحقة') ||
-      description.includes('مستحق') || 
-      description.includes('مستحقة') || 
-      description.includes('آجل') || 
-      description.includes('مؤجل') || 
-      description.includes('غير مسدد') || 
-      description.includes('لم يسدد') || 
-      description.includes('دين') ||
-      category.toLowerCase().includes('due') ||
-      category.toLowerCase().includes('accrued') ||
-      description.toLowerCase().includes('due') ||
-      description.toLowerCase().includes('accrued');
+    const isTransactionAccrued = isAccrualType(type, category, description);
 
     if (accrualFilter === 'Due') return isTransactionAccrued;
     if (accrualFilter === 'Paid') return !isTransactionAccrued;
@@ -186,29 +171,10 @@ export default function ReportViewer({ employees, balances, branches, categories
   }) : [];
 
   const isUnpaidAccrualRow = (row: any) => {
+    const type = String(row[3] || '');
     const category = String(row[4] || '');
     const description = row.length > 8 ? String(row[8] || '') : '';
-    const isSettlement = /سداد|تسوية/i.test(`${category} ${description}`);
-    if (isSettlement) return false;
-
-    return (
-      category.includes('مستحق') || 
-      category.includes('مستحقة') || 
-      category.includes('آجل') || 
-      category.includes('مؤجل') || 
-      category.includes('رواتب مستحقة') ||
-      description.includes('مستحق') || 
-      description.includes('مستحقة') || 
-      description.includes('آجل') || 
-      description.includes('مؤجل') || 
-      description.includes('غير مسدد') || 
-      description.includes('لم يسدد') || 
-      description.includes('دين') ||
-      category.toLowerCase().includes('due') ||
-      category.toLowerCase().includes('accrued') ||
-      description.toLowerCase().includes('due') ||
-      description.toLowerCase().includes('accrued')
-    );
+    return isAccrualType(type, category, description);
   };
 
   const filteredIn = filteredRows.reduce((acc, row) => {

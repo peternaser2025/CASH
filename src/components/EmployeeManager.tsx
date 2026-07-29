@@ -288,16 +288,51 @@ function deleteEmployee(ss, name) {
 
 // دالة إضافة حركة مالية وتحديث رصيد الموظف
 function addTransaction(ss, data) {
+  // إذا كانت العملية تحويل عهدة بين موظفين (sender و receiver)
+  if (data.type === "Transfer" || (data.sender && data.receiver)) {
+    var senderName = String(data.sender || data.employee).trim();
+    var receiverName = String(data.receiver).trim();
+    var amt = parseFloat(data.amount) || 0;
+    var desc = data.description || ("تحويل عهدة نقدية من " + senderName + " إلى " + receiverName);
+    var dt = data.date || new Date().toISOString().split('T')[0];
+    var br = data.branch || "";
+    var tm = data.targetMonth || "";
+    var lastId = new Date().getTime();
+    
+    if (senderName) {
+      var sSheet = ss.getSheetByName(senderName);
+      if (!sSheet) { addEmployee(ss, senderName); sSheet = ss.getSheetByName(senderName); }
+      var sLastRow = sSheet.getLastRow();
+      var sBal = 0;
+      if (sLastRow > 1) sBal = parseFloat(sSheet.getRange(sLastRow, 8).getValue()) || 0;
+      var newSBal = sBal - amt;
+      sSheet.appendRow([lastId, dt, br, "تحويل عهدة (صادر إلى " + receiverName + ")", desc, 0, amt, newSBal, tm, senderName]);
+      recalculateSheetBalances(ss, senderName);
+    }
+    
+    if (receiverName) {
+      var rSheet = ss.getSheetByName(receiverName);
+      if (!rSheet) { addEmployee(ss, receiverName); rSheet = ss.getSheetByName(receiverName); }
+      var rLastRow = rSheet.getLastRow();
+      var rBal = 0;
+      if (rLastRow > 1) rBal = parseFloat(rSheet.getRange(rLastRow, 8).getValue()) || 0;
+      var newRBal = rBal + amt;
+      rSheet.appendRow([lastId + 1, dt, br, "تحويل عهدة (وارد من " + senderName + ")", desc, amt, 0, newRBal, tm, receiverName]);
+      recalculateSheetBalances(ss, receiverName);
+    }
+    
+    return { success: true, id: lastId };
+  }
+
   var name = String(data.employee).trim();
   var sheet = ss.getSheetByName(name);
   
-  // إذا لم يكن تب الموظف موجوداً، نقوم بإنشائه فوراً وتلقائياً!
   if (!sheet) {
     addEmployee(ss, name);
     sheet = ss.getSheetByName(name);
   }
   
-  var id = new Date().getTime(); // رقم العملية الفريد
+  var id = new Date().getTime();
   var date = data.date || new Date().toISOString().split('T')[0];
   var branch = data.branch || "";
   var category = data.category || "";
@@ -309,21 +344,23 @@ function addTransaction(ss, data) {
   var income = (type === "Income") ? amount : 0;
   var expense = (type === "Expense") ? amount : 0;
   
-  // حساب الرصيد الجديد التراكمي للموظف
+  // فحص ما إذا كانت العملية آجلة / غير مسددة (لا تخصم نقدية من رصيد عهدة الموظف)
+  var isSettlement = /سداد|تسوية/i.test(category + " " + description);
+  var isAccrual = isSettlement ? false : /آجل|اجل|مستحق|مستحقة|مستحقه|رواتب مستحقة|دين|دائن|مورد|مؤجل|غير مسدد|لم يسدد|deferred|accrual|credit|due/i.test(category + " " + description);
+  
   var currentBalance = 0;
   var lastRow = sheet.getLastRow();
   if (lastRow > 1) {
     currentBalance = parseFloat(sheet.getRange(lastRow, 8).getValue()) || 0;
   }
   
-  var newBalance = currentBalance + income - expense;
+  var cashExpense = isAccrual ? 0 : expense;
+  var newBalance = currentBalance + income - cashExpense;
   
-  // إضافة الحركة في سطر جديد
   sheet.appendRow([id, date, branch, category, description, income, expense, newBalance, targetMonth, name]);
   sheet.setGridlinesActive(true);
   
-  // تحديث جدول الأرصدة الرئيسي
-  updateEmployeeBalanceInSheet(ss, name, newBalance);
+  recalculateSheetBalances(ss, name);
   
   return { success: true, id: id };
 }
@@ -338,7 +375,6 @@ function updateEmployeeBalanceInSheet(ss, name, balance) {
       return;
     }
   }
-  // إن لم يكن بالجدول نلحقه
   balancesSheet.appendRow([name, balance]);
 }
 
@@ -364,7 +400,6 @@ function updateTransaction(ss, id, data) {
   var income = (type === "Income") ? amount : 0;
   var expense = (type === "Expense") ? amount : 0;
   
-  // تعديل السطر المحدد
   sheet.getRange(targetRow, 2).setValue(data.date);
   sheet.getRange(targetRow, 3).setValue(data.branch);
   sheet.getRange(targetRow, 4).setValue(data.category);
@@ -373,7 +408,6 @@ function updateTransaction(ss, id, data) {
   sheet.getRange(targetRow, 7).setValue(expense);
   sheet.getRange(targetRow, 9).setValue(data.targetMonth || "");
   
-  // إعادة حساب كافة الأرصدة التراكمية في التب من البداية للنهاية لضمان سلامة الحسابات!
   recalculateSheetBalances(ss, name);
   
   return { success: true };
@@ -381,7 +415,6 @@ function updateTransaction(ss, id, data) {
 
 // دالة حذف حركة مالية
 function deleteTransaction(ss, id) {
-  // نبحث في جميع أوراق العمل عن الحركة بهذا الـ ID
   var sheets = ss.getSheets();
   var found = false;
   var empName = "";
@@ -404,7 +437,6 @@ function deleteTransaction(ss, id) {
   }
   
   if (found && empName) {
-    // إعادة حساب الأرصدة
     recalculateSheetBalances(ss, empName);
     return { success: true };
   }
@@ -423,15 +455,22 @@ function recalculateSheetBalances(ss, name) {
     return;
   }
   
-  var range = sheet.getRange(2, 6, lastRow - 1, 3); // دائن، مدين، الرصيد
+  var range = sheet.getRange(2, 1, lastRow - 1, 9); // قراءة الأسطر كاملة (من البند إلى الشهر)
   var values = range.getValues();
   var balance = 0;
   
   for (var i = 0; i < values.length; i++) {
-    var inc = parseFloat(values[i][0]) || 0;
-    var exp = parseFloat(values[i][1]) || 0;
-    balance = balance + inc - exp;
-    sheet.getRange(i + 2, 8).setValue(balance); // حفظ الرصيد في العمود الثامن
+    var category = String(values[i][3] || '');
+    var description = String(values[i][4] || '');
+    var inc = parseFloat(values[i][5]) || 0;
+    var exp = parseFloat(values[i][6]) || 0;
+    
+    var isSettlement = /سداد|تسوية/i.test(category + " " + description);
+    var isAccrual = isSettlement ? false : /آجل|اجل|مستحق|مستحقة|مستحقه|رواتب مستحقة|دين|دائن|مورد|مؤجل|غير مسدد|لم يسدد|deferred|accrual|credit|due/i.test(category + " " + description);
+
+    var cashExp = isAccrual ? 0 : exp;
+    balance = balance + inc - cashExp;
+    sheet.getRange(i + 2, 8).setValue(balance);
   }
   
   updateEmployeeBalanceInSheet(ss, name, balance);

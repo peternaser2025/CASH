@@ -76,3 +76,14 @@ export const isExpenseType = (type: string, category?: string): boolean => {
     c.includes('مشتريات')
   );
 };
+
+/**
+ * Determines if a transaction row is an unpaid accrual or credit purchase (does NOT deduct from cash box)
+ */
+export const isAccrualType = (type?: string, category?: string, description?: string): boolean => {
+  const text = `${type || ''} ${category || ''} ${description || ''}`;
+  // Skip settlements (سداد / تسوية ديون) - settlement DOES involve cash!
+  if (/سداد|تسوية/i.test(text)) return false;
+
+  return /آجل|اجل|مستحق|مستحقة|مستحقه|رواتب مستحقة|دين|دائن|مورد|مؤجل|غير مسدد|لم يسدد|deferred|accrual|credit|due/i.test(text);
+};

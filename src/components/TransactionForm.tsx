@@ -38,6 +38,25 @@ export default function TransactionForm({ onComplete, employees, branches, categ
 
     let finalCategory = formData.category;
     let finalDescription = formData.description;
+    let finalEmployee = formData.employee;
+
+    if (type === 'Transfer') {
+      if (!formData.sender || !formData.receiver) {
+        setStatus({ type: 'error', message: 'يرجى اختيار الموظف المرسل والموظف المستلم لعملية التحويل' });
+        setLoading(false);
+        return;
+      }
+      if (formData.sender === formData.receiver) {
+        setStatus({ type: 'error', message: 'لا يمكن تحويل العهدة لنفس الموظف' });
+        setLoading(false);
+        return;
+      }
+      finalCategory = 'تحويل عهدة نقدية';
+      finalEmployee = formData.sender;
+      if (!finalDescription) {
+        finalDescription = `تحويل عهدة نقدية من ${formData.sender} إلى ${formData.receiver}`;
+      }
+    }
 
     if (formData.isAccrual) {
       if (!finalCategory.includes('آجل') && !finalCategory.includes('مستحق')) {
@@ -50,6 +69,7 @@ export default function TransactionForm({ onComplete, employees, branches, categ
 
     const data = {
       ...formData,
+      employee: finalEmployee,
       category: finalCategory,
       description: finalDescription,
       type,
