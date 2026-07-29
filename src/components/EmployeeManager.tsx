@@ -175,18 +175,42 @@ function addUser(ss, email, password, displayName, role) {
   return { success: true };
 }
 
-// دالة جلب الأرصدة وقائمة الموظفين
+// دالة جلب الأرصدة وقائمة الموظفين المتطابقة 100% مع تبويبات الموظفين
 function fetchBalances(ss) {
-  var sheet = ss.getSheetByName("Balances");
-  var data = sheet.getDataRange().getValues();
+  var sheets = ss.getSheets();
+  var ignoreSheets = ["Users", "Balances", "Settings", "Dashboard", "Sheet1", "عمليات", "employee", "البيانات", "Sheet2", "Sheet3"];
   var list = [];
-  for (var i = 1; i < data.length; i++) {
-    var name = String(data[i][0]).trim();
-    var bal = parseFloat(data[i][1]) || 0;
-    if (name) {
-      list.push([name, bal]);
+  var addedNames = {};
+  
+  for (var k = 0; k < sheets.length; k++) {
+    var sheet = sheets[k];
+    var name = sheet.getName();
+    if (ignoreSheets.indexOf(name) !== -1) continue;
+    
+    var lastRow = sheet.getLastRow();
+    var bal = 0;
+    if (lastRow > 1) {
+      bal = parseFloat(sheet.getRange(lastRow, 8).getValue()) || 0;
+    }
+    list.push([name, bal]);
+    addedNames[name.toLowerCase()] = true;
+    
+    updateEmployeeBalanceInSheet(ss, name, bal);
+  }
+
+  var balancesSheet = ss.getSheetByName("Balances");
+  if (balancesSheet) {
+    var bData = balancesSheet.getDataRange().getValues();
+    for (var i = 1; i < bData.length; i++) {
+      var bName = String(bData[i][0]).trim();
+      var bBal = parseFloat(bData[i][1]) || 0;
+      if (bName && ignoreSheets.indexOf(bName) === -1 && !addedNames[bName.toLowerCase()]) {
+        list.push([bName, bBal]);
+        addedNames[bName.toLowerCase()] = true;
+      }
     }
   }
+
   return list;
 }
 

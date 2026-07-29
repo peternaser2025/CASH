@@ -41,11 +41,44 @@ export const gasService = {
       const data = await response.json();
       
       // Filter out non-employee names
-      const ignoreSheets = ['Balances', 'Settings', 'Sheet1', 'الرئيسية', 'عمليات', 'employee', 'البيانات', 'Dashboard', 'Sheet2', 'Sheet3'];
+      const ignoreSheets = ['Balances', 'Settings', 'Sheet1', 'الرئيسية', 'عمليات', 'employee', 'البيانات', 'Dashboard', 'Sheet2', 'Sheet3', 'Users'];
       
-      const parsedBalances = data
-        .filter(([name]: [string, any]) => name && !ignoreSheets.includes(name))
-        .map(([name, balance]: [string, number]) => ({ name, balance }));
+      const balancesMap = new Map<string, number>();
+
+      if (Array.isArray(data)) {
+        data
+          .filter(([name]: [string, any]) => name && !ignoreSheets.includes(name))
+          .forEach(([name, balance]: [string, number]) => {
+            balancesMap.set(String(name).trim(), parseFloat(String(balance)) || 0);
+          });
+      }
+
+      // Cross-verify with actual report rows to guarantee 100% precision with individual employee sheets
+      try {
+        const report = await this.getReport({}, forceRefresh);
+        if (report && Array.isArray(report.rows) && report.rows.length > 0) {
+          const latestEmployeeBalances = new Map<string, number>();
+          
+          report.rows.forEach((row: any) => {
+            const emp = String(row.employee || row[9] || '').trim();
+            if (emp && !ignoreSheets.includes(emp)) {
+              const bal = parseFloat(String(row.balance !== undefined ? row.balance : (row[7] || 0))) || 0;
+              latestEmployeeBalances.set(emp, bal);
+            }
+          });
+
+          latestEmployeeBalances.forEach((val, emp) => {
+            balancesMap.set(emp, val);
+          });
+        }
+      } catch (e) {
+        console.warn('Could not cross-verify balances with report rows:', e);
+      }
+
+      const parsedBalances: EmployeeBalance[] = Array.from(balancesMap.entries()).map(([name, balance]) => ({
+        name,
+        balance
+      }));
 
       balancesCache = { data: parsedBalances, timestamp: now };
       return parsedBalances;
