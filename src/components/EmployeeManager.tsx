@@ -943,10 +943,12 @@ function generateReport(ss, filters) {
                       </td>
                       <td className="px-8 py-6">
                         <div className="flex flex-col">
-                          <span className={`text-xl font-black font-mono ${emp.balance < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                            {emp.balance.toFixed(3)}
+                          <span className={`text-xl font-black font-mono ${emp.balance < 0 ? 'text-red-600' : emp.balance > 0 ? 'text-emerald-700' : 'text-slate-800'}`}>
+                            {emp.balance.toFixed(3)} <span className="text-xs">د.ك</span>
                           </span>
-                          <span className="text-[10px] text-gray-400 font-bold uppercase">د.ك</span>
+                          <span className={`text-[10px] font-bold ${emp.balance > 0 ? 'text-emerald-600' : emp.balance < 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                            {emp.balance > 0 ? 'رصيد متوفر بالصندوق' : emp.balance < 0 ? 'مستحق للموظف (عجز تغذية)' : 'عهدة متوازنة (صفر)'}
+                          </span>
                         </div>
                       </td>
                       <td className="px-8 py-6 text-left">

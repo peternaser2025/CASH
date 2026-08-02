@@ -38,9 +38,9 @@ export default function Dashboard({ balances, loading, onRefresh }: DashboardPro
     ];
 
     const rows = balances.map(emp => {
-      let statusText = 'متوازن (صفر)';
-      if (emp.balance > 0) statusText = 'مستحق للموظف (دائن)';
-      else if (emp.balance < 0) statusText = 'مستحق على الموظف (مدين / عجز)';
+      let statusText = 'عهدة متوازنة (صفر)';
+      if (emp.balance > 0) statusText = 'رصيد سيولة متبقي بصندوق الموظف';
+      else if (emp.balance < 0) statusText = 'مستحق للموظف (عجز تغذية / صرف شخصي)';
 
       return [
         emp.name,
@@ -53,20 +53,20 @@ export default function Dashboard({ balances, loading, onRefresh }: DashboardPro
     exportReportToExcel({
       fileName,
       sheetName: 'المركز المالي',
-      reportTitle: 'تقرير المركز المالي الشامل وأرصدة السيولة',
-      subtitle: `إجمالي السيولة النقدية: ${formatKWD(totalBalance)} د.ك | تاريخ التصدير: ${new Date().toLocaleDateString('ar-KW')}`,
+      reportTitle: 'تقرير المركز المالي الشامل وأرصدة السيولة النقدية',
+      subtitle: `إجمالي السيولة النقدية المتاحة بالعهد: ${formatKWD(totalBalance)} د.ك | تاريخ التصدير: ${new Date().toLocaleDateString('ar-KW')}`,
       summaryCards: [
-        { label: 'إجمالي السيولة النقدية بالعهد', value: formatKWD(totalBalance) },
-        { label: 'عهدة بها رصيد موجبة', value: `${positiveBalances} عهدة` },
-        { label: 'عهدة بها عجز / مدينة', value: `${negativeBalances} عهدة` },
-        { label: 'إجمالي الموظفين', value: `${balances.length} موظف` },
+        { label: 'إجمالي السيولة النقدية المتاحة بالعهد', value: formatKWD(totalBalance) },
+        { label: 'عهدة بها سيولة متبقية', value: `${positiveBalances} عهدة` },
+        { label: 'عهدة بها عجز / مستحق للموظف', value: `${negativeBalances} عهدة` },
+        { label: 'إجمالي المسؤولين والمعتمدين', value: `${balances.length} موظف` },
       ],
       headers,
       rows,
       totalsRow: [
-        'الإجمالي الكلي للسيولة',
+        'الإجمالي الكلي للسيولة النقدية',
         totalBalance,
-        totalBalance > 0 ? 'مستحقات دائنة' : totalBalance < 0 ? 'عجز كلي' : 'متوازن',
+        totalBalance > 0 ? 'فائض سيولة بالعهد' : totalBalance < 0 ? 'إجمالي عجز التغذية المستحق' : 'متوازن',
         '-'
       ]
     });
@@ -258,12 +258,14 @@ export default function Dashboard({ balances, loading, onRefresh }: DashboardPro
                       </td>
                       <td className="px-8 py-5 text-center">
                         <div className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-xl text-xs font-black uppercase tracking-wider ${
-                          item.balance >= 0 
+                          item.balance > 0 
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                            : 'bg-rose-50 text-rose-700 border border-rose-200'
+                            : item.balance < 0 
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                            : 'bg-slate-100 text-slate-700 border border-slate-200'
                         }`}>
-                          {item.balance >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                          {item.balance >= 0 ? 'دائن (رصيد موجب)' : 'مدين (عجز / مستحق)'}
+                          {item.balance > 0 ? <ArrowUpRight size={14} /> : item.balance < 0 ? <ArrowDownRight size={14} /> : <Scale size={14} />}
+                          {item.balance > 0 ? 'رصيد متوفر بالصندوق' : item.balance < 0 ? 'مستحق للموظف (عجز تغذية)' : 'عهدة متوازنة (صفر)'}
                         </div>
                       </td>
                       <td className="px-8 py-5 text-center">
