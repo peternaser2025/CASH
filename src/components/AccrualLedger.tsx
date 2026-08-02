@@ -15,6 +15,7 @@ import {
   Plus, 
   RefreshCw, 
   Printer, 
+  FileSpreadsheet,
   ArrowUpRight, 
   ChevronDown, 
   AlertTriangle, 
@@ -27,6 +28,7 @@ import {
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { formatKWD, isTransferType } from '../utils/format';
+import { exportReportToExcel } from '../utils/excelExport';
 
 interface AccrualItem {
   id: string;
@@ -354,6 +356,60 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
     };
   }, [items]);
 
+  const handleExportAccrualsExcel = () => {
+    const fileName = `دفتر_المشتريات_والالتزامات_الآجلة_${selectedBranch}_${statusFilter}`;
+
+    const headers = [
+      'التاريخ',
+      'الفرع',
+      'اسم المورد / الجهة الدائنة',
+      'التصنيف',
+      'البيان والتفاصيل',
+      'المبلغ الأصلي (د.ك)',
+      'المسدد بالفعل (د.ك)',
+      'الرصيد المتبقي (د.ك)',
+      'حالة السداد'
+    ];
+
+    const rows = filteredItems.map(item => [
+      item.date,
+      item.branch,
+      item.vendorName,
+      item.category,
+      item.description,
+      item.amount,
+      item.paidAmount,
+      item.remainingAmount,
+      item.status === 'Paid' ? 'مسدد بالكامل' : item.status === 'PartiallyPaid' ? 'مسدد جزئياً' : 'غير مسدد (مستحق)'
+    ]);
+
+    exportReportToExcel({
+      fileName,
+      sheetName: 'دفتر المستحقات',
+      reportTitle: 'دفتر المشتريات الآجلة والالتزامات المستحقة',
+      subtitle: `الفرع: ${selectedBranch} | الحالة: ${statusFilter} | تاريخ التصدير: ${new Date().toLocaleDateString('ar-KW')}`,
+      summaryCards: [
+        { label: 'إجمالي المستحقات المسجلة', value: formatKWD(totalAccruedLiabilities) },
+        { label: 'إجمالي المسدد بالفعل', value: formatKWD(totalPaidLiabilities) },
+        { label: 'الرصيد المتبقي المستحق', value: formatKWD(totalRemainingLiabilities) },
+        { label: 'عدد الفواتير المعلقة', value: `${dueItemsCount} فاتورة` },
+      ],
+      headers,
+      rows,
+      totalsRow: [
+        'المجموع الإجمالي',
+        '-',
+        '-',
+        '-',
+        '-',
+        totalAccruedLiabilities,
+        totalPaidLiabilities,
+        totalRemainingLiabilities,
+        '-'
+      ]
+    });
+  };
+
   return (
     <div className="space-y-8 pb-20">
       
@@ -373,7 +429,15 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleExportAccrualsExcel}
+            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-all shadow-sm cursor-pointer"
+          >
+            <FileSpreadsheet size={16} />
+            تصدير إلى إكسيل (Excel)
+          </button>
+
           <button
             onClick={() => setIsAddModalOpen(true)}
             className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs transition-all shadow-sm cursor-pointer"
@@ -513,13 +577,22 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
             <h3 className="text-lg font-black text-slate-900">سجل الفواتير والمستحقات المكتشفة ({filteredItems.length})</h3>
             <p className="text-xs font-medium text-slate-500 mt-0.5">كشف تفصيلي بكافة المشتريات والمصاريف ذات الصبغة الآجلة والمستحقة</p>
           </div>
-          <button
-            onClick={() => window.print()}
-            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-2 no-print cursor-pointer transition-colors"
-          >
-            <Printer size={14} />
-            طباعة الكشف
-          </button>
+          <div className="flex items-center gap-2 no-print">
+            <button
+              onClick={handleExportAccrualsExcel}
+              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <FileSpreadsheet size={14} />
+              تصدير إكسيل
+            </button>
+            <button
+              onClick={() => window.print()}
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <Printer size={14} />
+              طباعة الكشف
+            </button>
+          </div>
         </div>
 
         {loading ? (

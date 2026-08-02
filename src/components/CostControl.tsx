@@ -12,6 +12,7 @@ import {
   Info, 
   RefreshCw, 
   Printer, 
+  FileSpreadsheet,
   Plus, 
   Trash2, 
   Save, 
@@ -26,6 +27,7 @@ import {
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { formatKWD, isTransferType, isIncomeType, isExpenseType } from '../utils/format';
+import { exportReportToExcel } from '../utils/excelExport';
 
 interface CostControlProps {
   branches: string[];
@@ -314,6 +316,66 @@ export default function CostControl({ branches, categories, onRefresh }: CostCon
   const costToSalesRatio = totalSales > 0 ? ((totalActualExpenses / totalSales) * 100).toFixed(1) : '0';
   const achievedSavings = optimizationTasks.filter(t => t.completed).reduce((sum, t) => sum + t.estimatedSavingKWD, 0);
 
+  const handleExportCostControlExcel = () => {
+    const fileName = `تقرير_ضبط_التكاليف_والميزانية_${selectedBranch}_${selectedMonth}`;
+    
+    const headers = [
+      'التصنيف / التوزيع',
+      'نوع التكلفة',
+      'الميزانية (السقف المحدد) (د.ك)',
+      'المصاريف الفعلية (د.ك)',
+      'نسبة الاستهلاك (%)',
+      'الفارق المتبقي (د.ك)',
+      'حالة الالتزام'
+    ];
+
+    const rows = allCategories.map(cat => {
+      const actual = actualExpenses[cat] || 0;
+      const budgetConf = budgets[cat] || { category: cat, monthlyLimit: 0, isFixedCost: false };
+      const limit = budgetConf.monthlyLimit;
+      const isOver = limit > 0 && actual > limit;
+      const percentage = limit > 0 ? Math.round((actual / limit) * 100) : (actual > 0 ? 100 : 0);
+      const diff = limit - actual;
+
+      return [
+        cat,
+        budgetConf.isFixedCost ? 'تكلفة ثابتة' : 'تكلفة متغيرة',
+        limit > 0 ? limit : 'غير محدد',
+        actual,
+        `${percentage}%`,
+        diff,
+        isOver ? 'تجاوز السقف ⚠️' : (limit > 0 ? 'ضمن الحدود ✅' : 'بدون ميزانية')
+      ];
+    });
+
+    const overallSavings = totalBudgetCeiling - totalActualExpenses;
+
+    exportReportToExcel({
+      fileName,
+      sheetName: 'ضبط التكاليف',
+      reportTitle: 'تقرير ضبط التكاليف وتحليل ميزانية التشغيل',
+      subtitle: `الفرع: ${selectedBranch} | الشهر: ${selectedMonth} | تاريخ التصدير: ${new Date().toLocaleDateString('ar-KW')}`,
+      summaryCards: [
+        { label: 'سقف الميزانية المحدد', value: formatKWD(totalBudgetCeiling) },
+        { label: 'إجمالي المصاريف الفعلية', value: formatKWD(totalActualExpenses) },
+        { label: 'التكاليف الثابتة', value: formatKWD(totalFixedExpenses) },
+        { label: 'التكاليف المتغيرة', value: formatKWD(totalVariableExpenses) },
+        { label: 'الفارق الإجمالي للميزانية', value: formatKWD(overallSavings) },
+      ],
+      headers,
+      rows,
+      totalsRow: [
+        'الإجمالي الكلي',
+        '-',
+        totalBudgetCeiling,
+        totalActualExpenses,
+        '-',
+        overallSavings,
+        overallSavings >= 0 ? 'توفير وإلتزام ✅' : 'تجاوز للميزانية ⚠️'
+      ]
+    });
+  };
+
   const printReport = () => {
     window.print();
   };
@@ -336,7 +398,15 @@ export default function CostControl({ branches, categories, onRefresh }: CostCon
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleExportCostControlExcel}
+            className="flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-bold text-xs transition-all shadow-md cursor-pointer"
+          >
+            <FileSpreadsheet size={16} />
+            تصدير إلى إكسيل (Excel)
+          </button>
+
           <button
             onClick={fetchCostData}
             disabled={loadingData}

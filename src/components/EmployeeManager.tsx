@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { UserPlus, Users, CheckCircle2, AlertCircle, Loader2, ShieldCheck, UserCheck, Search, Trash2, Key, Copy, Check } from 'lucide-react';
+import { UserPlus, Users, CheckCircle2, AlertCircle, Loader2, ShieldCheck, UserCheck, Search, Trash2, Key, Copy, Check, FileSpreadsheet } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
+import { formatKWD } from '../utils/format';
+import { exportReportToExcel } from '../utils/excelExport';
 
 interface EmployeeManagerProps {
   balances: EmployeeBalance[];
@@ -617,6 +619,55 @@ function generateReport(ss, filters) {
     setLoading(false);
   };
 
+  const handleExportEmployeeBalancesExcel = () => {
+    const fileName = `كشف_أرصدة_العهد_والموظفين_${new Date().toISOString().split('T')[0]}`;
+    
+    const headers = [
+      'اسم الموظف المسؤول',
+      'رصيد العهدة النقدية (د.ك)',
+      'حالة العهدة (المركز المالي)',
+      'تاريخ التحديث'
+    ];
+
+    const rows = filteredBalances.map(emp => {
+      const bal = typeof emp.balance === 'number' ? emp.balance : (parseFloat(emp.balance) || 0);
+      let statusText = 'متوازن (صفر)';
+      if (bal > 0) statusText = 'مستحق للموظف (دائن)';
+      else if (bal < 0) statusText = 'مستحق على الموظف (مدين / عجز)';
+
+      return [
+        emp.name,
+        bal,
+        statusText,
+        new Date().toLocaleDateString('ar-KW')
+      ];
+    });
+
+    const totalBalances = filteredBalances.reduce((acc, emp) => {
+      const b = typeof emp.balance === 'number' ? emp.balance : (parseFloat(emp.balance) || 0);
+      return acc + b;
+    }, 0);
+
+    exportReportToExcel({
+      fileName,
+      sheetName: 'أرصدة العهد المالي',
+      reportTitle: 'كشف أرصدة العهد والذمم المالية للموظفين',
+      subtitle: `عدد الموظفين: ${filteredBalances.length} | تاريخ التصدير: ${new Date().toLocaleDateString('ar-KW')}`,
+      summaryCards: [
+        { label: 'إجمالي السيولة التراكمية بالعهد', value: formatKWD(totalBalances) },
+        { label: 'إجمالي الموظفين المسجلين', value: `${filteredBalances.length} موظف` },
+      ],
+      headers,
+      rows,
+      totalsRow: [
+        'المجموع الإجمالي للعهد',
+        totalBalances,
+        totalBalances > 0 ? 'مستحقات موجبة' : totalBalances < 0 ? 'عجز كلي' : 'متوازن',
+        '-'
+      ]
+    });
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-10 pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -624,13 +675,22 @@ function generateReport(ss, filters) {
           <h2 className="text-4xl font-black text-gray-900 tracking-tight">إدارة الموظفين والعهد</h2>
           <p className="text-gray-500 mt-2 font-medium">إضافة موظفين جدد، متابعة صلاحياتهم، ومراقبة أرصدة العهد النشطة</p>
         </div>
-        <div className="flex items-center gap-4 bg-white px-6 py-3 rounded-[2rem] border border-gray-100 shadow-sm">
-          <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
-            <ShieldCheck size={20} />
-          </div>
-          <div>
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">إجمالي المسجلين</p>
-            <p className="text-xl font-black text-gray-900">{balances.length} موظف</p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleExportEmployeeBalancesExcel}
+            className="flex items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-[2rem] font-bold text-xs transition-all shadow-sm cursor-pointer"
+          >
+            <FileSpreadsheet size={16} />
+            تصدير كشف العهد (Excel)
+          </button>
+          <div className="flex items-center gap-4 bg-white px-6 py-3 rounded-[2rem] border border-gray-100 shadow-sm">
+            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+              <ShieldCheck size={20} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">إجمالي المسجلين</p>
+              <p className="text-xl font-black text-gray-900">{balances.length} موظف</p>
+            </div>
           </div>
         </div>
       </div>
@@ -772,6 +832,13 @@ function generateReport(ss, filters) {
                 <div className="w-2 h-8 bg-emerald-500 rounded-full"></div>
                 <h3 className="text-xl font-black text-gray-900">قائمة الموظفين المعتمدين</h3>
               </div>
+              <button
+                onClick={handleExportEmployeeBalancesExcel}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+              >
+                <FileSpreadsheet size={14} />
+                تصدير إكسيل
+              </button>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-right">

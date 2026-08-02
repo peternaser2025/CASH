@@ -5,6 +5,7 @@ import {
   Filter, 
   Printer, 
   Download, 
+  FileSpreadsheet,
   Search, 
   Loader2, 
   TrendingUp, 
@@ -26,6 +27,7 @@ import {
   PieChart as PieChartIcon,
   X
 } from 'lucide-react';
+import { exportReportToExcel } from '../utils/excelExport';
 import { 
   PieChart, 
   Pie, 
@@ -208,6 +210,86 @@ export default function ReportViewer({ employees, balances, branches, categories
   // Actual Cash Box Balance (السيولة النقدية المتوفرة بالخزنة)
   const cashEndingBalance = (parseFloat(report?.openingBalance || '0') || 0) + filteredIn - filteredCashOut;
 
+  const handleExportExcel = () => {
+    if (!report) return;
+    const fileName = `كشف_حساب_${filters.employee || 'كل_الموظفين'}_${filters.startDate}_إلى_${filters.endDate}`;
+    
+    const headers = [
+      'التاريخ',
+      'الفرع',
+      'التصنيف',
+      'الموظف المسؤول',
+      'البيان والتفاصيل',
+      'حالة الدفع',
+      'وارد (+)',
+      'صادر (-)',
+      'الرصيد التراكمي'
+    ];
+
+    let runningBalance = parseFloat(report.openingBalance || '0') || 0;
+    
+    const rows = filteredRows.map(row => {
+      const date = String(row[0] || '');
+      const emp = String(row[1] || '');
+      const branch = String(row[2] || '');
+      const type = String(row[3] || '');
+      const cat = String(row[4] || '');
+      const inc = parseFloat(row[5]) || 0;
+      const exp = parseFloat(row[6]) || 0;
+      const desc = String(row[7] || '');
+      const isAccrued = isUnpaidAccrualRow(row);
+      
+      if (!isAccrued) {
+        if (isTransferType(type, cat)) {
+          if (filters.employee && emp === filters.employee) {
+            runningBalance += inc - exp;
+          }
+        } else {
+          runningBalance += inc - exp;
+        }
+      }
+
+      return [
+        date,
+        branch,
+        cat || (isTransferType(type, cat) ? 'تحويل مالي' : 'عام'),
+        emp,
+        desc,
+        isAccrued ? 'آجل / غير مدفوع' : 'نقدي / مسدد',
+        inc > 0 ? inc : 0,
+        exp > 0 ? exp : 0,
+        runningBalance
+      ];
+    });
+
+    exportReportToExcel({
+      fileName,
+      sheetName: 'كشف الحساب التفصيلي',
+      reportTitle: 'كشف الحساب المالي التدقيقي والتفصيلي',
+      subtitle: `الموظف المسؤول: ${filters.employee || 'كافة الموظفين'} | الفرع: ${filters.branch || 'كافة الفروع'} | الفترة: من ${filters.startDate} إلى ${filters.endDate}`,
+      summaryCards: [
+        { label: 'الرصيد الافتتاحي (د.ك)', value: formatKWD(report.openingBalance) },
+        { label: 'إجمالي التوريدات والمقبوضات (+)', value: formatKWD(filteredIn) },
+        { label: 'إجمالي المدفوعات النقدية (-)', value: formatKWD(filteredCashOut) },
+        { label: 'مشتريات وآجل مستحق', value: formatKWD(filteredUnpaidAccruals) },
+        { label: 'رصيد السيولة بالصندوق', value: formatKWD(cashEndingBalance) },
+      ],
+      headers,
+      rows,
+      totalsRow: [
+        'الإجمالي النهائي',
+        '-',
+        '-',
+        '-',
+        '-',
+        '-',
+        filteredIn,
+        filteredCashOut,
+        cashEndingBalance
+      ]
+    });
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-20">
       {/* Header Section */}
@@ -224,7 +306,16 @@ export default function ReportViewer({ employees, balances, branches, categories
             تحليل دقيق وشامل لكافة الحركات المالية والعهد النقدية بنظام التدقيق الموحد.
           </p>
         </div>
-        <div className="flex items-center gap-4 relative">
+        <div className="flex flex-wrap items-center gap-3 relative">
+          <button
+            onClick={handleExportExcel}
+            disabled={!report}
+            className="flex items-center gap-2 px-6 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-bold text-sm shadow-md transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+          >
+            <FileSpreadsheet size={18} />
+            تصدير إلى إكسيل (Excel)
+          </button>
+
           <button
             onClick={() => setShowPrintConfig(!showPrintConfig)}
             disabled={!report}
@@ -604,9 +695,18 @@ export default function ReportViewer({ employees, balances, branches, categories
                   </div>
                 </div>
               </div>
-              <div className="text-left">
-                <span className="text-xs text-slate-400 font-semibold block">سجل الحركات المالية</span>
-                <span className="text-xs font-bold text-emerald-400">{new Date().toLocaleDateString('ar-KW')}</span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleExportExcel}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                >
+                  <FileSpreadsheet size={15} />
+                  تصدير إكسيل (.xlsx)
+                </button>
+                <div className="text-left hidden sm:block">
+                  <span className="text-xs text-slate-400 font-semibold block">سجل الحركات المالية</span>
+                  <span className="text-xs font-bold text-emerald-400">{new Date().toLocaleDateString('ar-KW')}</span>
+                </div>
               </div>
             </div>
 

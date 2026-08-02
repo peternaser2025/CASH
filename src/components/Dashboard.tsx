@@ -1,7 +1,8 @@
 import { motion } from 'motion/react';
-import { Wallet, TrendingUp, TrendingDown, RefreshCw, Users, Activity, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, RefreshCw, Users, Activity, ArrowUpRight, ArrowDownRight, FileSpreadsheet } from 'lucide-react';
 import { EmployeeBalance } from '../types';
 import { formatKWD } from '../utils/format';
+import { exportReportToExcel } from '../utils/excelExport';
 
 interface DashboardProps {
   balances: EmployeeBalance[];
@@ -14,6 +15,51 @@ export default function Dashboard({ balances, loading, onRefresh }: DashboardPro
   const positiveBalances = balances.filter(b => b.balance > 0).length;
   const negativeBalances = balances.filter(b => b.balance < 0).length;
 
+  const handleExportDashboardExcel = () => {
+    const fileName = `المركز_المالي_الشامل_${new Date().toISOString().split('T')[0]}`;
+    
+    const headers = [
+      'اسم الموظف / المسؤول',
+      'السيولة والعهدة (د.ك)',
+      'الحالة المالية للعهدة',
+      'تاريخ التحديث'
+    ];
+
+    const rows = balances.map(emp => {
+      let statusText = 'متوازن (صفر)';
+      if (emp.balance > 0) statusText = 'مستحق للموظف (دائن)';
+      else if (emp.balance < 0) statusText = 'مستحق على الموظف (مدين / عجز)';
+
+      return [
+        emp.name,
+        emp.balance,
+        statusText,
+        new Date().toLocaleDateString('ar-KW')
+      ];
+    });
+
+    exportReportToExcel({
+      fileName,
+      sheetName: 'المركز المالي',
+      reportTitle: 'تقرير المركز المالي الشامل وأرصدة السيولة',
+      subtitle: `إجمالي السيولة النقدية: ${formatKWD(totalBalance)} د.ك | تاريخ التصدير: ${new Date().toLocaleDateString('ar-KW')}`,
+      summaryCards: [
+        { label: 'إجمالي السيولة النقدية بالعهد', value: formatKWD(totalBalance) },
+        { label: 'عهدة بها رصيد موجبة', value: `${positiveBalances} عهدة` },
+        { label: 'عهدة بها عجز / مدينة', value: `${negativeBalances} عهدة` },
+        { label: 'إجمالي الموظفين', value: `${balances.length} موظف` },
+      ],
+      headers,
+      rows,
+      totalsRow: [
+        'الإجمالي الكلي للسيولة',
+        totalBalance,
+        totalBalance > 0 ? 'مستحقات دائنة' : totalBalance < 0 ? 'عجز كلي' : 'متوازن',
+        '-'
+      ]
+    });
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -21,13 +67,22 @@ export default function Dashboard({ balances, loading, onRefresh }: DashboardPro
           <h2 className="text-4xl font-black text-gray-900 tracking-tight">المركز المالي</h2>
           <p className="text-gray-500 mt-1 font-medium">نظرة شاملة على السيولة النقدية وأرصدة العهد</p>
         </div>
-        <button 
-          onClick={onRefresh}
-          className="flex items-center justify-center gap-2 px-6 py-3 bg-white border border-gray-200 rounded-2xl hover:bg-gray-50 transition-all shadow-sm hover:shadow-md text-sm font-bold text-gray-700 active:scale-95"
-        >
-          <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-          تحديث البيانات
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleExportDashboardExcel}
+            className="flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-sm transition-all shadow-sm cursor-pointer"
+          >
+            <FileSpreadsheet size={18} />
+            تصدير المركز المالي (Excel)
+          </button>
+          <button 
+            onClick={onRefresh}
+            className="flex items-center justify-center gap-2 px-6 py-3 bg-white border border-gray-200 rounded-2xl hover:bg-gray-50 transition-all shadow-sm hover:shadow-md text-sm font-bold text-gray-700 active:scale-95 cursor-pointer"
+          >
+            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+            تحديث البيانات
+          </button>
+        </div>
       </div>
 
       {/* Hero Summary Cards */}

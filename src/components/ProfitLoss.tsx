@@ -23,6 +23,7 @@ import {
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
 import { formatKWD, isTransferType } from '../utils/format';
+import { exportReportToExcel } from '../utils/excelExport';
 
 interface ProfitLossProps {
   branches: string[];
@@ -299,6 +300,118 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
     }
   };
 
+  const handleExportCurrentPL = () => {
+    const fileName = `تقرير_الأرباح_والخسائر_${selectedBranch}_${selectedMonth}`;
+    
+    const headers = [
+      'البند المالي / البيان',
+      'القيمة بالدينار الكويتي (د.ك)',
+      'ملاحظات وتفاصيل'
+    ];
+
+    const rows = [
+      ['إجمالي المبيعات والإيرادات', sales, 'إجمالي الإيرادات المسجلة لشهر التقرير'],
+      ['إجمالي المصاريف التشغيلية', pulledExpenses, 'المصاريف المسجلة بالنظام'],
+      ['إجمالي مشتريات البضاعة', pulledPurchases, 'مشتريات البضاعة المسجلة'],
+      ['إجمالي التكاليف الكلية', totalCosts, 'المصاريف + المشتريات'],
+      ['صافي الأرباح التشغيلية (Net Profit)', netProfit, netProfit >= 0 ? 'ربح تشغيلي صافي' : 'خسارة تشغيلية'],
+      ['التكاليف المسددة نقداً بالصندوق', totalCashCosts, 'السيولة الخارجة فعلياً من الصندوق'],
+      ['مستحقات وآجل غير مسدد (التزامات)', totalUnpaidCosts, 'مستحقات على الفرع للموردين'],
+      ['سداد مستحقات وآجل سابق', pulledSettlementPayments, 'تسديدات لديون سابقة من السيولة'],
+      ['رصيد أول الشهر بالخزنة', openingBalance, 'رصيد الخزنة الافتتاحي'],
+      ['رصيد الخزنة الدفتري المتوقع', calculatedEnding, 'افتتاحي + مبيعات - مصاريف مسددة'],
+      ['رصيد الخزنة الفعلي المجرود', closingBalance, 'الرصيد الفعلي الموجود بالصندوق'],
+      ['فارق المطابقة والتدقيق', variance, variance === 0 ? 'مطابق تماماً' : variance > 0 ? 'فائض نقدي بالصندوق' : 'عجز نقدي بالصندوق'],
+    ];
+
+    exportReportToExcel({
+      fileName,
+      sheetName: 'الأرباح والخسائر',
+      reportTitle: `تقرير الأرباح والمطابقة المالية - فرع ${selectedBranch}`,
+      subtitle: `شهر التقرير: ${selectedMonth} | تاريخ التصدير: ${new Date().toLocaleDateString('ar-KW')}`,
+      summaryCards: [
+        { label: 'إجمالي المبيعات', value: formatKWD(sales) },
+        { label: 'إجمالي التكاليف', value: formatKWD(totalCosts) },
+        { label: 'صافي الربح / الخسارة', value: formatKWD(netProfit) },
+        { label: 'فارق المطابقة المالية', value: formatKWD(variance) },
+      ],
+      headers,
+      rows,
+      totalsRow: [
+        'الملاحظات المرفقة بالتقرير',
+        notes || 'لا توجد ملاحظات إضافية',
+        '-'
+      ]
+    });
+  };
+
+  const handleExportHistoryPL = () => {
+    if (history.length === 0) {
+      alert('لا توجد سجلات أرباح وخسائر سابقة لتصديرها.');
+      return;
+    }
+
+    const fileName = `سجل_الأرباح_والخسائر_التاريخي`;
+    const headers = [
+      'الشهر',
+      'الفرع',
+      'المبيعات (د.ك)',
+      'المصاريف (د.ك)',
+      'المشتريات (د.ك)',
+      'إجمالي التكاليف',
+      'صافي الأرباح (د.ك)',
+      'رصيد أول الشهر',
+      'رصيد آخر الشهر الفعلي',
+      'الفارق والتدقيق',
+      'ملاحظات'
+    ];
+
+    const rows = history.map(r => [
+      r.month,
+      r.branch,
+      r.sales,
+      r.expenses,
+      r.purchases,
+      r.expenses + r.purchases,
+      r.netProfit,
+      r.openingBalance,
+      r.closingBalance,
+      r.variance,
+      r.notes || ''
+    ]);
+
+    const totalSalesHist = history.reduce((acc, r) => acc + r.sales, 0);
+    const totalCostsHist = history.reduce((acc, r) => acc + r.expenses + r.purchases, 0);
+    const totalProfitHist = history.reduce((acc, r) => acc + r.netProfit, 0);
+
+    exportReportToExcel({
+      fileName,
+      sheetName: 'سجل الإغلاقات التاريخي',
+      reportTitle: 'سجل الإغلاقات والأرباح التاريخية للفروع',
+      subtitle: `عدد الإغلاقات المحفوظة: ${history.length} | تاريخ التصدير: ${new Date().toLocaleDateString('ar-KW')}`,
+      summaryCards: [
+        { label: 'مجموع المبيعات التاريخية', value: formatKWD(totalSalesHist) },
+        { label: 'مجموع التكاليف التاريخية', value: formatKWD(totalCostsHist) },
+        { label: 'مجموع صافي الأرباح', value: formatKWD(totalProfitHist) },
+      ],
+      headers,
+      rows,
+      totalsRow: [
+        'المجموع الإجمالي',
+        '-',
+        totalSalesHist,
+        '-',
+        '-',
+        totalCostsHist,
+        totalProfitHist,
+        '-',
+        '-',
+        '-',
+        '-'
+      ]
+    });
+  };
+
   const printPl = () => {
     window.print();
   };
@@ -319,13 +432,22 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
             احتساب أرباح وخسائر الفروع شهرياً، وتدقيق ومطابقة رصيد النقدية والسيولة بين الدفتري والفعلي.
           </p>
         </div>
-        <button
-          onClick={printPl}
-          className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-gray-900 hover:bg-gray-900 hover:text-white rounded-full font-black text-sm transition-all"
-        >
-          <Printer size={16} />
-          طباعة التقرير الحالي
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleExportCurrentPL}
+            className="flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-bold text-sm transition-all shadow-sm cursor-pointer"
+          >
+            <FileSpreadsheet size={16} />
+            تصدير التقرير الحالي (Excel)
+          </button>
+          <button
+            onClick={printPl}
+            className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-gray-900 hover:bg-gray-900 hover:text-white rounded-full font-black text-sm transition-all cursor-pointer"
+          >
+            <Printer size={16} />
+            طباعة التقرير الحالي
+          </button>
+        </div>
       </div>
 
       {/* Main Grid for calculation */}
@@ -792,9 +914,19 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
             <History className="text-slate-700" size={22} />
             <h3 className="text-lg font-black text-gray-900">سجل الإغلاقات والأرباح التاريخية</h3>
           </div>
-          <span className="px-3 py-1 bg-gray-100 text-gray-600 text-[10px] font-black rounded-lg uppercase">
-            {history.length} إغلاق مسجل
-          </span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleExportHistoryPL}
+              disabled={history.length === 0}
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <FileSpreadsheet size={14} />
+              تصدير سجل الأرباح التاريخي (Excel)
+            </button>
+            <span className="px-3 py-1 bg-gray-100 text-gray-600 text-[10px] font-black rounded-lg uppercase">
+              {history.length} إغلاق مسجل
+            </span>
+          </div>
         </div>
 
         {history.length === 0 ? (
