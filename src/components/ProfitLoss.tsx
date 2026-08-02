@@ -1030,6 +1030,25 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                 </div>
               )}
 
+              {/* Official Printable Signature Block for Financial Statements */}
+              <div className="print-signatures-block mt-8 pt-6 border-t-2 border-dashed border-gray-300">
+                <div className="print-signature-box">
+                  <span className="block font-black text-xs text-gray-900">إعداد / قسم المحاسبة</span>
+                  <p className="text-[10px] text-gray-500 mt-0.5">التوقيع والتاريخ</p>
+                  <div className="print-signature-line">اسم المحاسب: ....................</div>
+                </div>
+                <div className="print-signature-box">
+                  <span className="block font-black text-xs text-gray-900">مراجعة وتدقيق الإدارة المالية</span>
+                  <p className="text-[10px] text-gray-500 mt-0.5">التوقيع والتاريخ</p>
+                  <div className="print-signature-line">اسم المدقق: ....................</div>
+                </div>
+                <div className="print-signature-box">
+                  <span className="block font-black text-xs text-gray-900">الاعتماد والختم الرسمي</span>
+                  <p className="text-[10px] text-gray-500 mt-0.5">مدير الشركة / المالك</p>
+                  <div className="print-signature-line">التوقيع والختم: ....................</div>
+                </div>
+              </div>
+
             </div>
           </div>
 
@@ -1123,15 +1142,22 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                 
                 <div className="flex items-center gap-3">
                   <button
+                    onClick={() => window.print()}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm no-print"
+                  >
+                    <Printer size={14} />
+                    طباعة كشف البند
+                  </button>
+                  <button
                     onClick={handleExportModalExcel}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm no-print"
                   >
                     <FileSpreadsheet size={14} />
                     تصدير البند (Excel)
                   </button>
                   <button
                     onClick={() => setDetailModal(prev => ({ ...prev, isOpen: false }))}
-                    className="p-2 hover:bg-white/20 text-white rounded-xl transition-all cursor-pointer"
+                    className="p-2 hover:bg-white/20 text-white rounded-xl transition-all cursor-pointer no-print"
                   >
                     <X size={20} />
                   </button>
@@ -1209,6 +1235,25 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                     </table>
                   </div>
                 )}
+
+                {/* Print Signature Block for Itemized Schedule */}
+                <div className="print-signatures-block mt-6 pt-4 border-t border-slate-300">
+                  <div className="print-signature-box">
+                    <span className="block font-black text-xs text-gray-900">إعداد كشف البند</span>
+                    <p className="text-[10px] text-gray-500 mt-0.5">التوقيع والتاريخ</p>
+                    <div className="print-signature-line">اسم الموظف: ....................</div>
+                  </div>
+                  <div className="print-signature-box">
+                    <span className="block font-black text-xs text-gray-900">تدقيق الحركات والتصنيف</span>
+                    <p className="text-[10px] text-gray-500 mt-0.5">التوقيع والتاريخ</p>
+                    <div className="print-signature-line">المراجع المالي: ....................</div>
+                  </div>
+                  <div className="print-signature-box">
+                    <span className="block font-black text-xs text-gray-900">اعتماد الكشف التفصيلي</span>
+                    <p className="text-[10px] text-gray-500 mt-0.5">مدير الإدارة المالية</p>
+                    <div className="print-signature-line">التوقيع والختم: ....................</div>
+                  </div>
+                </div>
               </div>
 
               {/* Modal Footer */}

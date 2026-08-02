@@ -463,6 +463,14 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
 
         <div className="flex flex-wrap items-center gap-3">
           <button
+            onClick={() => window.print()}
+            className="flex items-center gap-2 px-5 py-2.5 bg-white border-2 border-slate-900 hover:bg-slate-900 hover:text-white text-slate-900 rounded-xl font-bold text-xs transition-all shadow-sm cursor-pointer"
+          >
+            <Printer size={16} />
+            طباعة الكشف المعتمد
+          </button>
+
+          <button
             onClick={handleExportAccrualsExcel}
             className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-all shadow-sm cursor-pointer"
           >
@@ -731,6 +739,25 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
             </table>
           </div>
         )}
+
+        {/* Official Printable Signature Approval Block */}
+        <div className="print-signatures-block mt-8 pt-6 border-t-2 border-dashed border-slate-300">
+          <div className="print-signature-box">
+            <span className="block font-black text-xs text-slate-900">إعداد / مسؤول المشتريات والمستحقات</span>
+            <p className="text-[10px] text-slate-500 mt-0.5">التوقيع والتاريخ</p>
+            <div className="print-signature-line">اسم الموظف: ....................</div>
+          </div>
+          <div className="print-signature-box">
+            <span className="block font-black text-xs text-slate-900">مراجعة وتدقيق الحسابات والدائنين</span>
+            <p className="text-[10px] text-slate-500 mt-0.5">التوقيع والتاريخ</p>
+            <div className="print-signature-line">المراجع المالي: ....................</div>
+          </div>
+          <div className="print-signature-box">
+            <span className="block font-black text-xs text-slate-900">الاعتماد النهائي للتسديدات والالتزامات</span>
+            <p className="text-[10px] text-slate-500 mt-0.5">مدير الشركة / الكفيل</p>
+            <div className="print-signature-line">التوقيع والختم: ....................</div>
+          </div>
+        </div>
       </div>
 
       {/* Settlement Modal */}

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { UserPlus, Users, CheckCircle2, AlertCircle, Loader2, ShieldCheck, UserCheck, Search, Trash2, Key, Copy, Check, FileSpreadsheet, Lock, Scale, Coins, CalendarClock, X } from 'lucide-react';
+import { UserPlus, Users, CheckCircle2, AlertCircle, Loader2, ShieldCheck, UserCheck, Search, Trash2, Key, Copy, Check, FileSpreadsheet, Lock, Scale, Coins, CalendarClock, X, Printer } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
 import { formatKWD } from '../utils/format';
@@ -900,13 +900,22 @@ function generateReport(ss, filters) {
                 <div className="w-2 h-8 bg-emerald-500 rounded-full"></div>
                 <h3 className="text-xl font-black text-gray-900">قائمة الموظفين المعتمدين</h3>
               </div>
-              <button
-                onClick={handleExportEmployeeBalancesExcel}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-              >
-                <FileSpreadsheet size={14} />
-                تصدير إكسيل
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-100 text-gray-900 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                >
+                  <Printer size={14} />
+                  طباعة الكشف المعتمد
+                </button>
+                <button
+                  onClick={handleExportEmployeeBalancesExcel}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                >
+                  <FileSpreadsheet size={14} />
+                  تصدير إكسيل
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-right">
@@ -1004,6 +1013,25 @@ function generateReport(ss, filters) {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Printable Signatures Block */}
+            <div className="print-signatures-block p-6 mt-4 border-t-2 border-dashed border-gray-300">
+              <div className="print-signature-box">
+                <span className="block font-black text-xs text-gray-900">إعداد / أمين الصندوق المالي</span>
+                <p className="text-[10px] text-gray-500 mt-0.5">التوقيع والتاريخ</p>
+                <div className="print-signature-line">اسم الموظف: ....................</div>
+              </div>
+              <div className="print-signature-box">
+                <span className="block font-black text-xs text-gray-900">مراجعة وتدقيق جرد العهد</span>
+                <p className="text-[10px] text-gray-500 mt-0.5">التوقيع والتاريخ</p>
+                <div className="print-signature-line">المراجع المالي: ....................</div>
+              </div>
+              <div className="print-signature-box">
+                <span className="block font-black text-xs text-gray-900">اعتماد أرصدة الصناديق</span>
+                <p className="text-[10px] text-gray-500 mt-0.5">مدير الإدارة المالية / الكفيل</p>
+                <div className="print-signature-line">التوقيع والختم: ....................</div>
+              </div>
             </div>
           </div>
         </div>
