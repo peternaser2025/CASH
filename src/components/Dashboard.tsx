@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { motion } from 'motion/react';
-import { Wallet, TrendingUp, TrendingDown, RefreshCw, Users, Activity, ArrowUpRight, ArrowDownRight, FileSpreadsheet } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, RefreshCw, Users, Activity, ArrowUpRight, ArrowDownRight, FileSpreadsheet, Search, Filter, ShieldCheck, Scale } from 'lucide-react';
 import { EmployeeBalance } from '../types';
 import { formatKWD } from '../utils/format';
 import { exportReportToExcel } from '../utils/excelExport';
@@ -11,9 +12,20 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ balances, loading, onRefresh }: DashboardProps) {
+  const [searchFilter, setSearchFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'positive' | 'negative'>('all');
+
   const totalBalance = balances.reduce((acc, curr) => acc + curr.balance, 0);
   const positiveBalances = balances.filter(b => b.balance > 0).length;
   const negativeBalances = balances.filter(b => b.balance < 0).length;
+
+  const filteredBalances = balances.filter(item => {
+    const matchesSearch = item.name.toLowerCase().includes(searchFilter.toLowerCase());
+    if (!matchesSearch) return false;
+    if (statusFilter === 'positive') return item.balance >= 0;
+    if (statusFilter === 'negative') return item.balance < 0;
+    return true;
+  });
 
   const handleExportDashboardExcel = () => {
     const fileName = `المركز_المالي_الشامل_${new Date().toISOString().split('T')[0]}`;
@@ -162,20 +174,58 @@ export default function Dashboard({ balances, loading, onRefresh }: DashboardPro
         <div className="p-8 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gray-50/30">
           <div className="flex items-center gap-3">
             <div className="w-2 h-8 bg-emerald-500 rounded-full"></div>
-            <h3 className="text-xl font-black text-gray-900">تفاصيل أرصدة العهد</h3>
+            <div>
+              <h3 className="text-xl font-black text-gray-900">تفاصيل أرصدة العهد والمسؤولين</h3>
+              <p className="text-xs text-gray-400 font-bold">تتبع فوري ومباشر لأرصدة الصناديق الفردية</p>
+            </div>
           </div>
-          <span className="text-xs font-bold text-gray-400 bg-white px-3 py-1 rounded-full border border-gray-100 w-fit">
-            {balances.length} سجل مالي
-          </span>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Quick Search */}
+            <div className="relative">
+              <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+              <input
+                type="text"
+                placeholder="بحث باسم الموظف..."
+                value={searchFilter}
+                onChange={e => setSearchFilter(e.target.value)}
+                className="pr-10 pl-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 w-48 transition-all"
+              />
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center bg-gray-100 p-1 rounded-xl text-xs font-bold">
+              <button
+                onClick={() => setStatusFilter('all')}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${statusFilter === 'all' ? 'bg-white text-gray-900 shadow-sm font-black' : 'text-gray-500 hover:text-gray-900'}`}
+              >
+                الكل ({balances.length})
+              </button>
+              <button
+                onClick={() => setStatusFilter('positive')}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${statusFilter === 'positive' ? 'bg-emerald-600 text-white shadow-sm font-black' : 'text-gray-500 hover:text-emerald-700'}`}
+              >
+                موجب ({positiveBalances})
+              </button>
+              <button
+                onClick={() => setStatusFilter('negative')}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${statusFilter === 'negative' ? 'bg-rose-600 text-white shadow-sm font-black' : 'text-gray-500 hover:text-rose-700'}`}
+              >
+                مدين ({negativeBalances})
+              </button>
+            </div>
+          </div>
         </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-right">
             <thead>
-              <tr className="text-gray-400 text-xs font-black uppercase tracking-widest border-b border-gray-50">
-                <th className="px-8 py-6">الموظف / العهدة</th>
-                <th className="px-8 py-6">الحالة المالية</th>
-                <th className="px-8 py-6">الرصيد الحالي</th>
-                <th className="px-8 py-6 text-left">الإجراء</th>
+              <tr className="text-gray-400 text-xs font-black uppercase tracking-widest border-b border-gray-50 bg-slate-50/50">
+                <th className="px-8 py-5">الموظف / العهدة</th>
+                <th className="px-8 py-5 text-center">الحالة المالية</th>
+                <th className="px-8 py-5 text-center">نسبة الحصة من السيولة</th>
+                <th className="px-8 py-5">الرصيد الحالي</th>
+                <th className="px-8 py-5 text-left">التوثيق</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -185,57 +235,77 @@ export default function Dashboard({ balances, loading, onRefresh }: DashboardPro
                     <td className="px-8 py-6"><div className="h-6 bg-gray-100 rounded-xl w-48"></div></td>
                     <td className="px-8 py-6"><div className="h-6 bg-gray-100 rounded-xl w-24"></div></td>
                     <td className="px-8 py-6"><div className="h-6 bg-gray-100 rounded-xl w-32"></div></td>
+                    <td className="px-8 py-6"><div className="h-6 bg-gray-100 rounded-xl w-32"></div></td>
                     <td className="px-8 py-6"><div className="h-6 bg-gray-100 rounded-xl w-16"></div></td>
                   </tr>
                 ))
-              ) : balances.length > 0 ? (
-                balances.map((item, index) => (
-                  <tr key={index} className="hover:bg-gray-50/50 transition-all group">
-                    <td className="px-8 py-6">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-900 font-black text-lg group-hover:bg-emerald-500 group-hover:text-white transition-all shadow-sm">
-                          {item.name.charAt(0)}
+              ) : filteredBalances.length > 0 ? (
+                filteredBalances.map((item, index) => {
+                  const sharePct = totalBalance > 0 && item.balance > 0 ? ((item.balance / totalBalance) * 100).toFixed(1) : '0.0';
+
+                  return (
+                    <tr key={index} className="hover:bg-gray-50/70 transition-all group">
+                      <td className="px-8 py-5">
+                        <div className="flex items-center gap-4">
+                          <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-800 border border-emerald-100 flex items-center justify-center font-black text-base group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-sm">
+                            {item.name.charAt(0)}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-black text-gray-900 text-base">{item.name}</span>
+                            <span className="text-[11px] text-gray-400 font-bold">مسؤول عهدة معتمد</span>
+                          </div>
                         </div>
+                      </td>
+                      <td className="px-8 py-5 text-center">
+                        <div className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-xl text-xs font-black uppercase tracking-wider ${
+                          item.balance >= 0 
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                            : 'bg-rose-50 text-rose-700 border border-rose-200'
+                        }`}>
+                          {item.balance >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                          {item.balance >= 0 ? 'دائن (رصيد موجب)' : 'مدين (عجز / مستحق)'}
+                        </div>
+                      </td>
+                      <td className="px-8 py-5 text-center">
+                        <div className="w-32 mx-auto space-y-1">
+                          <div className="flex justify-between text-[10px] font-bold text-gray-500">
+                            <span>حصة السيولة:</span>
+                            <span className="font-mono font-black">{sharePct}%</span>
+                          </div>
+                          <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                            <div 
+                              className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
+                              style={{ width: `${Math.min(100, Math.max(0, parseFloat(sharePct)))}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-8 py-5">
                         <div className="flex flex-col">
-                          <span className="font-black text-gray-900 text-lg">{item.name}</span>
-                          <span className="text-xs text-gray-400 font-medium">موظف معتمد</span>
+                          <span className={`text-xl font-black font-mono ${item.balance < 0 ? 'text-rose-600' : 'text-gray-900'}`}>
+                            {formatKWD(item.balance)}
+                          </span>
+                          <span className="text-[10px] text-gray-400 font-bold uppercase">دينار كويتي</span>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider ${
-                        item.balance >= 0 
-                          ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' 
-                          : 'bg-red-50 text-red-600 border border-red-100'
-                      }`}>
-                        {item.balance >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                        {item.balance >= 0 ? 'رصيد إيجابي' : 'رصيد مدين'}
-                      </div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className="flex flex-col">
-                        <span className={`text-2xl font-black font-mono ${item.balance < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                          {formatKWD(item.balance)}
-                        </span>
-                        <span className="text-[10px] text-gray-400 font-bold uppercase">دينار كويتي</span>
-                      </div>
-                    </td>
-                    <td className="px-8 py-6 text-left">
-                      <button className="p-2 hover:bg-emerald-50 text-gray-300 hover:text-emerald-600 rounded-xl transition-all">
-                        <Activity size={20} />
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="px-8 py-5 text-left">
+                        <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold border border-slate-200">
+                          <ShieldCheck size={14} className="text-emerald-600" />
+                          <span>موثق</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
-                  <td colSpan={4} className="px-8 py-20 text-center text-gray-400">
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center">
-                        <Users size={40} className="opacity-20" />
+                  <td colSpan={5} className="px-8 py-16 text-center text-gray-400">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center">
+                        <Users size={32} className="opacity-30" />
                       </div>
-                      <p className="font-bold text-lg">لا توجد بيانات متاحة حالياً</p>
-                      <p className="text-sm">ابدأ بإضافة موظفين وتسجيل عمليات مالية لتظهر هنا</p>
+                      <p className="font-bold text-base text-gray-700">لا توجد نتائج مطابقة للبحث أو التصفية المختارة</p>
+                      <p className="text-xs text-gray-400">جرب البحث باسم آخر أو تغيير فلتر التصفية</p>
                     </div>
                   </td>
                 </tr>
