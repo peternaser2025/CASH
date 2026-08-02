@@ -34,3 +34,106 @@ body {
 .arabic-text {
   font-family: 'Inter', sans-serif; /* Inter supports Arabic glyphs well, but we can add a specific Arabic font if needed */
 }
+
+/* World-class Print Styles for Reports, Ledgers & Statements */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 10mm 10mm 10mm;
+  }
+
+  /* Hide navigation, sidebars, headers, and interactive action buttons */
+  aside, 
+  header, 
+  .no-print, 
+  button.no-print, 
+  nav, 
+  .fixed:not(.printable-modal), 
+  .backdrop-blur-sm:not(.printable-modal) {
+    display: none !important;
+  }
+
+  /* Expand main container to full printable width */
+  body, html, #root, main {
+    background: white !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    height: auto !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Table formatting for print */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-top: 12px !important;
+    margin-bottom: 12px !important;
+    font-size: 10pt !important;
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    page-break-after: auto;
+  }
+
+  th, td {
+    border: 1px solid #cbd5e1 !important;
+    padding: 6px 8px !important;
+    text-align: right !important;
+  }
+
+  th {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    font-weight: bold !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Cards & containers print styles */
+  .rounded-\[2\.5rem\], .rounded-\[2rem\], .rounded-3xl, .rounded-2xl {
+    border-radius: 8px !important;
+    border: 1px solid #e2e8f0 !important;
+  }
+
+  /* High contrast text & background colors for print */
+  .text-emerald-600, .text-emerald-700, .text-emerald-800 {
+    color: #047857 !important;
+  }
+
+  .text-rose-600, .text-rose-700, .text-red-600 {
+    color: #b91c1c !important;
+  }
+
+  .bg-emerald-600, .bg-emerald-500 {
+    background-color: #059669 !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Printable Voucher Modal Exception */
+  .printable-modal {
+    position: static !important;
+    background: white !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Official Print Header Watermark */
+  body::before {
+    content: "نظام الإدارة المالية للعهد والمصروفات - تقرير رسمي معتمد | KWD Finance Pro";
+    display: block;
+    text-align: center;
+    font-size: 10pt;
+    font-weight: bold;
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+    border-bottom: 2px solid #0f172a;
+  }
+}
