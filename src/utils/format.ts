@@ -87,3 +87,54 @@ export const isAccrualType = (type?: string, category?: string, description?: st
 
   return /آجل|اجل|مستحق|مستحقة|مستحقه|رواتب مستحقة|دين|دائن|مورد|مؤجل|غير مسدد|لم يسدد|deferred|accrual|credit|due/i.test(text);
 };
+
+/**
+ * Classifies a transaction into standard accounting operation types:
+ * - مبيعات
+ * - مشتريات
+ * - مصاريف
+ * - مشتريات آجلة
+ * - مصاريف مستحقة
+ * - سداد مستحقات
+ * - تحويل مالي
+ * - إغلاق وتصفية صندوق
+ */
+export const getAccountingOperationType = (
+  type: string, 
+  category: string = '', 
+  description: string = '', 
+  income: number = 0, 
+  expense: number = 0
+): string => {
+  const combined = `${type} ${category} ${description}`;
+  
+  if (isTransferType(type, category)) {
+    return 'تحويل مالي';
+  }
+
+  if (combined.includes('إغلاق صندوق') || combined.includes('تصفية صندوق') || combined.includes('تسوية رصيد') || combined.includes('إغلاق عهدة')) {
+    return 'إغلاق وتصفية صندوق';
+  }
+
+  if (income > 0 || isIncomeType(type, category)) {
+    return 'مبيعات';
+  }
+
+  const isSettlement = /سداد.*(مستحق|آجل|اجل|دين|دائن|مورد|التزام)|سداد مشتريات|تسوية التزامات/i.test(combined) ||
+                      description.includes('سداد مستحقات') || 
+                      description.includes('سداد آجل') ||
+                      category.includes('سداد مشتريات');
+  if (isSettlement) {
+    return 'سداد مستحقات';
+  }
+
+  const isAccrual = isAccrualType(type, category, description);
+  const isPurchase = category.includes('مشتريات') || category.includes('شراء') || combined.toLowerCase().includes('purchase') || description.includes('شراء');
+
+  if (isPurchase) {
+    return isAccrual ? 'مشتريات آجلة' : 'مشتريات';
+  } else {
+    return isAccrual ? 'مصاريف مستحقة' : 'مصاريف';
+  }
+};
+

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { UserPlus, Users, CheckCircle2, AlertCircle, Loader2, ShieldCheck, UserCheck, Search, Trash2, Key, Copy, Check, FileSpreadsheet } from 'lucide-react';
+import { UserPlus, Users, CheckCircle2, AlertCircle, Loader2, ShieldCheck, UserCheck, Search, Trash2, Key, Copy, Check, FileSpreadsheet, Lock, Scale, Coins, CalendarClock, X } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
 import { formatKWD } from '../utils/format';
@@ -17,6 +17,74 @@ export default function EmployeeManager({ balances, onRefresh }: EmployeeManager
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Month-end Cash Box Closing Modal state
+  const [closingModal, setClosingModal] = useState<{
+    isOpen: boolean;
+    employeeName: string;
+    bookBalance: number;
+  }>({
+    isOpen: false,
+    employeeName: '',
+    bookBalance: 0
+  });
+
+  const [closingMonth, setClosingMonth] = useState<string>(() => {
+    const d = new Date();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    return `${d.getFullYear()}-${mm}`;
+  });
+  const [actualBalanceInput, setActualBalanceInput] = useState<string>('');
+  const [closingNotes, setClosingNotes] = useState<string>('');
+  const [isSavingClosing, setIsSavingClosing] = useState<boolean>(false);
+
+  const handleSaveCashClosing = async () => {
+    if (!closingModal.employeeName) return;
+    setIsSavingClosing(true);
+    
+    const bookBal = closingModal.bookBalance;
+    const actualBal = parseFloat(actualBalanceInput) || 0;
+    const diff = actualBal - bookBal;
+    
+    let type: 'Expense' | 'Income' = 'Expense';
+    let category = 'إغلاق وتصفية صندوق';
+    let amount = Math.abs(diff);
+    let statusText = '';
+    
+    if (diff < 0) {
+      statusText = `[عجز صندوق: -${Math.abs(diff).toFixed(3)} د.ك]`;
+      type = 'Expense';
+    } else if (diff > 0) {
+      statusText = `[زيادة صندوق: +${diff.toFixed(3)} د.ك]`;
+      type = 'Income';
+    } else {
+      statusText = `[مطابق للرصيد الفعلي 100%]`;
+      type = 'Expense';
+      amount = 0;
+    }
+    
+    const description = `إغلاق وتصفية رصيد صندوق شهر ${closingMonth} - الرصيد الدفتري: ${bookBal.toFixed(3)} د.ك | الرصيد الفعلي المجرود: ${actualBal.toFixed(3)} د.ك ${statusText} ${closingNotes ? '- ملاحظات: ' + closingNotes : ''}`;
+
+    const res = await gasService.addTransaction({
+      date: new Date().toISOString().split('T')[0],
+      employee: closingModal.employeeName,
+      branch: '',
+      category,
+      amount,
+      type,
+      description,
+      targetMonth: closingMonth
+    });
+
+    if (res.success) {
+      alert(`تم إغلاق وتصفية صندوق ${closingModal.employeeName} لشهر ${closingMonth} بنجاح بالرصيد الفعلي (${actualBal.toFixed(3)} د.ك)`);
+      setClosingModal({ isOpen: false, employeeName: '', bookBalance: 0 });
+      onRefresh();
+    } else {
+      alert(`حدث خطأ أثناء حفظ التصفية: ${res.error || 'خطأ غير معروف'}`);
+    }
+    setIsSavingClosing(false);
+  };
 
   const gasScriptCode = `/*
   ========================================================================
@@ -882,23 +950,43 @@ function generateReport(ss, filters) {
                         </div>
                       </td>
                       <td className="px-8 py-6 text-left">
-                        <button 
-                          onClick={async () => {
-                            if (window.confirm(`هل أنت متأكد من حذف الموظف ${emp.name}؟ سيتم حذف كافة بياناته!`)) {
-                              setLoading(true);
-                              const res = await gasService.deleteEmployee(emp.name);
-                              if (res.success) {
-                                onRefresh();
-                              } else {
-                                alert('خطأ في الحذف: ' + res.error);
+                        <div className="flex items-center gap-2 justify-end">
+                          <button
+                            onClick={() => {
+                              setClosingModal({
+                                isOpen: true,
+                                employeeName: emp.name,
+                                bookBalance: emp.balance
+                              });
+                              setActualBalanceInput(emp.balance.toFixed(3));
+                              setClosingNotes('');
+                            }}
+                            className="px-3 py-1.5 bg-teal-50 text-teal-700 hover:bg-teal-600 hover:text-white rounded-xl text-xs font-bold border border-teal-200 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                            title="إغلاق وتصفية رصيد الصندوق بنهاية الشهر بالرصيد الفعلي المجرود"
+                          >
+                            <Lock size={14} />
+                            <span>إغلاق الشهر</span>
+                          </button>
+
+                          <button 
+                            onClick={async () => {
+                              if (window.confirm(`هل أنت متأكد من حذف الموظف ${emp.name}؟ سيتم حذف كافة بياناته!`)) {
+                                setLoading(true);
+                                const res = await gasService.deleteEmployee(emp.name);
+                                if (res.success) {
+                                  onRefresh();
+                                } else {
+                                  alert('خطأ في الحذف: ' + res.error);
+                                }
+                                setLoading(false);
                               }
-                              setLoading(false);
-                            }
-                          }}
-                          className="p-2 text-gray-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                            }}
+                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                            title="حذف الموظف"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -918,6 +1006,122 @@ function generateReport(ss, filters) {
           </div>
         </div>
       </div>
+
+      {/* Month-End Cash Box Closing Modal */}
+      <AnimatePresence>
+        {closingModal.isOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl border border-slate-100 space-y-6"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-teal-50 text-teal-700 rounded-2xl">
+                    <Lock size={24} />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-xl text-slate-900">إغلاق وتصفية الصندوق بنهاية الشهر</h3>
+                    <p className="text-xs text-slate-500 font-bold">تسوية صندوق: <span className="text-teal-700 font-black">{closingModal.employeeName}</span></p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setClosingModal({ isOpen: false, employeeName: '', bookBalance: 0 })}
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5 flex items-center gap-1.5">
+                    <CalendarClock size={14} />
+                    الشهر المستهدف للتصفية
+                  </label>
+                  <input
+                    type="month"
+                    value={closingMonth}
+                    onChange={(e) => setClosingMonth(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-xs font-bold text-slate-500 block mb-1">الرصيد الدفتري بالنظام</span>
+                    <span className="text-xl font-black font-mono text-slate-800">{closingModal.bookBalance.toFixed(3)} د.ك</span>
+                  </div>
+                  
+                  <div className="p-4 bg-teal-50/60 rounded-2xl border border-teal-100">
+                    <label className="text-xs font-bold text-teal-800 block mb-1">الرصيد الفعلي المجرود</label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      placeholder="0.000"
+                      value={actualBalanceInput}
+                      onChange={(e) => setActualBalanceInput(e.target.value)}
+                      className="w-full bg-white px-3 py-1.5 border border-teal-200 rounded-xl font-mono font-black text-lg text-teal-900 outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Live Math Difference Calculation */}
+                {(() => {
+                  const actual = parseFloat(actualBalanceInput) || 0;
+                  const diff = actual - closingModal.bookBalance;
+                  return (
+                    <div className={`p-4 rounded-2xl border flex items-center justify-between text-xs font-bold ${
+                      diff < 0 ? 'bg-rose-50 border-rose-200 text-rose-800' :
+                      diff > 0 ? 'bg-amber-50 border-amber-200 text-amber-800' :
+                      'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    }`}>
+                      <span>نتيجة المطابقة:</span>
+                      <span className="text-sm font-black font-mono">
+                        {diff === 0 ? 'مطابق 100% (لا يوجد عجز/زيادة)' :
+                         diff < 0 ? `عجز بالصندوق: ${Math.abs(diff).toFixed(3)} د.ك` :
+                         `زيادة بالصندوق: ${diff.toFixed(3)} د.ك`}
+                      </span>
+                    </div>
+                  );
+                })()}
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5">ملاحظات التصفية (اختياري)</label>
+                  <textarea
+                    rows={2}
+                    value={closingNotes}
+                    onChange={(e) => setClosingNotes(e.target.value)}
+                    placeholder="مثل: تم استلام المتبقي نقدياً أو ترحيل الفارق لشهر قادم..."
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 outline-none focus:ring-2 focus:ring-teal-500 resize-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setClosingModal({ isOpen: false, employeeName: '', bookBalance: 0 })}
+                  className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-2xl font-bold text-xs hover:bg-slate-200 transition-all cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingClosing}
+                  onClick={handleSaveCashClosing}
+                  className="flex-1 py-3 bg-teal-600 text-white rounded-2xl font-black text-xs hover:bg-teal-700 transition-all shadow-lg shadow-teal-600/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingClosing ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
+                  <span>اعتماد وإغلاق الصندوق</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
