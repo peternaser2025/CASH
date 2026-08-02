@@ -358,129 +358,127 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
     <div className="space-y-8 pb-20">
       
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-gray-200 pb-8 no-print">
-        <div className="space-y-3">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-slate-200 pb-6 no-print">
+        <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-[2px] bg-amber-500"></div>
-            <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Accounts Payable & Accrued Liabilities</span>
+            <span className="px-2.5 py-0.5 bg-amber-50 text-amber-800 text-xs font-bold rounded-md border border-amber-200">
+              Accounts Payable & Accruals
+            </span>
           </div>
-          <h2 className="text-5xl font-black text-gray-900 tracking-tighter">
-            دفتر المشتريات الآجلة <span className="text-amber-600 italic font-serif font-light">والالتزامات المستحقة</span>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight">
+            دفتر المشتريات الآجلة والالتزامات المستحقة
           </h2>
-          <p className="text-gray-500 max-w-2xl font-medium text-base leading-relaxed">
-            منظومة مالية متكاملة لربط كافة الفواتير والمشتريات الآجلة، متابعة المستحقات للشركات والموردين، وإجراء تسديدات مخصصة مع التزامن التلقائي بالسجلات.
+          <p className="text-slate-500 font-medium text-xs leading-relaxed max-w-2xl">
+            سجل مالي متكامل لربط فواتير الشراء والخدمات الآجلة، متابعة المستحقات للدائنين والموردين، وتوثيق التسديدات بشكل دقيق.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full font-black text-xs transition-all shadow-md cursor-pointer"
+            className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs transition-all shadow-sm cursor-pointer"
           >
             <Plus size={16} />
-            إضافة مشتريات/مصاريف جديدة بالآجل
+            إضافة مشتريات/مصاريف آجلة
           </button>
 
           <button
             onClick={fetchAccruals}
             disabled={loading}
-            className="flex items-center gap-2 px-5 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full font-black text-xs transition-all cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-all cursor-pointer border border-slate-200"
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            تحديث
+            تحديث البيانات
           </button>
         </div>
       </div>
 
       {/* KPI Stats Banner */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        
-        <div className="bg-white border-2 border-gray-900 rounded-[2rem] p-6 shadow-sm space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-2">
           <div className="flex justify-between items-center">
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">إجمالي الالتزامات والمستحقات</span>
-            <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl">
-              <ShieldAlert size={18} />
+            <span className="text-xs font-bold text-slate-500">إجمالي المستحقات المسجلة</span>
+            <div className="p-2 bg-amber-50 text-amber-600 rounded-lg border border-amber-100">
+              <ShieldAlert size={16} />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-black font-mono text-gray-900">
-              {formatKWD(totalAccruedLiabilities)} <span className="text-xs text-gray-400 font-sans">KWD</span>
+            <div className="text-2xl font-extrabold font-mono text-slate-900">
+              {formatKWD(totalAccruedLiabilities)} <span className="text-xs text-slate-400 font-sans">د.ك</span>
             </div>
-            <p className="text-[11px] font-bold text-gray-400 mt-1">كافة الفواتير الآجلة المسجلة بالسجلات</p>
+            <p className="text-[11px] font-medium text-slate-400 mt-0.5">كافة الفواتير والمستحقات الآجلة</p>
           </div>
         </div>
 
-        <div className="bg-white border-2 border-gray-900 rounded-[2rem] p-6 shadow-sm space-y-3">
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-2">
           <div className="flex justify-between items-center">
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">إجمالي المسدد بالفعل</span>
-            <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
-              <CheckCircle2 size={18} />
+            <span className="text-xs font-bold text-slate-500">إجمالي المسدد بالفعل</span>
+            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-100">
+              <CheckCircle2 size={16} />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-black font-mono text-emerald-600">
-              {formatKWD(totalPaidLiabilities)} <span className="text-xs text-emerald-400 font-sans">KWD</span>
+            <div className="text-2xl font-extrabold font-mono text-emerald-600">
+              {formatKWD(totalPaidLiabilities)} <span className="text-xs text-emerald-500/70 font-sans">د.ك</span>
             </div>
-            <p className="text-[11px] font-bold text-gray-400 mt-1">دفعات التسديد المثبتة بالصرف</p>
+            <p className="text-[11px] font-medium text-slate-400 mt-0.5">دفوعات التسديد المسجلة بالصندوق</p>
           </div>
         </div>
 
-        <div className="bg-white border-2 border-gray-900 rounded-[2rem] p-6 shadow-sm space-y-3">
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-2">
           <div className="flex justify-between items-center">
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">الرصيد المتبقي الواجب سداده</span>
-            <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl">
-              <Wallet size={18} />
+            <span className="text-xs font-bold text-slate-500">الرصيد المتبقي المستحق</span>
+            <div className="p-2 bg-rose-50 text-rose-600 rounded-lg border border-rose-100">
+              <Wallet size={16} />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-black font-mono text-rose-600">
-              {formatKWD(totalRemainingLiabilities)} <span className="text-xs text-rose-400 font-sans">KWD</span>
+            <div className="text-2xl font-extrabold font-mono text-rose-600">
+              {formatKWD(totalRemainingLiabilities)} <span className="text-xs text-rose-400 font-sans">د.ك</span>
             </div>
-            <p className="text-[11px] font-bold text-gray-400 mt-1">المبلغ القائم والمطلوب من الفروع</p>
+            <p className="text-[11px] font-medium text-slate-400 mt-0.5">المبلغ القائم والمطلوب سداده</p>
           </div>
         </div>
 
-        <div className="bg-white border-2 border-gray-900 rounded-[2rem] p-6 shadow-sm space-y-3">
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-2">
           <div className="flex justify-between items-center">
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">عدد الفواتير المعلقة</span>
-            <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
-              <Clock size={18} />
+            <span className="text-xs font-bold text-slate-500">الفواتير القائمة المعلقة</span>
+            <div className="p-2 bg-slate-100 text-slate-700 rounded-lg border border-slate-200">
+              <Clock size={16} />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-black font-mono text-gray-900">
-              {dueItemsCount} <span className="text-xs text-gray-400 font-sans">فاتورة</span>
+            <div className="text-2xl font-extrabold font-mono text-slate-900">
+              {dueItemsCount} <span className="text-xs text-slate-400 font-sans">فاتورة</span>
             </div>
-            <p className="text-[11px] font-bold text-gray-400 mt-1">تحتاج متابعة وتسديد مع الموردين</p>
+            <p className="text-[11px] font-medium text-slate-400 mt-0.5">تحتاج متابعة وتسديد</p>
           </div>
         </div>
-
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-white border-2 border-gray-900 rounded-[2rem] p-6 shadow-sm space-y-4 no-print">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3 no-print">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           {/* Search box */}
           <div className="relative md:col-span-2">
-            <Search size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               placeholder="ابحث باسم المورد، البيان، رقم الفاتورة، أو الموظف المسؤول..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pr-11 pl-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl font-bold text-xs text-gray-900 outline-none focus:border-amber-500 focus:bg-white transition-all"
+              className="w-full pr-10 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-900 outline-none focus:border-slate-400 focus:bg-white transition-all"
             />
           </div>
 
           {/* Branch filter */}
-          <div className="flex items-center gap-2 bg-gray-50 px-4 py-2.5 rounded-2xl border border-gray-200">
-            <Building size={16} className="text-amber-600" />
-            <span className="text-xs font-black text-gray-400 shrink-0">الفرع:</span>
+          <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200">
+            <Building size={15} className="text-slate-500" />
+            <span className="text-xs font-bold text-slate-500 shrink-0">الفرع:</span>
             <select
               value={selectedBranch}
               onChange={e => setSelectedBranch(e.target.value)}
-              className="w-full bg-transparent font-black text-xs text-gray-900 outline-none cursor-pointer"
+              className="w-full bg-transparent font-bold text-xs text-slate-900 outline-none cursor-pointer"
             >
               <option value="All">كافة الفروع</option>
               {branches.map(b => (
@@ -490,13 +488,13 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
           </div>
 
           {/* Status filter */}
-          <div className="flex items-center gap-2 bg-gray-50 px-4 py-2.5 rounded-2xl border border-gray-200">
-            <Filter size={16} className="text-amber-600" />
-            <span className="text-xs font-black text-gray-400 shrink-0">الحالة:</span>
+          <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200">
+            <Filter size={15} className="text-slate-500" />
+            <span className="text-xs font-bold text-slate-500 shrink-0">الحالة:</span>
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value as any)}
-              className="w-full bg-transparent font-black text-xs text-gray-900 outline-none cursor-pointer"
+              className="w-full bg-transparent font-bold text-xs text-slate-900 outline-none cursor-pointer"
             >
               <option value="All">كافة الحالات</option>
               <option value="Due">غير مسددة (مستحقة ⚠️)</option>
@@ -509,15 +507,15 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
       </div>
 
       {/* Main Accrual Ledger Table */}
-      <div className="bg-white border-2 border-gray-900 rounded-[2.5rem] p-8 space-y-6 shadow-sm">
-        <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-5 shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div>
-            <h3 className="text-xl font-black text-gray-900">سجل الفواتير والمستحقات المكتشفة ({filteredItems.length})</h3>
-            <p className="text-xs font-bold text-gray-400 mt-1">كشف تفصيلي بكافة المشتريات والمصاريف ذات الصبغة الآجلة والمستحقة</p>
+            <h3 className="text-lg font-black text-slate-900">سجل الفواتير والمستحقات المكتشفة ({filteredItems.length})</h3>
+            <p className="text-xs font-medium text-slate-500 mt-0.5">كشف تفصيلي بكافة المشتريات والمصاريف ذات الصبغة الآجلة والمستحقة</p>
           </div>
           <button
             onClick={() => window.print()}
-            className="px-5 py-2.5 bg-gray-900 text-white rounded-xl text-xs font-black flex items-center gap-2 no-print cursor-pointer"
+            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-2 no-print cursor-pointer transition-colors"
           >
             <Printer size={14} />
             طباعة الكشف
@@ -525,100 +523,100 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
         </div>
 
         {loading ? (
-          <div className="py-20 text-center space-y-3">
-            <RefreshCw size={32} className="animate-spin text-amber-500 mx-auto" />
-            <p className="font-black text-sm text-gray-500">جاري جلب وتدقيق السجلات من Google Sheets...</p>
+          <div className="py-16 text-center space-y-3">
+            <RefreshCw size={28} className="animate-spin text-amber-500 mx-auto" />
+            <p className="font-bold text-xs text-slate-500">جاري جلب وتدقيق السجلات من Google Sheets...</p>
           </div>
         ) : filteredItems.length === 0 ? (
-          <div className="py-16 text-center space-y-3 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-            <BadgeAlert size={40} className="text-gray-300 mx-auto" />
-            <p className="font-black text-gray-600 text-base">لا يوجد فواتير مستحقة أو مشتريات آجلة مطابقة للبحث حالياً</p>
-            <p className="text-xs font-bold text-gray-400">يمكنك تسليم فاتورة آجل جديدة من زر الإضافة بالأعلى.</p>
+          <div className="py-12 text-center space-y-2 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+            <BadgeAlert size={36} className="text-slate-300 mx-auto" />
+            <p className="font-bold text-slate-700 text-sm">لا توجد فواتير مستحقة أو مشتريات آجلة مطابقة للبحث</p>
+            <p className="text-xs font-medium text-slate-400">يمكنك تسليم فاتورة آجل جديدة من زر الإضافة بالأعلى.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-right border-collapse border-2 border-gray-900">
+            <table className="w-full text-right border-collapse border border-slate-200 rounded-xl overflow-hidden shadow-sm">
               <thead>
-                <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
-                  <th className="px-6 py-4 border-l border-white/10">التاريخ</th>
-                  <th className="px-6 py-4 border-l border-white/10">الفرع</th>
-                  <th className="px-6 py-4 border-l border-white/10">المورد / الجهة الدائنة</th>
-                  <th className="px-6 py-4 border-l border-white/10">التصنيف والبيان</th>
-                  <th className="px-6 py-4 border-l border-white/10 text-center">المبلغ الأصلي (KWD)</th>
-                  <th className="px-6 py-4 border-l border-white/10 text-center">المسدد (KWD)</th>
-                  <th className="px-6 py-4 border-l border-white/10 text-center">المتبقي (KWD)</th>
-                  <th className="px-6 py-4 border-l border-white/10 text-center">حالة السداد</th>
-                  <th className="px-6 py-4 text-center no-print">إجراء التسديد</th>
+                <tr className="bg-slate-900 text-slate-100 text-xs font-bold">
+                  <th className="px-4 py-3 border-b border-slate-800">التاريخ</th>
+                  <th className="px-4 py-3 border-b border-slate-800">الفرع</th>
+                  <th className="px-4 py-3 border-b border-slate-800">المورد / الجهة الدائنة</th>
+                  <th className="px-4 py-3 border-b border-slate-800">التصنيف والبيان</th>
+                  <th className="px-4 py-3 border-b border-slate-800 text-center">المبلغ الأصلي</th>
+                  <th className="px-4 py-3 border-b border-slate-800 text-center">المسدد</th>
+                  <th className="px-4 py-3 border-b border-slate-800 text-center">المتبقي</th>
+                  <th className="px-4 py-3 border-b border-slate-800 text-center">حالة السداد</th>
+                  <th className="px-4 py-3 text-center no-print border-b border-slate-800">إجراء التسديد</th>
                 </tr>
               </thead>
-              <tbody className="divide-y-2 divide-gray-900 font-bold text-xs text-gray-800">
+              <tbody className="divide-y divide-slate-200/80 font-semibold text-xs text-slate-800 bg-white">
                 {filteredItems.map(item => {
                   return (
-                    <tr key={item.id} className="hover:bg-amber-50/30 transition-colors">
-                      <td className="px-6 py-4 border-l border-gray-900 font-mono text-gray-600">
+                    <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3 font-mono text-slate-600">
                         {item.date}
                       </td>
 
-                      <td className="px-6 py-4 border-l border-gray-900 font-black">
+                      <td className="px-4 py-3 font-bold text-slate-900">
                         {item.branch}
                       </td>
 
-                      <td className="px-6 py-4 border-l border-gray-900">
-                        <div className="flex items-center gap-2">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
                           <User size={14} className="text-amber-600 shrink-0" />
-                          <span className="font-black text-gray-900">{item.vendorName}</span>
+                          <span className="font-bold text-slate-900">{item.vendorName}</span>
                         </div>
                       </td>
 
-                      <td className="px-6 py-4 border-l border-gray-900 space-y-1">
-                        <span className="px-2.5 py-0.5 bg-amber-100 text-amber-900 rounded-md text-[10px] font-black inline-block">
+                      <td className="px-4 py-3 space-y-1">
+                        <span className="px-2 py-0.5 bg-amber-50 text-amber-800 rounded text-[10px] font-bold inline-block border border-amber-200/60">
                           {item.category}
                         </span>
-                        <p className="text-xs font-semibold text-gray-700 leading-snug">{item.description}</p>
+                        <p className="text-xs font-medium text-slate-700 leading-snug">{item.description}</p>
                       </td>
 
-                      <td className="px-6 py-4 border-l border-gray-900 text-center font-mono font-black text-gray-900">
+                      <td className="px-4 py-3 text-center font-mono font-bold text-slate-900">
                         {formatKWD(item.amount)}
                       </td>
 
-                      <td className="px-6 py-4 border-l border-gray-900 text-center font-mono font-black text-emerald-600">
+                      <td className="px-4 py-3 text-center font-mono font-bold text-emerald-600">
                         {formatKWD(item.paidAmount)}
                       </td>
 
-                      <td className="px-6 py-4 border-l border-gray-900 text-center font-mono font-black text-rose-600 bg-rose-50/20">
+                      <td className="px-4 py-3 text-center font-mono font-extrabold text-rose-600 bg-rose-50/20">
                         {formatKWD(item.remainingAmount)}
                       </td>
 
-                      <td className="px-6 py-4 border-l border-gray-900 text-center">
+                      <td className="px-4 py-3 text-center">
                         {item.status === 'Paid' ? (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-black">
-                            <CheckCircle2 size={12} /> مسدد بالكامل ✅
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200/80 rounded-md text-[11px] font-bold">
+                            <CheckCircle2 size={12} /> مسدد بالكامل
                           </span>
                         ) : item.status === 'PartiallyPaid' ? (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-[10px] font-black">
-                            <Clock size={12} /> مسدد جزئياً ⏳
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200/80 rounded-md text-[11px] font-bold">
+                            <Clock size={12} /> مسدد جزئياً
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded-full text-[10px] font-black animate-pulse">
-                            <AlertTriangle size={12} /> غير مسدد ⚠️
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200/80 rounded-md text-[11px] font-bold">
+                            <AlertTriangle size={12} /> غير مسدد
                           </span>
                         )}
                       </td>
 
-                      <td className="px-6 py-4 text-center no-print">
+                      <td className="px-4 py-3 text-center no-print">
                         {item.remainingAmount > 0 ? (
                           <button
                             onClick={() => {
                               setSelectedItemForSettlement(item);
                               setSettlementAmount(String(item.remainingAmount));
                             }}
-                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md transition-all cursor-pointer flex items-center justify-center gap-1 mx-auto"
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1 mx-auto"
                           >
-                            <CreditCard size={14} />
+                            <CreditCard size={13} />
                             تسديد الدفعة
                           </button>
                         ) : (
-                          <span className="text-gray-400 text-[10px] font-bold">مكتمل ✅</span>
+                          <span className="text-slate-400 text-[11px] font-bold">مكتمل ✅</span>
                         )}
                       </td>
                     </tr>
