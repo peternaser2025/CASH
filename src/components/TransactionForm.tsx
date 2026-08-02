@@ -241,6 +241,17 @@ export default function TransactionForm({ onComplete, employees, branches, categ
                     {categories.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
+
+                {/سداد|تسوية/i.test(formData.category) && (
+                  <div className="md:col-span-2 p-4 bg-purple-50 border-2 border-purple-200 rounded-2xl text-purple-950 text-xs font-bold space-y-1">
+                    <div className="flex items-center gap-2 font-black text-purple-900">
+                      <span>💳 إشعار المعالجة المحاسبية لسداد المستحقات:</span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-purple-800">
+                      سيتم <strong>خصم المبلغ نقدياً فوراً من صندوق/عهدة الموظف</strong> ({formData.employee || 'المحدد'})، <strong>ولن يُحسب إطلاقاً كمصروف جديد في أرباح وخسائر (P&L) الشهر المدفوع فيه</strong> لمنع الازدواجية، كون التكلفة قد حُسبت سابقاً في شهر الاستحقاق الأصلي.
+                    </p>
+                  </div>
+                )}
               </>
             )}
 

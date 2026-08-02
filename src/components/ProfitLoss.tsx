@@ -288,6 +288,7 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
 
   const cashExpenses = Math.max(0, pulledExpenses - pulledUnpaidExpenses);
   const cashPurchases = Math.max(0, pulledPurchases - pulledUnpaidPurchases);
+  const pulledSettlements = allTransactions.filter(i => i.operationType === 'سداد مستحقات ديون سابقة').reduce((acc, i) => acc + i.amount, 0);
 
   // Save the record
   const handleSavePL = async () => {
@@ -391,6 +392,9 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
         break;
       case 'purchases_accrued':
         filtered = allTransactions.filter(i => i.operationType === 'مشتريات آجلة (دين / موردين)');
+        break;
+      case 'settlements':
+        filtered = allTransactions.filter(i => i.operationType === 'سداد مستحقات ديون سابقة');
         break;
       case 'net_profit':
       default:
@@ -961,6 +965,29 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                       </td>
                       <td className="px-6 py-2.5 text-center border-l border-gray-200 font-mono text-orange-800 font-bold">مشتريات آجلة</td>
                       <td className="px-6 py-2.5 text-center font-mono font-black text-orange-900">{formatKWD(pulledUnpaidPurchases)}</td>
+                    </tr>
+
+                    {/* Settlements Row (Pure Cash Flow / Liability Settlement - Excluded from P&L Expenses) */}
+                    <tr 
+                      onClick={() => openDetailModal('settlements', 'سداد مستحقات وديون سابقة (تسوية التزامات)', 'حركات السداد النقدي للآجل والمستحقات، تم خصمها من الصندوق ومستبعدة من مصاريف P&L هذا الشهر لمنع التكرار')}
+                      className="text-[11px] text-purple-950 bg-purple-50/60 hover:bg-purple-100/80 transition-colors cursor-pointer group border-t border-purple-100"
+                    >
+                      <td className="px-6 py-3 border-l border-gray-200 font-bold flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-purple-600 text-sm">💳</span>
+                          <div>
+                            <span className="font-black text-purple-950">سداد مستحقات وآجل ديون سابقة (تسوية التزامات)</span>
+                            <span className="block text-[10px] text-purple-700 font-bold">
+                              خصم نقدي مباشر من الصندوق | مستبعد تماماً من تكاليف P&L لهذا الشهر
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[9px] font-black text-purple-800 bg-purple-200/80 px-2.5 py-0.5 rounded-full opacity-80 group-hover:opacity-100">
+                          عرض التفاصيل 🔍
+                        </span>
+                      </td>
+                      <td className="px-6 py-3 text-center border-l border-gray-200 font-mono text-purple-800 font-black">خصم صندوق فقط</td>
+                      <td className="px-6 py-3 text-center font-mono font-black text-purple-950 text-sm">{formatKWD(pulledSettlements)}</td>
                     </tr>
 
                     {/* Net Profit Summary Row */}
