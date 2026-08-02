@@ -217,26 +217,47 @@ export default function ReportViewer({ employees, balances, branches, categories
     const headers = [
       'التاريخ',
       'الفرع',
-      'التصنيف',
       'الموظف المسؤول',
-      'البيان والتفاصيل',
+      'نوع الحركة',
+      'التصنيف / البند',
+      'البيان والتفاصيل الشاملة',
       'حالة الدفع',
       'وارد (+)',
       'صادر (-)',
-      'الرصيد التراكمي'
+      'الرصيد التراكمي (د.ك)'
     ];
 
-    let runningBalance = parseFloat(report.openingBalance || '0') || 0;
+    const initialOpeningBalance = parseFloat(report.openingBalance || '0') || 0;
+    let runningBalance = initialOpeningBalance;
+
+    // Opening Balance row
+    const rows: (string | number)[][] = [
+      [
+        '---',
+        filters.branch || 'كافة الفروع',
+        filters.employee || 'كافة الموظفين',
+        'رصيد افتتاحي',
+        'رصيد سابق',
+        'الرصيد المرحل بداية الفترة المالية',
+        'مباشر',
+        0,
+        0,
+        initialOpeningBalance
+      ]
+    ];
+
+    // Category breakdown accumulator
+    const categoryTotals: Record<string, { count: number; totalExpense: number; totalIncome: number }> = {};
     
-    const rows = filteredRows.map(row => {
+    filteredRows.forEach(row => {
       const date = String(row[0] || '');
-      const emp = String(row[1] || '');
-      const branch = String(row[2] || '');
-      const type = String(row[3] || '');
-      const cat = String(row[4] || '');
+      const emp = String(row[1] || 'عام');
+      const branch = String(row[2] || 'عام');
+      const type = String(row[3] || (parseFloat(row[5]) > 0 ? 'إيرادات' : 'مصروفات'));
+      const cat = String(row[4] || (isTransferType(type, '') ? 'تحويل مالي' : 'عام'));
       const inc = parseFloat(row[5]) || 0;
       const exp = parseFloat(row[6]) || 0;
-      const desc = String(row[7] || '');
+      const desc = row.length > 8 ? String(row[8] || '-') : (row[7] ? String(row[7]) : '-');
       const isAccrued = isUnpaidAccrualRow(row);
       
       if (!isAccrued) {
@@ -249,30 +270,51 @@ export default function ReportViewer({ employees, balances, branches, categories
         }
       }
 
-      return [
+      // Track categories for purchase/expense itemization
+      if (!categoryTotals[cat]) {
+        categoryTotals[cat] = { count: 0, totalExpense: 0, totalIncome: 0 };
+      }
+      categoryTotals[cat].count += 1;
+      categoryTotals[cat].totalExpense += exp;
+      categoryTotals[cat].totalIncome += inc;
+
+      rows.push([
         date,
         branch,
-        cat || (isTransferType(type, cat) ? 'تحويل مالي' : 'عام'),
         emp,
+        type,
+        cat,
         desc,
         isAccrued ? 'آجل / غير مدفوع' : 'نقدي / مسدد',
         inc > 0 ? inc : 0,
         exp > 0 ? exp : 0,
         runningBalance
+      ]);
+    });
+
+    // Build Itemized Category Breakdown Section
+    const categoryBreakdownRows = Object.entries(categoryTotals).map(([catName, stat]) => {
+      const sharePercentage = filteredCashOut > 0 ? ((stat.totalExpense / filteredCashOut) * 100).toFixed(1) + '%' : '0%';
+      return [
+        catName,
+        stat.count,
+        stat.totalIncome,
+        stat.totalExpense,
+        sharePercentage
       ];
     });
 
     exportReportToExcel({
       fileName,
       sheetName: 'كشف الحساب التفصيلي',
-      reportTitle: 'كشف الحساب المالي التدقيقي والتفصيلي',
+      reportTitle: 'كشف الحساب المالي والعهد التفصيلي للموظف',
       subtitle: `الموظف المسؤول: ${filters.employee || 'كافة الموظفين'} | الفرع: ${filters.branch || 'كافة الفروع'} | الفترة: من ${filters.startDate} إلى ${filters.endDate}`,
       summaryCards: [
-        { label: 'الرصيد الافتتاحي (د.ك)', value: formatKWD(report.openingBalance) },
-        { label: 'إجمالي التوريدات والمقبوضات (+)', value: formatKWD(filteredIn) },
-        { label: 'إجمالي المدفوعات النقدية (-)', value: formatKWD(filteredCashOut) },
-        { label: 'مشتريات وآجل مستحق', value: formatKWD(filteredUnpaidAccruals) },
-        { label: 'رصيد السيولة بالصندوق', value: formatKWD(cashEndingBalance) },
+        { label: 'الرصيد الافتتاحي (د.ك)', value: initialOpeningBalance },
+        { label: 'إجمالي التوريدات والمقبوضات (+)', value: filteredIn },
+        { label: 'إجمالي المدفوعات النقدية (-)', value: filteredCashOut },
+        { label: 'مشتريات وآجل مستحق (-)', value: filteredUnpaidAccruals },
+        { label: 'رصيد السيولة الحالي بالصندوق', value: cashEndingBalance },
       ],
       headers,
       rows,
@@ -282,10 +324,25 @@ export default function ReportViewer({ employees, balances, branches, categories
         '-',
         '-',
         '-',
+        'مجموع الحركات المفلترة',
         '-',
         filteredIn,
         filteredCashOut,
         cashEndingBalance
+      ],
+      sections: [
+        {
+          title: 'جدول تفصيلي بمشتريات ومصاريف كل بند على حدة (ملخص التصنيفات)',
+          headers: ['التصنيف / البند', 'عدد العمليات', 'إجمالي الوارد (+)', 'إجمالي الصادر / المشتريات (-)', 'نسبة الاستهلاك من الصادر'],
+          rows: categoryBreakdownRows,
+          totalsRow: [
+            'المجموع الكلي للبنود',
+            filteredRows.length,
+            filteredIn,
+            filteredCashOut,
+            '100%'
+          ]
+        }
       ]
     });
   };

@@ -363,8 +363,8 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
       'التاريخ',
       'الفرع',
       'اسم المورد / الجهة الدائنة',
-      'التصنيف',
-      'البيان والتفاصيل',
+      'التصنيف / البند',
+      'البيان والتفاصيل الشاملة',
       'المبلغ الأصلي (د.ك)',
       'المسدد بالفعل (د.ك)',
       'الرصيد المتبقي (د.ك)',
@@ -383,15 +383,33 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
       item.status === 'Paid' ? 'مسدد بالكامل' : item.status === 'PartiallyPaid' ? 'مسدد جزئياً' : 'غير مسدد (مستحق)'
     ]);
 
+    // Vendor Breakdown
+    const vendorMap: Record<string, { count: number; totalAmount: number; totalRemaining: number }> = {};
+    filteredItems.forEach(item => {
+      const v = item.vendorName || 'غير محدد';
+      if (!vendorMap[v]) vendorMap[v] = { count: 0, totalAmount: 0, totalRemaining: 0 };
+      vendorMap[v].count += 1;
+      vendorMap[v].totalAmount += item.amount;
+      vendorMap[v].totalRemaining += item.remainingAmount;
+    });
+
+    const vendorRows = Object.entries(vendorMap).map(([vendor, stat]) => [
+      vendor,
+      stat.count,
+      stat.totalAmount,
+      stat.totalRemaining,
+      stat.totalRemaining === 0 ? 'مكتمل السداد' : 'يوجد مستحقات قائمة'
+    ]);
+
     exportReportToExcel({
       fileName,
-      sheetName: 'دفتر المستحقات',
-      reportTitle: 'دفتر المشتريات الآجلة والالتزامات المستحقة',
+      sheetName: 'دفتر المستحقات التفصيلي',
+      reportTitle: 'دفتر المشتريات الآجلة والالتزامات المستحقة التفصيلي',
       subtitle: `الفرع: ${selectedBranch} | الحالة: ${statusFilter} | تاريخ التصدير: ${new Date().toLocaleDateString('ar-KW')}`,
       summaryCards: [
-        { label: 'إجمالي المستحقات المسجلة', value: formatKWD(totalAccruedLiabilities) },
-        { label: 'إجمالي المسدد بالفعل', value: formatKWD(totalPaidLiabilities) },
-        { label: 'الرصيد المتبقي المستحق', value: formatKWD(totalRemainingLiabilities) },
+        { label: 'إجمالي المستحقات المسجلة', value: totalAccruedLiabilities },
+        { label: 'إجمالي المسدد بالفعل', value: totalPaidLiabilities },
+        { label: 'الرصيد المتبقي المستحق', value: totalRemainingLiabilities },
         { label: 'عدد الفواتير المعلقة', value: `${dueItemsCount} فاتورة` },
       ],
       headers,
@@ -406,6 +424,20 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
         totalPaidLiabilities,
         totalRemainingLiabilities,
         '-'
+      ],
+      sections: [
+        {
+          title: 'جدول ملخص المشتريات والالتزامات حسب المورد والجهة الدائنة',
+          headers: ['اسم المورد / الشركة', 'عدد الفواتير', 'إجمالي مشتريات المورد (د.ك)', 'المتبقي المستحق للمورد (د.ك)', 'موقف السداد'],
+          rows: vendorRows,
+          totalsRow: [
+            'المجموع الكلي للموردين',
+            filteredItems.length,
+            totalAccruedLiabilities,
+            totalRemainingLiabilities,
+            '-'
+          ]
+        }
       ]
     });
   };
