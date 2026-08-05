@@ -952,20 +952,51 @@ export default function ReportViewer({ employees, balances, branches, categories
                   </tr>
 
                   {filteredRows.map((row, i) => {
-                    const date = String(row[0] || '');
-                    const branch = String(row[2] || 'عام');
-                    const category = String(row[4] || '');
-                    const type = String(row[3] || '');
-                    const income = parseFloat(row[5]) || 0;
-                    const expense = parseFloat(row[6]) || 0;
-                    const balance = row[7];
-                    const description = row.length > 8 ? String(row[8] || '-') : '-';
-                    const targetMonth = row.length > 9 ? String(row[9] || '') : '';
-                    const rawRowId = row.length > 10 && row[10] !== undefined && row[10] !== null && row[10] !== '' ? row[10] : null;
-                    const originalIndex = report ? report.rows.indexOf(row) : -1;
-                    const calculatedRowId = rawRowId !== null ? rawRowId : (originalIndex !== -1 ? originalIndex + 2 : i + 2);
-                    const employee = String(row[1] || '');
+                    const isObj = typeof row === 'object' && !Array.isArray(row);
+                    const date = isObj ? String(row.date || '') : String(row[0] || '');
+                    const employee = isObj ? String(row.employee || row.emp || '') : String(row[1] || '');
+                    const branch = isObj ? String(row.branch || 'عام') : String(row[2] || 'عام');
+                    const type = isObj ? String(row.type || '') : String(row[3] || '');
+                    const category = isObj ? String(row.category || row.cat || '') : String(row[4] || '');
                     
+                    let income = 0;
+                    let expense = 0;
+                    if (isObj) {
+                      income = parseFloat(row.income) || 0;
+                      expense = parseFloat(row.expense) || 0;
+                      if (income === 0 && expense === 0 && row.amount !== undefined) {
+                        const amt = parseFloat(row.amount) || 0;
+                        if (type === 'Income' || type === 'إيراد') income = amt;
+                        else expense = amt;
+                      }
+                    } else {
+                      income = parseFloat(row[5]) || 0;
+                      expense = parseFloat(row[6]) || 0;
+                    }
+
+                    const balance = isObj ? (row.balance !== undefined ? row.balance : 0) : row[7];
+                    const description = isObj 
+                      ? String(row.description || row.desc || '-') 
+                      : (row.length > 8 ? String(row[8] || '-') : '-');
+                    const targetMonth = isObj 
+                      ? String(row.targetMonth || '') 
+                      : (row.length > 9 ? String(row[9] || '') : '');
+                    
+                    let rawRowId: any = null;
+                    if (isObj) {
+                      rawRowId = row.id ?? row.rowId ?? row.rowIndex ?? null;
+                    } else {
+                      rawRowId = row.length > 10 && row[10] !== undefined && row[10] !== null && row[10] !== '' 
+                        ? row[10] 
+                        : (row[0] && typeof row[0] === 'number' ? row[0] : null);
+                    }
+
+                    const originalIndex = report ? report.rows.indexOf(row) : -1;
+                    const calculatedRowId = (rawRowId !== null && rawRowId !== undefined && rawRowId !== '') 
+                      ? rawRowId 
+                      : (originalIndex !== -1 ? originalIndex + 2 : i + 2);
+                    const rowIndexInSheet = isObj && row.rowIndex ? row.rowIndex : (originalIndex !== -1 ? originalIndex + 2 : i + 2);
+
                     const isIncome = isIncomeType(type) || (income > 0 && !isTransferType(type));
                     const isTransfer = isTransferType(type);
 
@@ -1056,6 +1087,7 @@ export default function ReportViewer({ employees, balances, branches, categories
                               onClick={() => {
                                 setEditingTransaction({
                                   id: calculatedRowId,
+                                  rowIndex: rowIndexInSheet,
                                   date: date,
                                   branch: branch,
                                   category: category,
@@ -1078,6 +1110,8 @@ export default function ReportViewer({ employees, balances, branches, categories
                               onClick={async () => {
                                 if (window.confirm('هل أنت متأكد من حذف هذه العملية؟')) {
                                   const res = await gasService.deleteTransaction(calculatedRowId, {
+                                    id: calculatedRowId,
+                                    rowIndex: rowIndexInSheet,
                                     date,
                                     employee,
                                     branch,

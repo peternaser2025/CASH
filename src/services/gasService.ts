@@ -214,6 +214,7 @@ export const gasService = {
   async updateTransaction(id: number | string, transaction: any): Promise<{ success: boolean; error?: string }> {
     if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
     try {
+      const targetId = transaction.id || transaction.rowId || transaction.rowIndex || id;
       const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
@@ -222,28 +223,36 @@ export const gasService = {
         },
         body: JSON.stringify({ 
           action: 'update', 
-          id, 
-          rowId: id, 
-          rowIndex: id, 
-          data: { ...transaction, id, rowId: id, rowIndex: id } 
+          id: targetId, 
+          rowId: targetId, 
+          rowIndex: transaction.rowIndex || targetId, 
+          data: { 
+            ...transaction, 
+            id: targetId, 
+            rowId: targetId, 
+            rowIndex: transaction.rowIndex || targetId 
+          } 
         }),
       });
       const text = await response.text();
       this.clearCache();
       try {
-        return JSON.parse(text);
+        const parsed = JSON.parse(text);
+        if (parsed.success) return parsed;
+        return { success: false, error: parsed.error || 'تعذر العثور على الصف المطابق للتعديل في شيت جوجل' };
       } catch (e) {
-        return { success: false, error: 'خطأ في معالجة البيانات' };
+        return { success: false, error: 'خطأ في معالجة الاستجابة من السيرفر' };
       }
     } catch (error) {
       console.error('Error updating transaction:', error);
-      return { success: false, error: 'خطأ في الاتصال' };
+      return { success: false, error: 'خطأ في الاتصال بالسيرفر' };
     }
   },
 
   async deleteTransaction(id: number | string, extraMeta?: any): Promise<{ success: boolean; error?: string }> {
     if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
     try {
+      const targetId = extraMeta?.id || extraMeta?.rowId || extraMeta?.rowIndex || id;
       const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
@@ -252,16 +261,18 @@ export const gasService = {
         },
         body: JSON.stringify({ 
           action: 'delete', 
-          id, 
-          rowId: id, 
-          rowIndex: id, 
+          id: targetId, 
+          rowId: targetId, 
+          rowIndex: extraMeta?.rowIndex || targetId, 
           ...extraMeta 
         }),
       });
       const text = await response.text();
       this.clearCache();
       try {
-        return JSON.parse(text);
+        const parsed = JSON.parse(text);
+        if (parsed.success) return parsed;
+        return { success: false, error: parsed.error || 'تعذر حذف الحركة' };
       } catch (e) {
         return { success: false, error: 'خطأ في معالجة البيانات' };
       }

@@ -199,39 +199,87 @@ function doPost(e) {
     }
 
     else if (action === 'update') {
-      var targetId = requestData.id;
+      var targetId = requestData.id || requestData.rowId || requestData.rowIndex || (requestData.data && (requestData.data.id || requestData.data.rowId || requestData.data.rowIndex));
       var newData = requestData.data || {};
       var lastRow = mainSheet.getLastRow();
       
       if (lastRow > 1) {
-        var values = mainSheet.getRange(2, 1, lastRow - 1, 1).getValues();
+        var values = mainSheet.getRange(2, 1, lastRow - 1, Math.max(8, mainSheet.getLastColumn())).getValues();
+        var found = false;
+
+        function updateRowAt(rIdx) {
+          var typeStr = (newData.type === 'Income' || newData.type === 'إيراد') ? 'إيراد' : 'مصروف';
+          if (newData.date) mainSheet.getRange(rIdx, 2).setValue(newData.date);
+          mainSheet.getRange(rIdx, 3).setValue(typeStr);
+          if (newData.category) mainSheet.getRange(rIdx, 4).setValue(newData.category);
+          if (newData.employee) mainSheet.getRange(rIdx, 5).setValue(newData.employee);
+          if (newData.amount !== undefined) mainSheet.getRange(rIdx, 6).setValue(parseFloat(newData.amount) || 0);
+          if (newData.description !== undefined) mainSheet.getRange(rIdx, 7).setValue(newData.description);
+          if (newData.branch) mainSheet.getRange(rIdx, 8).setValue(newData.branch);
+        }
+
+        // 1. Search by ID in Column 1
         for (var i = 0; i < values.length; i++) {
-          if (String(values[i][0]) === String(targetId)) {
-            var rowIdx = i + 2;
-            var typeStr = newData.type === 'Income' ? 'إيراد' : 'مصروف';
-            mainSheet.getRange(rowIdx, 2).setValue(newData.date || new Date().toISOString().split('T')[0]);
-            mainSheet.getRange(rowIdx, 3).setValue(typeStr);
-            mainSheet.getRange(rowIdx, 4).setValue(newData.category || '');
-            mainSheet.getRange(rowIdx, 5).setValue(newData.employee || '');
-            mainSheet.getRange(rowIdx, 6).setValue(parseFloat(newData.amount) || 0);
-            mainSheet.getRange(rowIdx, 7).setValue(newData.description || '');
-            mainSheet.getRange(rowIdx, 8).setValue(newData.branch || '');
-            return respondJSON({ success: true });
+          var col1Val = String(values[i][0] || '').trim();
+          if (col1Val && col1Val === String(targetId).trim()) {
+            updateRowAt(i + 2);
+            found = true;
+            break;
           }
         }
+
+        // 2. Search by Row Index number
+        if (!found) {
+          var rowNum = parseInt(targetId);
+          if (!isNaN(rowNum) && rowNum >= 2 && rowNum <= lastRow) {
+            updateRowAt(rowNum);
+            found = true;
+          }
+        }
+
+        // 3. Search by content match (Date + Amount + Employee)
+        if (!found) {
+          for (var i = 0; i < values.length; i++) {
+            var rDate = String(values[i][1] || '').split('T')[0];
+            var rEmp = String(values[i][4] || '').trim();
+            var rAmt = parseFloat(values[i][5]) || 0;
+            if (rDate === String(newData.date || '') &&
+                (!newData.employee || rEmp === String(newData.employee).trim()) &&
+                Math.abs(rAmt - (parseFloat(newData.amount) || 0)) < 0.001) {
+              updateRowAt(i + 2);
+              found = true;
+              break;
+            }
+          }
+        }
+
+        if (found) {
+          return respondJSON({ success: true });
+        }
       }
-      return respondJSON({ success: false, error: "لم يتم العثور على الحركة المالية" });
+      return respondJSON({ success: false, error: "لم يتم العثور على الحركة المالية للتعديل في الشيت" });
     }
 
     else if (action === 'delete') {
-      var targetId = requestData.id;
+      var targetId = requestData.id || requestData.rowId || requestData.rowIndex || (requestData.data && requestData.data.id);
       var lastRow = mainSheet.getLastRow();
       if (lastRow > 1) {
-        var values = mainSheet.getRange(2, 1, lastRow - 1, 1).getValues();
+        var values = mainSheet.getRange(2, 1, lastRow - 1, Math.max(8, mainSheet.getLastColumn())).getValues();
+        var deleted = false;
+        
         for (var i = 0; i < values.length; i++) {
-          if (String(values[i][0]) === String(targetId)) {
+          if (String(values[i][0] || '').trim() === String(targetId).trim()) {
             mainSheet.deleteRow(i + 2);
-            return respondJSON({ success: true });
+            deleted = true;
+            break;
+          }
+        }
+
+        if (!deleted) {
+          var rowNum = parseInt(targetId);
+          if (!isNaN(rowNum) && rowNum >= 2 && rowNum <= lastRow) {
+            mainSheet.deleteRow(rowNum);
+            deleted = true;
           }
         }
       }
