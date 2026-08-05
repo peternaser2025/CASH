@@ -98,6 +98,44 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
     }
   }, []);
 
+  // Safe helper to extract values from transaction rows whether array or object
+  const getRowVal = (row: any, arrayIndex: number, objKeys: string[]) => {
+    if (!row) return '';
+    if (Array.isArray(row)) {
+      return row[arrayIndex] !== undefined ? row[arrayIndex] : '';
+    }
+    if (typeof row === 'object') {
+      for (const key of objKeys) {
+        if (row[key] !== undefined && row[key] !== null) {
+          return row[key];
+        }
+      }
+    }
+    return '';
+  };
+
+  // Safe helper to extract numeric amount safely
+  const getRowAmount = (row: any, type: 'expense' | 'income' | 'amount') => {
+    if (!row) return 0;
+    if (Array.isArray(row)) {
+      if (type === 'income') return parseFloat(String(row[5] || 0)) || 0;
+      if (type === 'expense') return parseFloat(String(row[6] || 0)) || 0;
+      return parseFloat(String(row[6] || row[5] || 0)) || 0;
+    }
+    if (typeof row === 'object') {
+      if (type === 'income') {
+        if (row.income !== undefined) return parseFloat(String(row.income)) || 0;
+        return row.type === 'Income' ? (parseFloat(String(row.amount)) || 0) : 0;
+      }
+      if (type === 'expense') {
+        if (row.expense !== undefined) return parseFloat(String(row.expense)) || 0;
+        return (row.type === 'Expense' || row.type === 'مصروف' || !row.type) ? (parseFloat(String(row.amount)) || 0) : 0;
+      }
+      return parseFloat(String(row.amount !== undefined ? row.amount : (row.expense || row.income || 0))) || 0;
+    }
+    return 0;
+  };
+
   // Fetch all transactions from Google Sheets and extract Accrued/Credit items
   const fetchAccruals = async () => {
     setLoading(true);
@@ -111,14 +149,17 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
       if (reportData && reportData.rows) {
         const accruals: AccrualItem[] = [];
         const sheetsSettlements: Record<string, number> = {};
+        const keywordSettlements: { keyword: string; amount: number }[] = [];
 
         // Pass 1: Identify all settlement transactions in Google Sheets and map their payments
         reportData.rows.forEach((row: any) => {
-          const category = String(row[4] || '');
-          const expense = parseFloat(String(row[6])) || 0;
-          const description = row.length > 8 ? String(row[8] || '') : '';
+          const category = String(getRowVal(row, 4, ['category'])).trim();
+          const description = String(getRowVal(row, 8, ['description', 'notes', 'details']) || getRowVal(row, 6, ['description'])).trim();
+          const expense = getRowAmount(row, 'expense');
 
-          const isSettlement = /سداد|تسوية/i.test(`${category} ${description}`);
+          const combined = `${category} ${description}`;
+          const isSettlement = /سداد|تسوية|سداد مشتريات|تسوية التزامات|تسديد|دفع|دفعت|تم دفع|تم السداد|تم تسديد|دفعة من|صافي مدفوع/i.test(combined);
+
           if (isSettlement && expense > 0) {
             // Extract embedded ACCRUAL_REF ID if present
             const refMatch = description.match(/ACCRUAL_REF:(row_[^\s\]]+)/) || description.match(/REF:(row_[^\s\]]+)/);
@@ -126,40 +167,58 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
               const refId = refMatch[1];
               sheetsSettlements[refId] = (sheetsSettlements[refId] || 0) + expense;
             }
+
+            keywordSettlements.push({
+              keyword: combined.toLowerCase(),
+              amount: expense
+            });
           }
         });
 
         // Pass 2: Identify original Accrual / Deferred / Credit items (excluding settlements)
         reportData.rows.forEach((row: any, index: number) => {
-          const date = String(row[0] || '');
-          const branch = String(row[2] || 'عام');
-          const type = String(row[3] || '');
-          const category = String(row[4] || '');
-          const expense = parseFloat(String(row[6])) || 0;
-          const income = parseFloat(String(row[5])) || 0;
-          const employee = String(row[7] || '');
-          const description = row.length > 8 ? String(row[8] || '') : '';
+          const date = String(getRowVal(row, 0, ['date']) || '').split('T')[0];
+          const branch = String(getRowVal(row, 2, ['branch']) || 'عام');
+          const type = String(getRowVal(row, 3, ['type']) || '');
+          const category = String(getRowVal(row, 4, ['category']) || '');
+          const expense = getRowAmount(row, 'expense');
+          const income = getRowAmount(row, 'income');
+          const employee = String(getRowVal(row, 7, ['employee']) || getRowVal(row, 4, ['employee']) || '');
+          const description = String(getRowVal(row, 8, ['description', 'notes']) || getRowVal(row, 6, ['description']) || '');
 
           // Skip transfers
           if (isTransferType(type, category)) return;
 
-          // IMPORTANT: Skip settlement rows (sadaad / taswaya) so paying a debt doesn't create a new debt!
-          const isSettlement = /سداد|تسوية/i.test(`${category} ${description}`);
-          if (isSettlement) return;
+          const combinedText = `${category} ${description}`;
+
+          // IMPORTANT: Skip settlement rows (sadaad / taswaya / daf3) so paying a debt doesn't create a new debt!
+          const isSettlementRow = /سداد|تسوية|سداد مشتريات|تسوية التزامات|تسديد|دفعة من|صافي مدفوع/i.test(combinedText) ||
+                                  /^دفع\s+/i.test(description) ||
+                                  /^سداد\s+/i.test(description) ||
+                                  description.includes('سداد مستحقات') ||
+                                  description.includes('سداد آجل');
+          
+          if (isSettlementRow) return;
 
           // Check if this row represents an Accrual or Credit Purchase (آجل / مستحق)
           const isAccrued = 
             category.includes('مستحق') || 
             category.includes('مستحقة') || 
+            category.includes('مستحقات') || 
             category.includes('آجل') || 
+            category.includes('اجل') || 
             category.includes('مؤجل') || 
             description.includes('مستحق') || 
             description.includes('مستحقة') || 
+            description.includes('مستحقات') || 
             description.includes('آجل') || 
+            description.includes('اجل') || 
             description.includes('مؤجل') || 
             description.includes('غير مسدد') || 
             description.includes('لم يسدد') || 
+            description.includes('غير مدفوع') || 
             description.includes('دين') ||
+            description.includes('ديون') ||
             category.toLowerCase().includes('due') ||
             category.toLowerCase().includes('accrued') ||
             description.toLowerCase().includes('due') ||
@@ -169,10 +228,31 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
             const originalAmount = expense > 0 ? expense : income;
             const itemId = `row_${index}_${date}_${originalAmount}`;
             
+            // Check if description explicitly states that this row is ALREADY paid/settled
+            const isExplicitlyPaid = /تم السداد|مسدد|تم الدفع|مدفوع بالكامل|نقداً بالكامل|كاش مدفوع|مسددة/i.test(combinedText);
+
             // Sum paid amounts from both Google Sheets settlement rows and local storage memory
-            const paidFromSheets = sheetsSettlements[itemId] || 0;
+            let paidFromSheets = sheetsSettlements[itemId] || 0;
+
+            if (paidFromSheets === 0) {
+              const vendorLower = (employee || '').toLowerCase();
+              const descLower = description.toLowerCase();
+
+              keywordSettlements.forEach(ks => {
+                if ((vendorLower && ks.keyword.includes(vendorLower)) || 
+                    (descLower && descLower.length > 5 && ks.keyword.includes(descLower.slice(0, 15)))) {
+                  paidFromSheets += ks.amount;
+                }
+              });
+            }
+
             const paidFromLocal = settledHistory[itemId] || 0;
-            const paidAmount = Math.max(paidFromSheets, paidFromLocal);
+            let paidAmount = Math.max(paidFromSheets, paidFromLocal);
+
+            if (isExplicitlyPaid) {
+              paidAmount = Math.max(paidAmount, originalAmount);
+            }
+
             const remainingAmount = Math.max(0, originalAmount - paidAmount);
 
             let status: 'Due' | 'PartiallyPaid' | 'Paid' = 'Due';
