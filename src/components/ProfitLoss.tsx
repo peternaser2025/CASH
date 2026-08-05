@@ -20,7 +20,8 @@ import {
   Search,
   FileText,
   HelpCircle,
-  Tag
+  Tag,
+  Package
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
@@ -59,6 +60,10 @@ interface SavedPLRecord {
   month: string;
   branch: string;
   sales: number;
+  openingStock?: number;
+  closingStock?: number;
+  cogs?: number;
+  grossProfit?: number;
   expenses: number;
   purchases: number;
   unpaidExpenses: number;
@@ -80,6 +85,8 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
 
   // Inputs
   const [salesInput, setSalesInput] = useState<string>('');
+  const [openingStockInput, setOpeningStockInput] = useState<string>('');
+  const [closingStockInput, setClosingStockInput] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
 
   // Autopulled calculations and detailed transaction list
@@ -283,8 +290,20 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
 
   // Calculations
   const sales = parseFloat(salesInput) || 0;
-  const totalCosts = pulledExpenses + pulledPurchases;
-  const netProfit = sales - totalCosts;
+  const openingStock = parseFloat(openingStockInput) || 0;
+  const closingStock = parseFloat(closingStockInput) || 0;
+
+  // Cost of Goods Sold (COGS) = Opening Stock + Purchases - Closing Stock
+  const cogs = Math.max(0, openingStock + pulledPurchases - closingStock);
+
+  // Gross Profit = Sales - COGS
+  const grossProfit = sales - cogs;
+
+  // Net Operating Profit = Gross Profit - Operating Expenses
+  const netProfit = grossProfit - pulledExpenses;
+
+  // Total costs
+  const totalCosts = cogs + pulledExpenses;
 
   const cashExpenses = Math.max(0, pulledExpenses - pulledUnpaidExpenses);
   const cashPurchases = Math.max(0, pulledPurchases - pulledUnpaidPurchases);
@@ -306,6 +325,10 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
       month: selectedMonth,
       branch: selectedBranch,
       sales,
+      openingStock,
+      closingStock,
+      cogs,
+      grossProfit,
       expenses: pulledExpenses,
       purchases: pulledPurchases,
       unpaidExpenses: pulledUnpaidExpenses,
@@ -323,7 +346,7 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
         type: netProfit >= 0 ? 'Income' : 'Expense',
         amount: Math.abs(netProfit),
         targetMonth: selectedMonth,
-        description: `إغلاق شهر ${selectedMonth}: مبيعات (${sales.toFixed(3)}) | مصاريف (${pulledExpenses.toFixed(3)}) | مشتريات (${pulledPurchases.toFixed(3)}) | صافي الربح (${netProfit.toFixed(3)})`
+        description: `إغلاق شهر ${selectedMonth}: مبيعات (${sales.toFixed(3)}) | مخزون أول (${openingStock.toFixed(3)}) | مشتريات (${pulledPurchases.toFixed(3)}) | مخزون آخر (${closingStock.toFixed(3)}) | COGS (${cogs.toFixed(3)}) | مجمل الربح (${grossProfit.toFixed(3)}) | مصاريف (${pulledExpenses.toFixed(3)}) | صافي الربح (${netProfit.toFixed(3)})`
       };
 
       await gasService.addTransaction(plTransaction);
@@ -434,13 +457,17 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
 
     const rows = [
       ['إيرادات مبيعات الشهر (+)', sales, 'إيرادات مبيعات النشاط بالشهر'],
+      ['مخزون أول الشهر (بضاعة بداية المدة)', openingStock, 'قيمة بضاعة أول المدة'],
+      ['إجمالي مشتريات الفرع والمخزون (+)', pulledPurchases, 'مشتريات بضاعة ومخزون (كاش + آجل)'],
+      ['  └─ مشتريات نقدية (من الخزنة)', cashPurchases, 'مشتريات نقدية مسددة'],
+      ['  └─ مشتريات بالدين وآجلة (موردين)', pulledUnpaidPurchases, 'مشتريات آجلة للذمم والدائنين'],
+      ['(-) مخزون آخر الشهر (بضاعة نهاية المدة)', closingStock, 'يخصم - قيمة بضاعة نهاية المدة'],
+      ['تكلفة البضاعة المباعة COGS (-)', cogs, 'مخزون أول + مشتريات - مخزون آخر'],
+      ['مجمل الربح التجاري (=)', grossProfit, 'المبيعات - تكلفة البضاعة المباعة'],
       ['إجمالي مصاريف التشغيل والفرع (-)', pulledExpenses, 'مصاريف تشغيلية (نقدية + مستحقة)'],
       ['  └─ مصاريف تشغيلية مدفوعة نقداً', cashExpenses, 'مدفوعة نقداً'],
       ['  └─ مصاريف مستحقة (آجلة)', pulledUnpaidExpenses, 'التزام آجل لم يُدفع'],
-      ['إجمالي مشتريات الفرع والمخزون (-)', pulledPurchases, 'مشتريات بضاعة ومخزون (كاش + آجل)'],
-      ['  └─ مشتريات نقدية (من الخزنة)', cashPurchases, 'مشتريات نقدية مسددة'],
-      ['  └─ مشتريات بالدين وآجلة (موردين)', pulledUnpaidPurchases, 'مشتريات آجلة للذمم والدائنين'],
-      ['إجمالي التكاليف والمصاريف الكلية (-)', totalCosts, 'مصاريف + مشتريات'],
+      ['إجمالي التكاليف والمصاريف الكلية (-)', totalCosts, 'تكلفة البضاعة المباعة + المصاريف'],
       ['صافي ربح / خسارة النشاط بالشهر (أساس الاستحقاق)', netProfit, netProfit >= 0 ? 'ربح تشغيلي صافي' : 'خسارة تشغيلية']
     ];
 
@@ -664,6 +691,50 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
               />
             </div>
 
+            {/* Inventory Inputs Section (Opening & Closing Stock for COGS) */}
+            <div className="p-4 bg-amber-50/50 border-2 border-amber-200 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+                <div className="flex items-center gap-1.5 text-amber-950 font-black text-xs">
+                  <Package size={16} className="text-amber-600" />
+                  <span>مخزون أول وآخر الشهر (تكلفة البضاعة المباعة)</span>
+                </div>
+                <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">جرد البضاعة</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* Opening Stock Input */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-black text-gray-700">مخزون أول الشهر (بداية المدة)</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    placeholder="0.000"
+                    value={openingStockInput}
+                    onChange={e => setOpeningStockInput(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border-2 border-amber-200 rounded-xl font-mono font-bold text-xs outline-none focus:border-amber-500 transition-all text-left text-amber-950"
+                  />
+                </div>
+
+                {/* Closing Stock Input */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-black text-gray-700">مخزون آخر الشهر (نهاية المدة)</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    placeholder="0.000"
+                    value={closingStockInput}
+                    onChange={e => setClosingStockInput(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border-2 border-amber-200 rounded-xl font-mono font-bold text-xs outline-none focus:border-amber-500 transition-all text-left text-amber-950"
+                  />
+                </div>
+              </div>
+
+              <div className="text-[10px] font-bold text-amber-900 bg-amber-100/80 p-2.5 rounded-xl border border-amber-200 flex justify-between items-center">
+                <span>تكلفة البضاعة المباعة (COGS) = (مخزون أول + مشتريات - مخزون آخر)</span>
+                <span className="font-mono font-black text-amber-900 text-xs">{formatKWD(cogs)} KWD</span>
+              </div>
+            </div>
+
             {/* Pulled Expenses & Purchases Summary Box */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
@@ -730,7 +801,7 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
         </div>
 
         {/* Profit & Loss Report Sheet - Right Side */}
-        <div className="lg:col-span-7 space-y-8">
+        <div className="lg:col-span-7 space-y-8 print:col-span-12 print:w-full print:max-w-none print:m-0 print:p-0">
           
           {/* Success Dialog */}
           <AnimatePresence>
@@ -748,12 +819,12 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
           </AnimatePresence>
 
           {/* Dynamic Financial Report Sheet (Aesthetic Print Card) */}
-          <div className="bg-white border-2 border-gray-900 rounded-[2.5rem] shadow-sm overflow-hidden relative print:border-none print:shadow-none">
+          <div className="bg-white border-2 border-gray-900 rounded-[2.5rem] shadow-sm overflow-hidden relative print:border-none print:shadow-none print:p-0">
             
             {/* Elegant Header */}
-            <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 print:bg-white print:pb-6">
+            <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 print:bg-white print:pb-4 print:p-2">
               <div className="flex gap-4 items-center">
-                <div className="w-12 h-12 bg-gray-950 rounded-2xl flex items-center justify-center text-white font-black text-xl">
+                <div className="w-12 h-12 bg-gray-950 rounded-2xl flex items-center justify-center text-white font-black text-xl shrink-0">
                   P&L
                 </div>
                 <div>
@@ -763,7 +834,7 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                   </p>
                 </div>
               </div>
-              <div className="text-left">
+              <div className="text-left no-print">
                 <span className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full font-black text-[10px]">
                   💡 اضغط على أي بند بالجدول لعرض التفاصيل
                 </span>
@@ -771,50 +842,68 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
             </div>
 
             {/* Calculations Breakdown */}
-            <div className="p-8 space-y-8">
-              {/* Three Pillars Overview */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="p-8 space-y-8 print:p-2 print:space-y-4">
+              {/* Four Pillars Overview */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 print:grid-cols-4">
                 
                 {/* Sales Pillar */}
                 <div 
                   onClick={() => openDetailModal('sales', 'إيرادات مبيعات الشهر', 'كافة حركات الإيرادات والمبيعات المقيدة')}
-                  className="p-6 bg-emerald-50/40 rounded-2xl border-2 border-emerald-200 flex flex-col justify-between hover:border-emerald-500 transition-all cursor-pointer group shadow-xs"
+                  className="p-4 bg-emerald-50/40 rounded-2xl border-2 border-emerald-200 flex flex-col justify-between hover:border-emerald-500 transition-all cursor-pointer group shadow-xs"
                 >
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">إجمالي المبيعات (+)</span>
-                    <Eye size={16} className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <Eye size={14} className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity no-print" />
                   </div>
-                  <div className="flex items-baseline gap-1 mt-4">
-                    <span className="text-3xl font-black font-mono tracking-tight text-emerald-600">
+                  <div className="flex items-baseline gap-1 mt-3">
+                    <span className="text-2xl font-black font-mono tracking-tight text-emerald-600">
                       {formatKWD(sales)}
                     </span>
-                    <span className="text-[10px] font-black text-emerald-500">KWD</span>
+                    <span className="text-[9px] font-black text-emerald-500">KWD</span>
                   </div>
-                  <span className="text-[9px] font-bold text-emerald-600 mt-2 opacity-80">انقر لعرض الحركات 🔍</span>
+                  <span className="text-[8px] font-bold text-emerald-600 mt-1 opacity-80 no-print">انقر للتفاصيل 🔍</span>
                 </div>
 
-                {/* Costs Pillar */}
+                {/* COGS Pillar */}
                 <div 
-                  onClick={() => openDetailModal('net_profit', 'إجمالي المصاريف والمشتريات الكلية', 'كافة حركات المصاريف والمشتريات المسجلة')}
-                  className="p-6 bg-red-50/40 rounded-2xl border-2 border-red-200 flex flex-col justify-between hover:border-red-500 transition-all cursor-pointer group shadow-xs"
+                  onClick={() => openDetailModal('purchases_all', 'تكلفة البضاعة المباعة COGS', 'مخزون أول الشهر + المشتريات - مخزون آخر الشهر')}
+                  className="p-4 bg-amber-50/50 rounded-2xl border-2 border-amber-200 flex flex-col justify-between hover:border-amber-500 transition-all cursor-pointer group shadow-xs"
                 >
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-black text-red-700 uppercase tracking-widest">إجمالي التكاليف (-)</span>
-                    <Eye size={16} className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <span className="text-[10px] font-black text-amber-800 uppercase tracking-widest">تكلفة البضاعة COGS (-)</span>
+                    <Eye size={14} className="text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity no-print" />
                   </div>
-                  <div className="flex items-baseline gap-1 mt-4">
-                    <span className="text-3xl font-black font-mono tracking-tight text-red-600">
-                      {formatKWD(totalCosts)}
+                  <div className="flex items-baseline gap-1 mt-3">
+                    <span className="text-2xl font-black font-mono tracking-tight text-amber-700">
+                      {formatKWD(cogs)}
                     </span>
-                    <span className="text-[10px] font-black text-red-500">KWD</span>
+                    <span className="text-[9px] font-black text-amber-600">KWD</span>
                   </div>
-                  <span className="text-[9px] font-bold text-red-600 mt-2 opacity-80">انقر لعرض الحركات 🔍</span>
+                  <span className="text-[8px] font-bold text-amber-700 mt-1 opacity-80 no-print">أول: {formatKWD(openingStock)} | آخر: {formatKWD(closingStock)}</span>
+                </div>
+
+                {/* Gross Profit Pillar */}
+                <div 
+                  onClick={() => openDetailModal('sales', 'مجمل الربح التجاري', 'المبيعات مطروحاً منها تكلفة البضاعة المباعة')}
+                  className="p-4 bg-teal-50/50 rounded-2xl border-2 border-teal-200 flex flex-col justify-between hover:border-teal-500 transition-all cursor-pointer group shadow-xs"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-black text-teal-800 uppercase tracking-widest">مجمل الربح (=)</span>
+                    <Eye size={14} className="text-teal-500 opacity-0 group-hover:opacity-100 transition-opacity no-print" />
+                  </div>
+                  <div className="flex items-baseline gap-1 mt-3">
+                    <span className="text-2xl font-black font-mono tracking-tight text-teal-700">
+                      {formatKWD(grossProfit)}
+                    </span>
+                    <span className="text-[9px] font-black text-teal-600">KWD</span>
+                  </div>
+                  <span className="text-[8px] font-bold text-teal-700 mt-1 opacity-80 no-print">المبيعات - COGS</span>
                 </div>
 
                 {/* Net Profit Pillar */}
                 <div 
                   onClick={() => openDetailModal('net_profit', 'صافي ربح / خسارة النشاط', 'كافة حركات الإيرادات والتكاليف المحتسبة')}
-                  className={`p-6 rounded-2xl border-2 flex flex-col justify-between transition-all cursor-pointer group shadow-xs ${
+                  className={`p-4 rounded-2xl border-2 flex flex-col justify-between transition-all cursor-pointer group shadow-xs ${
                     netProfit >= 0 ? 'bg-blue-50/40 border-blue-200 hover:border-blue-500' : 'bg-rose-50/40 border-rose-200 hover:border-rose-500'
                   }`}
                 >
@@ -822,33 +911,33 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                     <span className={`text-[10px] font-black uppercase tracking-widest ${
                       netProfit >= 0 ? 'text-blue-700' : 'text-rose-700'
                     }`}>
-                      صافي الأرباح التشغيلية
+                      صافي الأرباح
                     </span>
-                    <Eye size={16} className={`opacity-0 group-hover:opacity-100 transition-opacity ${netProfit >= 0 ? 'text-blue-500' : 'text-rose-500'}`} />
+                    <Eye size={14} className={`opacity-0 group-hover:opacity-100 transition-opacity no-print ${netProfit >= 0 ? 'text-blue-500' : 'text-rose-500'}`} />
                   </div>
-                  <div className="flex items-baseline gap-1 mt-4">
-                    <span className={`text-3xl font-black font-mono tracking-tight ${
+                  <div className="flex items-baseline gap-1 mt-3">
+                    <span className={`text-2xl font-black font-mono tracking-tight ${
                       netProfit >= 0 ? 'text-blue-600' : 'text-rose-600'
                     }`}>
                       {formatKWD(netProfit)}
                     </span>
-                    <span className="text-[10px] font-black text-gray-500">KWD</span>
+                    <span className="text-[9px] font-black text-gray-500">KWD</span>
                   </div>
-                  <span className={`text-[9px] font-bold mt-2 opacity-80 ${netProfit >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
-                    انقر لعرض الحركات 🔍
+                  <span className={`text-[8px] font-bold mt-1 opacity-80 no-print ${netProfit >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
+                    صافي النشاط 🔍
                   </span>
                 </div>
 
               </div>
 
               {/* Interactive Detailed Breakdown Table */}
-              <div className="border-2 border-gray-900 rounded-2xl overflow-hidden shadow-xs">
+              <div className="border-2 border-gray-900 rounded-2xl overflow-hidden shadow-xs print:border print:rounded-none">
                 <table className="w-full text-right border-collapse">
                   <thead>
                     <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
-                      <th className="px-6 py-4 border-l border-white/10">البند المالي (انقر على أي بند للتفاصيل)</th>
-                      <th className="px-6 py-4 text-center border-l border-white/10">نوع التكلفة والالتزام</th>
-                      <th className="px-6 py-4 text-center">المبلغ (KWD)</th>
+                      <th className="px-6 py-4 border-l border-white/10 print:px-3 print:py-2">البند المالي (تفاصيل قائمة الدخل P&L)</th>
+                      <th className="px-6 py-4 text-center border-l border-white/10 print:px-3 print:py-2">النوع والتصنيف</th>
+                      <th className="px-6 py-4 text-center print:px-3 print:py-2">المبلغ (KWD)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 font-bold text-xs text-gray-800">
@@ -858,17 +947,79 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                       onClick={() => openDetailModal('sales', 'إيرادات مبيعات الشهر', 'جميع الفواتير وإيرادات المبيعات المقيدة لهذا الفرع')}
                       className="bg-emerald-50/30 hover:bg-emerald-100/60 transition-colors cursor-pointer group"
                     >
-                      <td className="px-6 py-4 border-l border-gray-200 font-black text-emerald-950 flex items-center justify-between">
+                      <td className="px-6 py-3.5 border-l border-gray-200 font-black text-emerald-950 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="text-emerald-600 font-bold">🟢</span>
                           <span>إيرادات مبيعات الشهر (+)</span>
                         </div>
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full opacity-80 group-hover:opacity-100">
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full opacity-80 group-hover:opacity-100 no-print">
                           عرض التفاصيل 🔍
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-center border-l border-gray-200 text-emerald-800 text-[11px]">إيرادات نشاط</td>
-                      <td className="px-6 py-4 text-center font-mono text-emerald-700 font-black text-sm">{formatKWD(sales)}</td>
+                      <td className="px-6 py-3.5 text-center border-l border-gray-200 text-emerald-800 text-[11px]">إيرادات النشاط</td>
+                      <td className="px-6 py-3.5 text-center font-mono text-emerald-700 font-black text-sm">{formatKWD(sales)}</td>
+                    </tr>
+
+                    {/* COGS Header Row */}
+                    <tr 
+                      onClick={() => openDetailModal('purchases_all', 'تكلفة البضاعة المباعة COGS', 'كافة المشتريات والمخزون المحتسب')}
+                      className="bg-amber-50/70 hover:bg-amber-100/80 transition-colors cursor-pointer group border-t-2 border-amber-200"
+                    >
+                      <td className="px-6 py-3.5 border-l border-gray-200 font-black text-amber-950 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-amber-600 font-bold">📦</span>
+                          <span>تكلفة البضاعة المباعة COGS (-)</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-amber-800 bg-amber-200 px-2 py-0.5 rounded-full opacity-80 group-hover:opacity-100 no-print">
+                          عرض التفاصيل 🔍
+                        </span>
+                      </td>
+                      <td className="px-6 py-3.5 text-center border-l border-gray-200 text-amber-900 text-[11px] font-bold">مخزون أول + مشتريات - مخزون آخر</td>
+                      <td className="px-6 py-3.5 text-center font-mono text-amber-900 font-black text-sm">{formatKWD(cogs)}</td>
+                    </tr>
+
+                    {/* Opening Stock Sub-row */}
+                    <tr className="text-[11px] text-amber-950 bg-amber-50/20">
+                      <td className="px-10 py-2 border-l border-gray-200 font-semibold">
+                        <span>📦 مخزون أول الشهر (بضاعة بداية المدة)</span>
+                      </td>
+                      <td className="px-6 py-2 text-center border-l border-gray-200 font-mono text-amber-800 text-[10px]">مخزون افتتاح (+)</td>
+                      <td className="px-6 py-2 text-center font-mono text-amber-950 font-bold">{formatKWD(openingStock)}</td>
+                    </tr>
+
+                    {/* Purchases Sub-row */}
+                    <tr 
+                      onClick={() => openDetailModal('purchases_all', 'إجمالي مشتريات الفرع والمخزون', 'كافة مشتريات البضائع والمستلزمات')}
+                      className="text-[11px] text-amber-950 bg-amber-50/20 hover:bg-amber-100/50 transition-colors cursor-pointer group"
+                    >
+                      <td className="px-10 py-2 border-l border-gray-200 font-semibold flex items-center justify-between">
+                        <span>🛒 (+) مشتريات الفرع والمخزون خلال الشهر</span>
+                        <span className="text-[9px] text-amber-700 opacity-0 group-hover:opacity-100 no-print">تفاصيل 🔍</span>
+                      </td>
+                      <td className="px-6 py-2 text-center border-l border-gray-200 font-mono text-amber-800 text-[10px]">مشتريات جديدة (+)</td>
+                      <td className="px-6 py-2 text-center font-mono text-amber-950 font-bold">{formatKWD(pulledPurchases)}</td>
+                    </tr>
+
+                    {/* Closing Stock Sub-row */}
+                    <tr className="text-[11px] text-amber-950 bg-amber-50/20">
+                      <td className="px-10 py-2 border-l border-gray-200 font-semibold">
+                        <span>🏷️ (-) مخزون آخر الشهر (بضاعة نهاية المدة - يخصم)</span>
+                      </td>
+                      <td className="px-6 py-2 text-center border-l border-gray-200 font-mono text-amber-800 text-[10px]">مخزون متبقي (-)</td>
+                      <td className="px-6 py-2 text-center font-mono text-amber-950 font-bold">({formatKWD(closingStock)})</td>
+                    </tr>
+
+                    {/* Gross Profit Row */}
+                    <tr className="bg-teal-50/80 font-black text-teal-950 border-t-2 border-b-2 border-teal-200">
+                      <td className="px-6 py-3.5 border-l border-teal-200 font-black flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-teal-700 font-bold text-sm">📊</span>
+                          <span>مجمل الربح التجاري (=)</span>
+                        </div>
+                        <span className="text-[10px] text-teal-800 font-bold">المبيعات - تكلفة البضاعة المباعة</span>
+                      </td>
+                      <td className="px-6 py-3.5 text-center border-l border-teal-200 text-teal-900 text-[11px]">مجمل ربح البضاعة</td>
+                      <td className="px-6 py-3.5 text-center font-mono text-teal-900 font-black text-base">{formatKWD(grossProfit)}</td>
                     </tr>
 
                     {/* Total Expenses Row */}
@@ -881,11 +1032,11 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                           <span className="text-red-600 font-bold">🔴</span>
                           <span>إجمالي مصاريف التشغيل والفرع (-)</span>
                         </div>
-                        <span className="text-[10px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full opacity-80 group-hover:opacity-100">
+                        <span className="text-[10px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full opacity-80 group-hover:opacity-100 no-print">
                           عرض التفاصيل 🔍
                         </span>
                       </td>
-                      <td className="px-6 py-3.5 text-center border-l border-gray-200 text-red-700 text-[11px]">تشمل النقدية والمستحقة</td>
+                      <td className="px-6 py-3.5 text-center border-l border-gray-200 text-red-700 text-[11px]">مصاريف تشغيلية</td>
                       <td className="px-6 py-3.5 text-center font-mono text-red-600 font-black text-sm">{formatKWD(pulledExpenses)}</td>
                     </tr>
 
@@ -894,14 +1045,14 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                       onClick={() => openDetailModal('expenses_cash', 'مصاريف تشغيلية مدفوعة نقداً', 'المصاريف التشغيلية التي تم سدادها نقداً من الخزنة')}
                       className="text-[11px] text-gray-700 bg-white hover:bg-slate-100 transition-colors cursor-pointer group"
                     >
-                      <td className="px-10 py-2.5 border-l border-gray-200 font-semibold flex items-center justify-between">
+                      <td className="px-10 py-2 border-l border-gray-200 font-semibold flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span>💵 مصاريف تشغيلية مدفوعة نقداً</span>
                         </div>
-                        <span className="text-[9px] text-slate-500 opacity-0 group-hover:opacity-100">عرض التفاصيل 🔍</span>
+                        <span className="text-[9px] text-slate-500 opacity-0 group-hover:opacity-100 no-print">عرض التفاصيل 🔍</span>
                       </td>
-                      <td className="px-6 py-2.5 text-center border-l border-gray-200 font-mono text-slate-500">مدفوع نقداً</td>
-                      <td className="px-6 py-2.5 text-center font-mono text-gray-800">{formatKWD(cashExpenses)}</td>
+                      <td className="px-6 py-2 text-center border-l border-gray-200 font-mono text-slate-500 text-[10px]">مدفوع نقداً</td>
+                      <td className="px-6 py-2 text-center font-mono text-gray-800">{formatKWD(cashExpenses)}</td>
                     </tr>
 
                     {/* Accrued Expenses Sub-row */}
@@ -909,65 +1060,17 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                       onClick={() => openDetailModal('expenses_accrued', 'مصاريف مستحقة (آجلة لم تُدفع)', 'المصاريف والالتزامات المستحقة على الفرع ولم تُدفع بعد')}
                       className="text-[11px] text-amber-950 bg-amber-50/40 hover:bg-amber-100/60 transition-colors cursor-pointer group"
                     >
-                      <td className="px-10 py-2.5 border-l border-gray-200 font-black flex items-center justify-between">
+                      <td className="px-10 py-2 border-l border-gray-200 font-black flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span>🧾 مصاريف مستحقة (آجلة لم تُدفع)</span>
                         </div>
-                        <span className="text-[9px] text-amber-800 opacity-80 group-hover:opacity-100">عرض التفاصيل 🔍</span>
+                        <span className="text-[9px] text-amber-800 opacity-80 group-hover:opacity-100 no-print">عرض التفاصيل 🔍</span>
                       </td>
-                      <td className="px-6 py-2.5 text-center border-l border-gray-200 font-mono text-amber-800 font-bold">مصاريف مستحقة</td>
-                      <td className="px-6 py-2.5 text-center font-mono font-black text-amber-800">{formatKWD(pulledUnpaidExpenses)}</td>
+                      <td className="px-6 py-2 text-center border-l border-gray-200 font-mono text-amber-800 font-bold text-[10px]">مصاريف مستحقة</td>
+                      <td className="px-6 py-2 text-center font-mono font-black text-amber-800">{formatKWD(pulledUnpaidExpenses)}</td>
                     </tr>
 
-                    {/* Total Purchases Row */}
-                    <tr 
-                      onClick={() => openDetailModal('purchases_all', 'إجمالي مشتريات الفرع والمخزون', 'كافة مشتريات البضائع والمستلزمات (كاش وآجل)')}
-                      className="bg-amber-50/60 hover:bg-amber-100/80 transition-colors cursor-pointer group"
-                    >
-                      <td className="px-6 py-3.5 border-l border-gray-200 font-black text-amber-950 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-amber-600 font-bold">📦</span>
-                          <span>إجمالي مشتريات الفرع والمخزون (-)</span>
-                        </div>
-                        <span className="text-[10px] font-bold text-amber-800 bg-amber-200 px-2 py-0.5 rounded-full opacity-80 group-hover:opacity-100">
-                          عرض التفاصيل 🔍
-                        </span>
-                      </td>
-                      <td className="px-6 py-3.5 text-center border-l border-gray-200 text-amber-800 text-[11px]">تشمل الكاش والآجل</td>
-                      <td className="px-6 py-3.5 text-center font-mono text-amber-800 font-black text-sm">{formatKWD(pulledPurchases)}</td>
-                    </tr>
-
-                    {/* Cash Purchases Sub-row */}
-                    <tr 
-                      onClick={() => openDetailModal('purchases_cash', 'مشتريات نقدية (مدفوعة من الخزنة)', 'المشتريات التي تم سدادها فوراً من النقدية والسيولة')}
-                      className="text-[11px] text-gray-700 bg-white hover:bg-slate-100 transition-colors cursor-pointer group"
-                    >
-                      <td className="px-10 py-2.5 border-l border-gray-200 font-semibold flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span>💳 مشتريات نقدية (مدفوعة من الخزنة)</span>
-                        </div>
-                        <span className="text-[9px] text-slate-500 opacity-0 group-hover:opacity-100">عرض التفاصيل 🔍</span>
-                      </td>
-                      <td className="px-6 py-2.5 text-center border-l border-gray-200 font-mono text-slate-500">مشتريات كاش</td>
-                      <td className="px-6 py-2.5 text-center font-mono text-gray-800">{formatKWD(cashPurchases)}</td>
-                    </tr>
-
-                    {/* Credit Purchases Sub-row */}
-                    <tr 
-                      onClick={() => openDetailModal('purchases_accrued', 'مشتريات بالدين وآجلة (دائنون / موردين)', 'فواتير المشتريات الآجلة المترتبة للموردين والدائنين')}
-                      className="text-[11px] text-orange-950 bg-orange-50/50 hover:bg-orange-100/70 transition-colors cursor-pointer group"
-                    >
-                      <td className="px-10 py-2.5 border-l border-gray-200 font-black flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span>🚚 مشتريات بالدين وآجلة (دائنون / موردين)</span>
-                        </div>
-                        <span className="text-[9px] text-orange-800 opacity-80 group-hover:opacity-100">عرض التفاصيل 🔍</span>
-                      </td>
-                      <td className="px-6 py-2.5 text-center border-l border-gray-200 font-mono text-orange-800 font-bold">مشتريات آجلة</td>
-                      <td className="px-6 py-2.5 text-center font-mono font-black text-orange-900">{formatKWD(pulledUnpaidPurchases)}</td>
-                    </tr>
-
-                    {/* Settlements Row (Pure Cash Flow / Liability Settlement - Excluded from P&L Expenses) */}
+                    {/* Settlements Row */}
                     <tr 
                       onClick={() => openDetailModal('settlements', 'سداد مستحقات وديون سابقة (تسوية التزامات)', 'حركات السداد النقدي للآجل والمستحقات، تم خصمها من الصندوق ومستبعدة من مصاريف P&L هذا الشهر لمنع التكرار')}
                       className="text-[11px] text-purple-950 bg-purple-50/60 hover:bg-purple-100/80 transition-colors cursor-pointer group border-t border-purple-100"
@@ -982,11 +1085,11 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                             </span>
                           </div>
                         </div>
-                        <span className="text-[9px] font-black text-purple-800 bg-purple-200/80 px-2.5 py-0.5 rounded-full opacity-80 group-hover:opacity-100">
+                        <span className="text-[9px] font-black text-purple-800 bg-purple-200/80 px-2.5 py-0.5 rounded-full opacity-80 group-hover:opacity-100 no-print">
                           عرض التفاصيل 🔍
                         </span>
                       </td>
-                      <td className="px-6 py-3 text-center border-l border-gray-200 font-mono text-purple-800 font-black">خصم صندوق فقط</td>
+                      <td className="px-6 py-3 text-center border-l border-gray-200 font-mono text-purple-800 font-black text-[10px]">خصم صندوق فقط</td>
                       <td className="px-6 py-3 text-center font-mono font-black text-purple-950 text-sm">{formatKWD(pulledSettlements)}</td>
                     </tr>
 
@@ -1002,11 +1105,11 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                             <div>
                               <span className="font-black text-blue-950 text-sm">صافي ربح / خسارة النشاط بالشهر (أساس الاستحقاق):</span>
                               <span className="block text-[10px] font-bold text-blue-800 mt-0.5">
-                                المبيعات ({formatKWD(sales)}) - إجمالي المصاريف والمشتريات ({formatKWD(totalCosts)})
+                                مجمل الربح ({formatKWD(grossProfit)}) - إجمالي المصاريف التشغيلية ({formatKWD(pulledExpenses)})
                               </span>
                             </div>
                           </div>
-                          <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full opacity-80 group-hover:opacity-100">
+                          <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full opacity-80 group-hover:opacity-100 no-print">
                             عرض كافة الحركات 🔍
                           </span>
                         </div>
