@@ -68,7 +68,8 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
   // Settlement Modal State
   const [selectedItemForSettlement, setSelectedItemForSettlement] = useState<AccrualItem | null>(null);
   const [settlementAmount, setSettlementAmount] = useState<string>('');
-  const [settlementMethod, setSettlementMethod] = useState<string>('KNET');
+  const [settlementMethod, setSettlementMethod] = useState<string>('كاش (نقد)');
+  const [settlementEmployee, setSettlementEmployee] = useState<string>('');
   const [settlementNotes, setSettlementNotes] = useState<string>('');
   const [settling, setSettling] = useState<boolean>(false);
   const [settlementSuccess, setSettlementSuccess] = useState<string | null>(null);
@@ -235,12 +236,13 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
     try {
       // 1. Record payment transaction in Google Sheets
       const originalMonth = selectedItemForSettlement.date ? selectedItemForSettlement.date.slice(0, 7) : '';
+      const payingEmployee = settlementEmployee || selectedItemForSettlement.employee || (employees.length > 0 ? employees[0] : 'إدارة');
       const newPaymentTrans = {
         date: new Date().toISOString().split('T')[0],
         type: 'Expense',
         branch: selectedItemForSettlement.branch,
         category: 'سداد مشتريات آجلة ومستحقات (تسوية التزامات)',
-        employee: selectedItemForSettlement.employee,
+        employee: payingEmployee,
         amount: payVal,
         description: `[سداد مستحقات/آجل - ACCRUAL_REF:${selectedItemForSettlement.id}] [تخص شهر ${originalMonth}] سداد ${settlementMethod} للبند: [${selectedItemForSettlement.category}] - ${selectedItemForSettlement.description}. ${settlementNotes ? 'ملاحظة: ' + settlementNotes : ''}`
       };
@@ -722,6 +724,7 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
                             onClick={() => {
                               setSelectedItemForSettlement(item);
                               setSettlementAmount(String(item.remainingAmount));
+                              setSettlementEmployee(item.employee || (employees.length > 0 ? employees[0] : 'إدارة'));
                             }}
                             className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1 mx-auto"
                           >
@@ -777,7 +780,7 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
                   </div>
                   <div>
                     <h3 className="text-lg font-black text-gray-900">تسديد مستحقات / فاتورة آجل</h3>
-                    <p className="text-xs font-bold text-gray-400">إثبات سداد مالي وتسجيله بالسجلات أوتوماتيكياً</p>
+                    <p className="text-xs font-bold text-gray-400">سداد كلي أو جزئي مع التسجيل الفوري بصندوق الموظف</p>
                   </div>
                 </div>
                 <button
@@ -795,16 +798,36 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
                 </div>
               ) : (
                 <form onSubmit={handleSettle} className="space-y-4">
-                  <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-1 text-xs">
-                    <p className="font-black text-gray-900">البند: {selectedItemForSettlement.category}</p>
-                    <p className="text-gray-600">المورد: {selectedItemForSettlement.vendorName}</p>
-                    <p className="font-mono text-rose-600 font-bold">
-                      الرصيد المتبقي الواجب سداده: {formatKWD(selectedItemForSettlement.remainingAmount)} KWD
-                    </p>
+                  <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-2 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="font-black text-gray-900">البند: {selectedItemForSettlement.category}</span>
+                      <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[10px]">
+                        شهر {selectedItemForSettlement.date.slice(0, 7)}
+                      </span>
+                    </div>
+                    <p className="text-gray-600 font-bold">المورد / الجهة: {selectedItemForSettlement.vendorName}</p>
+                    <div className="flex justify-between items-center font-mono pt-1 border-t border-gray-200 text-gray-700 font-bold">
+                      <span>إجمالي الدين: {formatKWD(selectedItemForSettlement.amount)} د.ك</span>
+                      <span className="text-rose-600">المتبقي المطلوب: {formatKWD(selectedItemForSettlement.remainingAmount)} د.ك</span>
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="block text-xs font-black text-gray-700">المبلغ المراد تسديده (د.ك)</label>
+                  {/* Cash box Employee Selector */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-black text-gray-700">الموظف / الصندوق القائم بالصرف (خصم من عهدته)</label>
+                    <select
+                      value={settlementEmployee}
+                      onChange={e => setSettlementEmployee(e.target.value)}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl font-bold text-xs text-gray-900 outline-none focus:border-emerald-500"
+                    >
+                      {employees.map(emp => (
+                        <option key={emp} value={emp}>{emp}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-black text-gray-700">المبلغ المراد تسديده الآن (د.ك)</label>
                     <input
                       type="number"
                       step="0.001"
@@ -812,19 +835,37 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
                       max={selectedItemForSettlement.remainingAmount}
                       value={settlementAmount}
                       onChange={e => setSettlementAmount(e.target.value)}
-                      className="w-full px-5 py-3.5 bg-gray-50 border border-gray-300 rounded-2xl font-mono text-xl font-black text-center text-emerald-600 outline-none focus:border-emerald-500"
+                      className="w-full px-5 py-3 bg-gray-50 border border-gray-300 rounded-2xl font-mono text-xl font-black text-center text-emerald-600 outline-none focus:border-emerald-500"
                     />
                   </div>
 
-                  <div className="space-y-2">
+                  {/* Dynamic Math Preview for Partial Payments */}
+                  {(() => {
+                    const payVal = parseFloat(settlementAmount) || 0;
+                    const remainingAfter = Math.max(0, selectedItemForSettlement.remainingAmount - payVal);
+                    return (
+                      <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl space-y-1 text-xs font-bold text-amber-900">
+                        <div className="flex justify-between">
+                          <span>المسدد في هذه العملية:</span>
+                          <span className="font-mono font-extrabold text-emerald-700">{formatKWD(payVal)} د.ك</span>
+                        </div>
+                        <div className="flex justify-between border-t border-amber-200/60 pt-1">
+                          <span>المتبقي في السجل بعد السداد:</span>
+                          <span className="font-mono font-extrabold text-rose-700">{formatKWD(remainingAfter)} د.ك</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div className="space-y-1.5">
                     <label className="block text-xs font-black text-gray-700">طريقة الدفع والصرف</label>
                     <div className="grid grid-cols-3 gap-2">
-                      {['KNET', 'كاش (نقد)', 'تحويل بنكي'].map(m => (
+                      {['كاش (نقد)', 'KNET', 'تحويل بنكي'].map(m => (
                         <button
                           key={m}
                           type="button"
                           onClick={() => setSettlementMethod(m)}
-                          className={`py-2.5 rounded-xl font-black text-xs transition-all border ${
+                          className={`py-2 rounded-xl font-black text-xs transition-all border cursor-pointer ${
                             settlementMethod === m ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-gray-50 text-gray-700 border-gray-200'
                           }`}
                         >
@@ -834,24 +875,32 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="block text-xs font-black text-gray-700">ملاحظات أو رقم السند (اختياري)</label>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-black text-gray-700">ملاحظات أو رقم وصل الاستلام (اختياري)</label>
                     <input
                       type="text"
                       placeholder="رقم الفاتورة أو وصل الاستلام..."
                       value={settlementNotes}
                       onChange={e => setSettlementNotes(e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl font-bold text-xs outline-none focus:border-emerald-500"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl font-bold text-xs outline-none focus:border-emerald-500"
                     />
+                  </div>
+
+                  {/* Accounting Protection Rule Badge */}
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-[11px] text-blue-900 flex items-start gap-2 leading-tight">
+                    <Info size={16} className="text-blue-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong>ضمان الحسابات:</strong> سيُخصم مبلغ الدفع فوراً من صندوق الموظف (<span className="font-bold">{settlementEmployee || selectedItemForSettlement.employee}</span>)، ويُستبعد أوتوماتيكياً من مصاريف P&L الشهرية لتجنب تكرار الاحتساب، ويُحدث رصيد الدين المتبقي بالسجل دون أي حذف.
+                    </div>
                   </div>
 
                   <button
                     type="submit"
                     disabled={settling}
-                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl text-base shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl text-base shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {settling ? <RefreshCw size={18} className="animate-spin" /> : <Send size={18} />}
-                    تأكيد وتسجيل التسديد
+                    تأكيد وتسجيل التسديد بالصندوق
                   </button>
                 </form>
               )}
