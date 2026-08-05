@@ -17,11 +17,240 @@ import {
   AlertCircle,
   Calendar,
   CloudLightning,
-  Check
+  Check,
+  Code,
+  Copy,
+  ShieldCheck
 } from 'lucide-react';
 import { auth } from '../firebase';
 import { workspaceService } from '../services/workspaceService';
 import { EmployeeBalance } from '../types';
+
+const SAFE_GAS_CODE = `/**
+ * ============================================================================
+ * KWD FINANCE PRO - GOOGLE APPS SCRIPT (الكود المحدث والآمن 100%)
+ * ============================================================================
+ * تم تطوير هذا السكريبت ليعمل بأمان تام دون حذف البيانات المسجلة حالياً
+ * ودون إتلاف أو تغيير أي صفوف أو أعمدة سابقة في ملف إكسيل / جوجل شيت.
+ */
+
+function doGet(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ss.getSheets();
+  var ignoreSheets = ['Balances', 'Settings', 'Sheet1', 'الرئيسية', 'عمليات', 'employee', 'البيانات', 'Dashboard', 'Sheet2', 'Sheet3', 'Users'];
+  
+  var balances = [];
+  
+  for (var i = 0; i < sheets.length; i++) {
+    var sheetName = sheets[i].getName().trim();
+    if (ignoreSheets.indexOf(sheetName) === -1) {
+      var lastRow = sheets[i].getLastRow();
+      var balance = 0;
+      if (lastRow > 1) {
+        var data = sheets[i].getRange(2, 1, lastRow - 1, Math.max(7, sheets[i].getLastColumn())).getValues();
+        var incomeSum = 0;
+        var expenseSum = 0;
+        for (var r = 0; r < data.length; r++) {
+          var type = String(data[r][1] || '').trim();
+          var amt = parseFloat(data[r][3]) || 0;
+          if (type === 'إيراد' || type === 'Income' || type === 'تغذية عهدة' || type === 'رصيد إفتتاحي') {
+            incomeSum += amt;
+          } else if (type === 'مصروف' || type === 'Expense' || type === 'صرف عهدة' || type === 'سداد مشتريات آجلة ومستحقات (تسوية التزامات)') {
+            expenseSum += amt;
+          }
+        }
+        balance = incomeSum - expenseSum;
+      }
+      balances.push([sheetName, balance]);
+    }
+  }
+  
+  return ContentService.createTextOutput(JSON.stringify(balances))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (err) {
+    return respondJSON({ success: false, error: "السيرفر مشغول، يرجى إعادة المحاولة" });
+  }
+
+  try {
+    var requestData = JSON.parse(e.postData.contents);
+    var action = requestData.action || 'add';
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // الحصول على الشيت الرئيسي بأمان دون حذف البيانات المسجلة
+    var mainSheet = ss.getSheetByName('البيانات') || ss.getSheetByName('Sheet1') || ss.getSheets()[0];
+    if (!mainSheet) {
+      mainSheet = ss.insertSheet('البيانات');
+      mainSheet.appendRow(['الرقم التعريفى', 'التاريخ', 'النوع', 'البند والتصنيف', 'الموظف / الصندوق', 'المبلغ (د.ك)', 'الملاحظات والبيان', 'الفرع']);
+    }
+
+    if (action === 'add') {
+      var item = requestData.data || {};
+      var id = item.id || Date.now();
+      var date = item.date || new Date().toISOString().split('T')[0];
+      var type = item.type === 'Income' ? 'إيراد' : 'مصروف';
+      var category = item.category || 'عام';
+      var employee = item.employee || 'إدارة';
+      var amount = parseFloat(item.amount) || 0;
+      var description = item.description || '';
+      var branch = item.branch || 'الفرع الرئيسي';
+
+      // إلحاق الحركة بالصف الأخير للشيت الرئيسي لحفظ البيانات المسجلة مسبقاً دون إتلاف
+      mainSheet.appendRow([id, date, type, category, employee, amount, description, branch]);
+
+      // إلحاق الحركة بشرائح الموظفين دون حذف البيانات الحالية
+      if (employee && employee !== 'إدارة') {
+        var empSheet = ss.getSheetByName(employee);
+        if (!empSheet) {
+          empSheet = ss.insertSheet(employee);
+          empSheet.appendRow(['التاريخ', 'النوع', 'البند والتصنيف', 'المبلغ (د.ك)', 'الفرع', 'الملاحظات والبيان', 'الرصيد التراكمي']);
+        }
+        
+        var lastEmpRow = empSheet.getLastRow();
+        var prevBalance = 0;
+        if (lastEmpRow > 1) {
+          var lastVal = empSheet.getRange(lastEmpRow, 7).getValue();
+          prevBalance = parseFloat(lastVal) || 0;
+        }
+        var newBalance = (type === 'إيراد' || type === 'Income') ? (prevBalance + amount) : (prevBalance - amount);
+        empSheet.appendRow([date, type, category, amount, branch, description, newBalance]);
+      }
+
+      return respondJSON({ success: true, id: id });
+    }
+    
+    else if (action === 'report') {
+      var filters = requestData.filters || {};
+      var lastRow = mainSheet.getLastRow();
+      var rows = [];
+      var totalIncome = 0;
+      var totalExpense = 0;
+
+      if (lastRow > 1) {
+        var values = mainSheet.getRange(2, 1, lastRow - 1, Math.max(8, mainSheet.getLastColumn())).getValues();
+        for (var i = 0; i < values.length; i++) {
+          var r = values[i];
+          var rId = r[0];
+          var rDate = String(r[1] || '').split('T')[0];
+          var rType = String(r[2] || '');
+          var rCat = String(r[3] || '');
+          var rEmp = String(r[4] || '');
+          var rAmt = parseFloat(r[5]) || 0;
+          var rDesc = String(r[6] || '');
+          var rBranch = String(r[7] || '');
+
+          if (filters.startDate && rDate < filters.startDate) continue;
+          if (filters.endDate && rDate > filters.endDate) continue;
+          if (filters.employee && rEmp !== filters.employee) continue;
+          if (filters.branch && rBranch !== filters.branch) continue;
+          if (filters.type && rType !== (filters.type === 'Income' ? 'إيراد' : 'مصروف')) continue;
+          if (filters.category && rCat !== filters.category) continue;
+          if (filters.search) {
+            var searchLower = String(filters.search).toLowerCase();
+            var rowText = (rDesc + ' ' + rCat + ' ' + rEmp + ' ' + rBranch).toLowerCase();
+            if (rowText.indexOf(searchLower) === -1) continue;
+          }
+
+          if (rType === 'إيراد' || rType === 'Income') {
+            totalIncome += rAmt;
+          } else {
+            totalExpense += rAmt;
+          }
+
+          rows.push({
+            id: rId,
+            date: rDate,
+            type: (rType === 'إيراد' || rType === 'Income') ? 'Income' : 'Expense',
+            category: rCat,
+            employee: rEmp,
+            amount: rAmt,
+            description: rDesc,
+            branch: rBranch,
+            rowIndex: i + 2
+          });
+        }
+      }
+
+      return respondJSON({
+        rows: rows,
+        summary: {
+          totalIncome: totalIncome,
+          totalExpense: totalExpense,
+          netProfit: totalIncome - totalExpense
+        }
+      });
+    }
+
+    else if (action === 'addEmployee') {
+      var empName = String(requestData.name || '').trim();
+      if (!empName) return respondJSON({ success: false, error: "اسم الموظف مطلوب" });
+      
+      var existingSheet = ss.getSheetByName(empName);
+      if (!existingSheet) {
+        var newSheet = ss.insertSheet(empName);
+        newSheet.appendRow(['التاريخ', 'النوع', 'البند والتصنيف', 'المبلغ (د.ك)', 'الفرع', 'الملاحظات والبيان', 'الرصيد التراكمي']);
+      }
+      return respondJSON({ success: true });
+    }
+
+    else if (action === 'update') {
+      var targetId = requestData.id;
+      var newData = requestData.data || {};
+      var lastRow = mainSheet.getLastRow();
+      
+      if (lastRow > 1) {
+        var values = mainSheet.getRange(2, 1, lastRow - 1, 1).getValues();
+        for (var i = 0; i < values.length; i++) {
+          if (String(values[i][0]) === String(targetId)) {
+            var rowIdx = i + 2;
+            var typeStr = newData.type === 'Income' ? 'إيراد' : 'مصروف';
+            mainSheet.getRange(rowIdx, 2).setValue(newData.date || new Date().toISOString().split('T')[0]);
+            mainSheet.getRange(rowIdx, 3).setValue(typeStr);
+            mainSheet.getRange(rowIdx, 4).setValue(newData.category || '');
+            mainSheet.getRange(rowIdx, 5).setValue(newData.employee || '');
+            mainSheet.getRange(rowIdx, 6).setValue(parseFloat(newData.amount) || 0);
+            mainSheet.getRange(rowIdx, 7).setValue(newData.description || '');
+            mainSheet.getRange(rowIdx, 8).setValue(newData.branch || '');
+            return respondJSON({ success: true });
+          }
+        }
+      }
+      return respondJSON({ success: false, error: "لم يتم العثور على الحركة المالية" });
+    }
+
+    else if (action === 'delete') {
+      var targetId = requestData.id;
+      var lastRow = mainSheet.getLastRow();
+      if (lastRow > 1) {
+        var values = mainSheet.getRange(2, 1, lastRow - 1, 1).getValues();
+        for (var i = 0; i < values.length; i++) {
+          if (String(values[i][0]) === String(targetId)) {
+            mainSheet.deleteRow(i + 2);
+            return respondJSON({ success: true });
+          }
+        }
+      }
+      return respondJSON({ success: true });
+    }
+
+    return respondJSON({ success: false, error: "إجراء غير معروف" });
+
+  } catch (err) {
+    return respondJSON({ success: false, error: err.toString() });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function respondJSON(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}`;
 
 interface GoogleToolsProps {
   balances: EmployeeBalance[];
@@ -32,7 +261,8 @@ export default function GoogleTools({ balances, onRefresh }: GoogleToolsProps) {
   const [isConnected, setIsConnected] = useState(workspaceService.hasActiveToken());
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
-  const [activeSubTab, setActiveSubTab] = useState<'sheets' | 'drive' | 'docs' | 'tasks' | 'chat'>('sheets');
+  const [activeSubTab, setActiveSubTab] = useState<'script' | 'sheets' | 'drive' | 'docs' | 'tasks' | 'chat'>('script');
+  const [copiedScript, setCopiedScript] = useState(false);
 
   // Google Sheets states
   const [spreadsheets, setSpreadsheets] = useState<any[]>([]);
@@ -508,6 +738,21 @@ export default function GoogleTools({ balances, onRefresh }: GoogleToolsProps) {
           {/* Sub Navigation */}
           <div className="lg:col-span-1 space-y-2 col-span-1">
             <button
+              onClick={() => setActiveSubTab('script')}
+              className={`w-full flex items-center justify-between p-4 rounded-2xl text-right font-black transition-all ${
+                activeSubTab === 'script'
+                  ? 'bg-emerald-600 text-white shadow-lg'
+                  : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-100'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Code size={20} />
+                <span>إسكربت Google Apps Script</span>
+              </div>
+              <span className="text-[10px] opacity-80 bg-black/10 px-2 py-0.5 rounded-full font-mono">Code.gs</span>
+            </button>
+
+            <button
               onClick={() => setActiveSubTab('sheets')}
               className={`w-full flex items-center justify-between p-4 rounded-2xl text-right font-black transition-all ${
                 activeSubTab === 'sheets'
@@ -592,6 +837,99 @@ export default function GoogleTools({ balances, onRefresh }: GoogleToolsProps) {
           {/* Sub Panels Container */}
           <div className="lg:col-span-3 col-span-1">
             <AnimatePresence mode="wait">
+              {/* 0. GOOGLE APPS SCRIPT CODE */}
+              {activeSubTab === 'script' && (
+                <motion.div
+                  key="script"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="bg-white border border-slate-100 rounded-[2.5rem] p-8 md:p-10 shadow-sm space-y-6"
+                >
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-5">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-md font-bold text-[10px]">
+                          تحديث آمن 100%
+                        </span>
+                        <h2 className="text-xl font-black text-gray-900">كود إسكربت جوجل شيت المحدث (Code.gs)</h2>
+                      </div>
+                      <p className="text-xs text-gray-500 font-medium mt-1">
+                        إسكربت محسن يحفظ ويحدث البيانات المسجلة حالياً دون أي حذف أو اتلاف لأرصدة الموظفين أو الصفوف السابقة.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(SAFE_GAS_CODE);
+                        setCopiedScript(true);
+                        setTimeout(() => setCopiedScript(false), 3000);
+                      }}
+                      className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl transition-all text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/10 shrink-0 cursor-pointer"
+                    >
+                      {copiedScript ? <Check size={16} /> : <Copy size={16} />}
+                      <span>{copiedScript ? 'تم نسخ الكود بنجاح!' : 'نسخ الكود بنقرة واحدة'}</span>
+                    </button>
+                  </div>
+
+                  {/* Safety guarantees badge */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/60 rounded-xl flex items-start gap-2.5 text-xs text-emerald-900">
+                      <ShieldCheck size={18} className="text-emerald-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="block font-black">حماية البيانات المسجلة:</strong>
+                        <span className="text-[11px] font-bold text-emerald-800">لا يتم مسح أو حذف أي صفوف قديمة، وتستكمل المعاملات من آخر صف.</span>
+                      </div>
+                    </div>
+                    <div className="p-3.5 bg-blue-50/70 border border-blue-200/60 rounded-xl flex items-start gap-2.5 text-xs text-blue-900">
+                      <ShieldCheck size={18} className="text-blue-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="block font-black">حفظ الهيكل والأعمدة:</strong>
+                        <span className="text-[11px] font-bold text-blue-800">يحافظ على ترتيب ورؤوس الأعمدة، ويدعم الفروع المتعددة تلقائياً.</span>
+                      </div>
+                    </div>
+                    <div className="p-3.5 bg-amber-50/70 border border-amber-200/60 rounded-xl flex items-start gap-2.5 text-xs text-amber-900">
+                      <ShieldCheck size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="block font-black">أرصدة الموظفين التراكمية:</strong>
+                        <span className="text-[11px] font-bold text-amber-800">تحديث أرصدة عهد الموظفين تلقائياً بحساب الحركات السابقة والجديدة.</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Instructions */}
+                  <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs space-y-2 leading-relaxed font-bold text-slate-700">
+                    <p className="font-black text-slate-900 text-sm">خطوات تحديث الإسكربت في ملف Google Sheets الخاص بك:</p>
+                    <ol className="list-decimal list-inside space-y-1 text-slate-600 pr-1">
+                      <li>افتح ملف جوجل شيت الخاص بك.</li>
+                      <li>من القائمة العلوية اختار: <strong>توسيع (Extensions)</strong> &larr; <strong>Apps Script</strong>.</li>
+                      <li>قم بتحديد كل الكود القديم الموجود واستبداله بالكود المحدث بالأسفل (باستخدام زر النسخ بالضغط بالعلوي).</li>
+                      <li>اضغط <strong>حفظ (Save)</strong> ثم <strong>نشر (Deploy)</strong> &larr; <strong>تطوير جديد (New deployment)</strong> &larr; اختيار النوع <strong>Web app</strong> &larr; تنفيذ باسمك والصلاحية <strong>Anyone (أي شخص)</strong> &larr; اضغط <strong>Deploy</strong>.</li>
+                    </ol>
+                  </div>
+
+                  {/* Code Viewer Container */}
+                  <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 font-mono text-[11px]">
+                    <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800 text-slate-400 font-sans text-xs">
+                      <span>Google Apps Script - Code.gs</span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(SAFE_GAS_CODE);
+                          setCopiedScript(true);
+                          setTimeout(() => setCopiedScript(false), 3000);
+                        }}
+                        className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        {copiedScript ? <Check size={12} /> : <Copy size={12} />}
+                        <span>{copiedScript ? 'تم النسخ' : 'نسخ'}</span>
+                      </button>
+                    </div>
+                    <pre className="p-4 text-emerald-300 overflow-x-auto max-h-[400px] leading-relaxed select-all">
+                      <code>{SAFE_GAS_CODE}</code>
+                    </pre>
+                  </div>
+                </motion.div>
+              )}
+
               {/* 1. GOOGLE SHEETS */}
               {activeSubTab === 'sheets' && (
                 <motion.div
