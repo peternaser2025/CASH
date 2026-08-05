@@ -353,6 +353,11 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
     e.preventDefault();
     if (!selectedItemForSettlement) return;
 
+    if (!settlementEmployee) {
+      alert('يرجى تحديد الموظف / العهدة القائمة بالسداد لخصم المبلغ منها وتحديث رصيد الصندوق بنجاح');
+      return;
+    }
+
     const payVal = parseFloat(settlementAmount);
     if (isNaN(payVal) || payVal <= 0) return;
 
@@ -362,7 +367,7 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
     try {
       // 1. Record payment transaction in Google Sheets
       const originalMonth = selectedItemForSettlement.date ? selectedItemForSettlement.date.slice(0, 7) : '';
-      const payingEmployee = settlementEmployee || selectedItemForSettlement.employee || (employees.length > 0 ? employees[0] : 'إدارة');
+      const payingEmployee = settlementEmployee;
       const newPaymentTrans = {
         date: new Date().toISOString().split('T')[0],
         type: 'Expense',
@@ -898,10 +903,10 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
                               onClick={() => {
                                 setSelectedItemForSettlement(item);
                                 setSettlementAmount(String(item.remainingAmount));
-                                setSettlementEmployee(item.employee || (employees.length > 0 ? employees[0] : 'إدارة'));
+                                setSettlementEmployee(employees.includes(item.employee) ? item.employee : '');
                               }}
-                              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center gap-1"
-                              title="تسديد المبلغ من الصندوق وتسجيل مصروف سداد"
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center gap-1"
+                              title="تسديد المبلغ واختيار العهدة لخصم القيمة منها وتحديث الرصيد"
                             >
                               <CreditCard size={13} />
                               <span>تسديد الدفعة</span>
@@ -910,9 +915,13 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
 
                           {item.status !== 'Paid' ? (
                             <button
-                              onClick={() => handleMarkAsPaid(item)}
+                              onClick={() => {
+                                setSelectedItemForSettlement(item);
+                                setSettlementAmount(String(item.remainingAmount));
+                                setSettlementEmployee(employees.includes(item.employee) ? item.employee : '');
+                              }}
                               className="px-2.5 py-1.5 bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border border-slate-200 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
-                              title="اعتبار هذه الحركة مسددة بالكامل كحركة قديمة بدون تسديد جديد"
+                              title="تسديد المبلغ واختيار العهدة لتسجيل الخصم"
                             >
                               <Check size={13} />
                               <span>مسددة</span>
@@ -1002,17 +1011,25 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
                   </div>
 
                   {/* Cash box Employee Selector */}
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-black text-gray-700">الموظف / الصندوق القائم بالصرف (خصم من عهدته)</label>
+                  <div className="space-y-2 p-4 bg-emerald-50/80 border-2 border-emerald-200 rounded-2xl">
+                    <label className="block text-xs font-black text-emerald-950 flex items-center justify-between">
+                      <span>💳 خصم السداد من عهدة الموظف / الصندوق:</span>
+                      <span className="text-rose-600 font-bold text-[11px]">* مطلوب للتحديث</span>
+                    </label>
                     <select
+                      required
                       value={settlementEmployee}
                       onChange={e => setSettlementEmployee(e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl font-bold text-xs text-gray-900 outline-none focus:border-emerald-500"
+                      className="w-full px-4 py-3 bg-white border border-emerald-300 rounded-xl font-black text-xs text-gray-900 outline-none focus:border-emerald-600 shadow-sm cursor-pointer"
                     >
+                      <option value="">-- اختر الموظف / العهدة القائمة بالسداد --</option>
                       {employees.map(emp => (
                         <option key={emp} value={emp}>{emp}</option>
                       ))}
                     </select>
+                    <p className="text-[11px] text-emerald-800 font-bold leading-relaxed">
+                      تنبيه: سيتم تسجيل حركة مصروف سداد مخصومة فوراً من عهدة <span className="underline font-black">{settlementEmployee || 'الموظف المحدد'}</span> في شيت جوجل لتحديث رصيد الصندوق الفعلي.
+                    </p>
                   </div>
 
                   <div className="space-y-1.5">

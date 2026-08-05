@@ -244,17 +244,15 @@ export const gasService = {
       const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
+        redirect: 'follow',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify({ action: 'addEmployee', name }),
       });
       const text = await response.text();
-      try {
-        return JSON.parse(text);
-      } catch (e) {
-        return { success: false, error: 'خطأ في معالجة البيانات' };
-      }
+      this.clearCache();
+      return safeParseGasResponse(text, response.ok);
     } catch (error) {
       console.error('Error adding employee:', error);
       return { success: false, error: 'خطأ في الاتصال. يرجى التأكد من نشر السكريبت بصلاحية "Anyone".' };
@@ -267,13 +265,15 @@ export const gasService = {
       const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
+        redirect: 'follow',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify({ action: 'deleteEmployee', name }),
       });
       const text = await response.text();
-      return JSON.parse(text);
+      this.clearCache();
+      return safeParseGasResponse(text, response.ok);
     } catch (error) {
       console.error('Error deleting employee:', error);
       return { success: false, error: 'خطأ في الاتصال' };
@@ -347,13 +347,18 @@ export const gasService = {
       const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
+        redirect: 'follow',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify({ action: 'getSettings' }),
       });
       const text = await response.text();
-      return JSON.parse(text);
+      const parsed = safeParseGasResponse(text, response.ok);
+      return {
+        branches: Array.isArray(parsed.branches) ? parsed.branches : [],
+        categories: Array.isArray(parsed.categories) ? parsed.categories : []
+      };
     } catch (error) {
       console.error('Error fetching settings:', error);
       return { branches: [], categories: [] };
@@ -366,13 +371,15 @@ export const gasService = {
       const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
+        redirect: 'follow',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify({ action: 'updateSettings', branches, categories }),
       });
       const text = await response.text();
-      return JSON.parse(text);
+      this.clearCache();
+      return safeParseGasResponse(text, response.ok);
     } catch (error) {
       console.error('Error updating settings:', error);
       return { success: false, error: 'خطأ في الاتصال' };
@@ -385,17 +392,14 @@ export const gasService = {
       const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
+        redirect: 'follow',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify({ action: 'addUser', email, password, displayName, role }),
       });
       const text = await response.text();
-      try {
-        return JSON.parse(text);
-      } catch (e) {
-        return { success: false, error: 'خطأ في معالجة البيانات من السيرفر' };
-      }
+      return safeParseGasResponse(text, response.ok);
     } catch (error) {
       console.error('Error adding user to GAS:', error);
       return { success: false, error: 'خطأ في الاتصال بالسيرفر' };
@@ -408,6 +412,7 @@ export const gasService = {
       const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
+        redirect: 'follow',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
@@ -417,12 +422,7 @@ export const gasService = {
       if (!text || text.trim() === '') {
         return { success: false, error: 'لم يتم تفعيل دالة تسجيل الدخول في سكريبت جوجل شيت بعد' };
       }
-      try {
-        return JSON.parse(text);
-      } catch (parseErr) {
-        console.warn('Parsing GAS login response failed, likely action not supported yet:', parseErr);
-        return { success: false, error: 'لم يتم تفعيل دالة تسجيل الدخول في سكريبت جوجل شيت بعد' };
-      }
+      return safeParseGasResponse(text, response.ok);
     } catch (error) {
       console.error('Error in GAS login:', error);
       return { success: false, error: 'خطأ في الاتصال بالسيرفر' };
