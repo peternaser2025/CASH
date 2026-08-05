@@ -117,7 +117,7 @@ export const gasService = {
       
       const balancesMap = new Map<string, number>();
 
-      if (Array.isArray(data)) {
+      if (Array.isArray(data) && data.length > 0) {
         data
           .filter(([name]: [string, any]) => name && !ignoreSheets.includes(name))
           .forEach(([name, balance]: [string, number]) => {
@@ -125,26 +125,31 @@ export const gasService = {
           });
       }
 
-      // Cross-verify with actual report rows to guarantee 100% precision with individual employee sheets
-      try {
-        const report = await this.getReport({}, forceRefresh);
-        if (report && Array.isArray(report.rows) && report.rows.length > 0) {
-          const latestEmployeeBalances = new Map<string, number>();
-          
-          report.rows.forEach((row: any) => {
-            const emp = String(row.employee || row[9] || '').trim();
-            if (emp && !ignoreSheets.includes(emp)) {
-              const bal = parseFloat(String(row.balance !== undefined ? row.balance : (row[7] || 0))) || 0;
-              latestEmployeeBalances.set(emp, bal);
-            }
-          });
-
-          latestEmployeeBalances.forEach((val, emp) => {
-            balancesMap.set(emp, val);
-          });
+      // If balancesMap is empty, calculate balances directly from report transactions using the standard cash balance formula
+      if (balancesMap.size === 0) {
+        try {
+          const report = await this.getReport({}, forceRefresh);
+          if (report && Array.isArray(report.rows) && report.rows.length > 0) {
+            report.rows.forEach((row: any) => {
+              const emp = String(row.employee || row[9] || '').trim();
+              if (emp && !ignoreSheets.includes(emp)) {
+                const inc = parseFloat(String(row.income !== undefined ? row.income : (row[5] || 0))) || 0;
+                const exp = parseFloat(String(row.expense !== undefined ? row.expense : (row[6] || 0))) || 0;
+                const category = String(row.category || row[3] || '');
+                const description = String(row.description || row[4] || '');
+                
+                const isSettlement = /سداد|تسوية/i.test(category + " " + description);
+                const isAccrual = isSettlement ? false : /آجل|اجل|مستحق|مستحقة|مستحقه|رواتب مستحقة|دين|دائن|مورد|مؤجل|غير مسدد|لم يسدد|deferred|accrual|credit|due/i.test(category + " " + description);
+                const cashExp = isAccrual ? 0 : exp;
+                
+                const currentBal = balancesMap.get(emp) || 0;
+                balancesMap.set(emp, currentBal + inc - cashExp);
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('Could not calculate balances from report rows:', e);
         }
-      } catch (e) {
-        console.warn('Could not cross-verify balances with report rows:', e);
       }
 
       const parsedBalances: EmployeeBalance[] = Array.from(balancesMap.entries()).map(([name, balance]) => ({

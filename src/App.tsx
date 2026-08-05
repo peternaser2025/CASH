@@ -138,10 +138,10 @@ export default function App() {
   }, []);
 
   // Fetch data from GAS Service
-  const fetchData = async () => {
+  const fetchData = async (forceRefresh: boolean = false) => {
     setLoadingData(true);
     try {
-      const bData = await gasService.getBalances();
+      const bData = await gasService.getBalances(forceRefresh);
       setBalances(bData);
       
       const settings = await gasService.getSettings();
@@ -642,14 +642,14 @@ export default function App() {
                 <Dashboard 
                   balances={balances} 
                   loading={loadingData} 
-                  onRefresh={fetchData} 
+                  onRefresh={() => fetchData(true)} 
                 />
               )}
               {activeTab === 'new-transaction' && (
                 <TransactionForm 
                   onComplete={() => {
                     setActiveTab('reports');
-                    fetchData();
+                    fetchData(true);
                   }} 
                   employees={employeeNames} 
                   branches={branches} 
@@ -667,7 +667,7 @@ export default function App() {
               {activeTab === 'employees' && (
                 <EmployeeManager 
                   balances={balances} 
-                  onRefresh={fetchData} 
+                  onRefresh={() => fetchData(true)} 
                 />
               )}
               {activeTab === 'profit-loss' && (
@@ -675,14 +675,14 @@ export default function App() {
                   branches={branches} 
                   categories={categories} 
                   balances={balances} 
-                  onRefresh={fetchData} 
+                  onRefresh={() => fetchData(true)} 
                 />
               )}
               {activeTab === 'cost-control' && (
                 <CostControl 
                   branches={branches} 
                   categories={categories} 
-                  onRefresh={fetchData} 
+                  onRefresh={() => fetchData(true)} 
                 />
               )}
               {activeTab === 'accruals' && (
@@ -690,7 +690,7 @@ export default function App() {
                   branches={branches} 
                   categories={categories} 
                   employees={employeeNames} 
-                  onRefresh={fetchData} 
+                  onRefresh={() => fetchData(true)} 
                 />
               )}
               {activeTab === 'global-search' && (
