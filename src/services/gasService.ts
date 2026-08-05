@@ -10,6 +10,78 @@ const reportCache: Map<string, { data: ReportData; timestamp: number }> = new Ma
 let balancesCache: { data: EmployeeBalance[]; timestamp: number } | null = null;
 const CACHE_TTL_MS = 30000; // 30 seconds fresh cache
 
+// Helper to robustly parse responses from Google Apps Script
+function safeParseGasResponse(text: string, responseOk: boolean = true): { success: boolean; data?: any; error?: string; [key: string]: any } {
+  if (!text || !text.trim()) {
+    if (responseOk) {
+      return { success: true };
+    }
+    return { success: false, error: 'استجابة فارغة من السيرفر' };
+  }
+
+  const cleaned = text.trim().replace(/^\uFEFF/, '');
+
+  // 1. Direct JSON parse
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (typeof parsed === 'object' && parsed !== null) {
+      if (parsed.success === false) {
+        return { success: false, error: parsed.error || 'فشل تنفيذ العملية على شيت جوجل' };
+      }
+      return { success: true, ...parsed };
+    }
+    if (typeof parsed === 'boolean') {
+      return { success: parsed };
+    }
+    if (typeof parsed === 'string') {
+      try {
+        const inner = JSON.parse(parsed);
+        if (typeof inner === 'object' && inner !== null) {
+          return { success: inner.success !== false, ...inner };
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  } catch (e) {
+    // Continue
+  }
+
+  // 2. Extract JSON object using regex
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (typeof parsed === 'object' && parsed !== null) {
+        if (parsed.success === false) {
+          return { success: false, error: parsed.error || 'فشل تنفيذ العملية على شيت جوجل' };
+        }
+        return { success: true, ...parsed };
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // 3. String keywords match
+  if (cleaned.toLowerCase().includes('success') || cleaned.toLowerCase().includes('true') || cleaned === 'OK') {
+    return { success: true };
+  }
+
+  // 4. HTML error or Exception
+  if (cleaned.includes('<html') || cleaned.includes('<!DOCTYPE') || cleaned.includes('Exception:')) {
+    const errMsgMatch = cleaned.match(/Exception:\s*([^<]+)/i) || cleaned.match(/<title>([^<]+)<\/title>/i);
+    const detail = errMsgMatch ? errMsgMatch[1].trim() : 'حدث خطأ أثناء تنفيذ السكريبت في جوجل شيت';
+    return { success: false, error: detail };
+  }
+
+  if (responseOk) {
+    return { success: true };
+  }
+
+  return { success: false, error: 'خطأ في معالجة الاستجابة من السيرفر' };
+}
+
 export const gasService = {
   getGasUrl(): string {
     return GAS_URL;
@@ -94,6 +166,7 @@ export const gasService = {
       const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
+        redirect: 'follow',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
@@ -101,11 +174,7 @@ export const gasService = {
       });
       const text = await response.text();
       this.clearCache(); // Invalidate cache on write
-      try {
-        return JSON.parse(text);
-      } catch (e) {
-        return { success: false, error: 'خطأ في معالجة البيانات من السيرفر' };
-      }
+      return safeParseGasResponse(text, response.ok);
     } catch (error) {
       console.error('Error adding transaction:', error);
       return { success: false, error: 'خطأ في الاتصال. يرجى التأكد من نشر السكريبت بصلاحية "Anyone" وإعادة المحاولة.' };
@@ -218,6 +287,7 @@ export const gasService = {
       const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
+        redirect: 'follow',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
@@ -236,13 +306,7 @@ export const gasService = {
       });
       const text = await response.text();
       this.clearCache();
-      try {
-        const parsed = JSON.parse(text);
-        if (parsed.success) return parsed;
-        return { success: false, error: parsed.error || 'تعذر العثور على الصف المطابق للتعديل في شيت جوجل' };
-      } catch (e) {
-        return { success: false, error: 'خطأ في معالجة الاستجابة من السيرفر' };
-      }
+      return safeParseGasResponse(text, response.ok);
     } catch (error) {
       console.error('Error updating transaction:', error);
       return { success: false, error: 'خطأ في الاتصال بالسيرفر' };
@@ -256,6 +320,7 @@ export const gasService = {
       const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
+        redirect: 'follow',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
@@ -269,13 +334,7 @@ export const gasService = {
       });
       const text = await response.text();
       this.clearCache();
-      try {
-        const parsed = JSON.parse(text);
-        if (parsed.success) return parsed;
-        return { success: false, error: parsed.error || 'تعذر حذف الحركة' };
-      } catch (e) {
-        return { success: false, error: 'خطأ في معالجة البيانات' };
-      }
+      return safeParseGasResponse(text, response.ok);
     } catch (error) {
       console.error('Error deleting transaction:', error);
       return { success: false, error: 'خطأ في الاتصال' };
