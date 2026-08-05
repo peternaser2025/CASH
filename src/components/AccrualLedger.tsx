@@ -56,11 +56,20 @@ interface AccrualLedgerProps {
 }
 
 export default function AccrualLedger({ branches, categories, employees, onRefresh }: AccrualLedgerProps) {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const currentYear = new Date().getFullYear();
+  const defaultStartDate = `${currentYear}-01-01`;
+
   const [selectedBranch, setSelectedBranch] = useState<string>('All');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Due' | 'PartiallyPaid' | 'Paid'>('Due');
   const [searchQuery, setSearchQuery] = useState<string>('');
   
+  // Date Range Filters
+  const [startDate, setStartDate] = useState<string>(defaultStartDate);
+  const [endDate, setEndDate] = useState<string>(todayStr);
+  const [enableDateFilter, setEnableDateFilter] = useState<boolean>(true);
+
   const [loading, setLoading] = useState<boolean>(false);
   const [items, setItems] = useState<AccrualItem[]>([]);
   const [settledHistory, setSettledHistory] = useState<Record<string, number>>({});
@@ -142,8 +151,8 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
     try {
       const reportData = await gasService.getReport({
         branch: selectedBranch,
-        startDate: '2020-01-01',
-        endDate: '2030-12-31'
+        startDate: enableDateFilter ? startDate : '2020-01-01',
+        endDate: enableDateFilter ? endDate : '2030-12-31'
       });
 
       if (reportData && reportData.rows) {
@@ -200,29 +209,33 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
           
           if (isSettlementRow) return;
 
-          // Check if this row represents an Accrual or Credit Purchase (آجل / مستحق)
-          const isAccrued = 
-            category.includes('مستحق') || 
-            category.includes('مستحقة') || 
-            category.includes('مستحقات') || 
-            category.includes('آجل') || 
-            category.includes('اجل') || 
-            category.includes('مؤجل') || 
-            description.includes('مستحق') || 
-            description.includes('مستحقة') || 
-            description.includes('مستحقات') || 
-            description.includes('آجل') || 
-            description.includes('اجل') || 
-            description.includes('مؤجل') || 
-            description.includes('غير مسدد') || 
-            description.includes('لم يسدد') || 
-            description.includes('غير مدفوع') || 
-            description.includes('دين') ||
-            description.includes('ديون') ||
-            category.toLowerCase().includes('due') ||
-            category.toLowerCase().includes('accrued') ||
-            description.toLowerCase().includes('due') ||
-            description.toLowerCase().includes('accrued');
+          // Strip preposition phrases like "من اجل" or "من أجل" or "على اجل" to prevent false positive word matches
+          const cleanCategory = category
+            .replace(/من\s+أ?جل/gi, '')
+            .replace(/على\s+أ?جل/gi, '')
+            .trim();
+
+          const cleanDescription = description
+            .replace(/من\s+أ?جل/gi, '')
+            .replace(/على\s+أ?جل/gi, '')
+            .trim();
+
+          // Check for explicit credit/payable category indicators
+          const isAccruedCategory = 
+            /مشتريات\s+آجلة|التزامات\s+مستحقة|فاتورة\s+آجل|دين\s+آجل|مستحقات\s+موردين|آجل\s+غير\s+مسدد|دفعة\s+مؤجلة|مشتريات\s+على\s+الحساب/i.test(cleanCategory) ||
+            (cleanCategory.includes('مستحق') && !cleanCategory.includes('سداد')) ||
+            (cleanCategory.includes('مستحقة') && !cleanCategory.includes('سداد')) ||
+            (cleanCategory.includes('مستحقات') && !cleanCategory.includes('سداد')) ||
+            (cleanCategory.includes('آجل') && !cleanCategory.includes('سداد'));
+
+          // Check for explicit credit/payable description tags
+          const isAccruedDesc = 
+            /\[آجل\]|\[مستحق\]|غير\s+مسدد|لم\s+يسدد|غير\s+مدفوع|على\s+الحساب|دين\s+قائم|فاتورة\s+آجلة|فاتوره\s+اجل|مشتريات\s+آجلة/i.test(cleanDescription) ||
+            (/\bآجل\b/.test(cleanDescription) && !cleanDescription.includes('سداد')) ||
+            (/\bاجل\b/.test(cleanDescription) && !cleanDescription.includes('سداد')) ||
+            (cleanDescription.includes('مستحق') && !/سداد|تسوية|تم\s+الدفع|مسدد/i.test(cleanDescription));
+
+          const isAccrued = (isAccruedCategory || isAccruedDesc);
 
           if (isAccrued && (expense > 0 || income > 0)) {
             const originalAmount = expense > 0 ? expense : income;
@@ -300,7 +313,28 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
 
   useEffect(() => {
     fetchAccruals();
-  }, [selectedBranch, settledHistory]);
+  }, [selectedBranch, settledHistory, startDate, endDate, enableDateFilter]);
+
+  // Mark single item as paid/settled directly without adding a new cash payout row
+  const handleMarkAsPaid = (item: AccrualItem) => {
+    const updatedSettled = {
+      ...settledHistory,
+      [item.id]: item.amount
+    };
+    setSettledHistory(updatedSettled);
+    localStorage.setItem('kwd_accrual_settlements', JSON.stringify(updatedSettled));
+  };
+
+  // Bulk mark all currently visible items as settled
+  const handleBulkMarkAllAsPaid = () => {
+    if (!window.confirm('هل أنت متأكد من اعتبار كافة الحركات المسجلة المعروضة مسددة بالكامل؟')) return;
+    const updatedSettled = { ...settledHistory };
+    filteredItems.forEach(item => {
+      updatedSettled[item.id] = item.amount;
+    });
+    setSettledHistory(updatedSettled);
+    localStorage.setItem('kwd_accrual_settlements', JSON.stringify(updatedSettled));
+  };
 
   // Handle Settlement Submission
   const handleSettle = async (e: React.FormEvent) => {
@@ -644,9 +678,9 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
 
       {/* Filter and Search Bar */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3 no-print">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Search box */}
-          <div className="relative md:col-span-2">
+          <div className="relative lg:col-span-2">
             <Search size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
@@ -688,7 +722,54 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
               <option value="Paid">مسددة بالكامل (✅)</option>
             </select>
           </div>
+        </div>
 
+        {/* Date Filter Controls Bar */}
+        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 font-bold text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={enableDateFilter}
+                onChange={e => setEnableDateFilter(e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500 cursor-pointer"
+              />
+              <span>فلتر تحديد تاريخ الكشف</span>
+            </label>
+
+            {enableDateFilter && (
+              <div className="flex flex-wrap items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+                <div className="flex items-center gap-1.5 px-2">
+                  <Calendar size={14} className="text-slate-500" />
+                  <span className="font-bold text-slate-600 text-[11px]">من:</span>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={e => setStartDate(e.target.value)}
+                    className="bg-white px-2 py-1 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 outline-none cursor-pointer"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 px-2 border-r border-slate-200">
+                  <span className="font-bold text-slate-600 text-[11px]">إلى:</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={e => setEndDate(e.target.value)}
+                    className="bg-white px-2 py-1 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 outline-none cursor-pointer"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={handleBulkMarkAllAsPaid}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors flex items-center gap-1.5 text-xs border border-slate-300 cursor-pointer shadow-sm"
+            title="اعتبار جميع الحركات المعروضة مسددة بالكامل كحركات قديمة"
+          >
+            <CheckCircle2 size={14} className="text-emerald-600" />
+            <span>اعتبار المعروض مسدد بالكامل (تصفير السجلات القديمة)</span>
+          </button>
         </div>
       </div>
 
@@ -799,21 +880,37 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
                       </td>
 
                       <td className="px-4 py-3 text-center no-print">
-                        {item.remainingAmount > 0 ? (
-                          <button
-                            onClick={() => {
-                              setSelectedItemForSettlement(item);
-                              setSettlementAmount(String(item.remainingAmount));
-                              setSettlementEmployee(item.employee || (employees.length > 0 ? employees[0] : 'إدارة'));
-                            }}
-                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1 mx-auto"
-                          >
-                            <CreditCard size={13} />
-                            تسديد الدفعة
-                          </button>
-                        ) : (
-                          <span className="text-slate-400 text-[11px] font-bold">مكتمل ✅</span>
-                        )}
+                        <div className="flex items-center justify-center gap-1.5">
+                          {item.remainingAmount > 0 && (
+                            <button
+                              onClick={() => {
+                                setSelectedItemForSettlement(item);
+                                setSettlementAmount(String(item.remainingAmount));
+                                setSettlementEmployee(item.employee || (employees.length > 0 ? employees[0] : 'إدارة'));
+                              }}
+                              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center gap-1"
+                              title="تسديد المبلغ من الصندوق وتسجيل مصروف سداد"
+                            >
+                              <CreditCard size={13} />
+                              <span>تسديد الدفعة</span>
+                            </button>
+                          )}
+
+                          {item.status !== 'Paid' ? (
+                            <button
+                              onClick={() => handleMarkAsPaid(item)}
+                              className="px-2.5 py-1.5 bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border border-slate-200 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                              title="اعتبار هذه الحركة مسددة بالكامل كحركة قديمة بدون تسديد جديد"
+                            >
+                              <Check size={13} />
+                              <span>مسددة</span>
+                            </button>
+                          ) : (
+                            <span className="text-emerald-600 text-[11px] font-bold inline-flex items-center gap-1">
+                              <CheckCircle2 size={13} /> مكتمل
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
