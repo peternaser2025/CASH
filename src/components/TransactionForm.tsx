@@ -63,8 +63,13 @@ export default function TransactionForm({ onComplete, employees, branches, categ
         finalCategory = `${finalCategory} (آجل/مستحق)`;
       }
       finalDescription = `[مستحق/آجل] ${finalDescription} ${formData.vendorName ? '- المورد: ' + formData.vendorName : ''}`;
-    } else if (finalCategory.includes('سداد') && formData.hasTargetMonth) {
-      finalDescription = `[سداد مستحقات/آجل سابق - تخص شهر ${formData.targetMonth}] ${finalDescription}`;
+    }
+
+    if (formData.hasTargetMonth && formData.targetMonth) {
+      const targetTag = `[تخص شهر ${formData.targetMonth}]`;
+      if (!finalDescription.includes(targetTag) && !finalDescription.includes(`تخص شهر ${formData.targetMonth}`)) {
+        finalDescription = `${targetTag} ${finalDescription}`;
+      }
     }
 
     const data = {

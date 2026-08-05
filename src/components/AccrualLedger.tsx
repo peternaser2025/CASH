@@ -1032,8 +1032,37 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
                     </p>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-black text-gray-700">المبلغ المراد تسديده الآن (د.ك)</label>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="block text-xs font-black text-gray-700">المبلغ المراد تسديده الآن (د.ك)</label>
+                      <span className="text-[11px] font-bold text-slate-500">اختر سداد سريع أو أدخل مبلغ:</span>
+                    </div>
+
+                    {/* Quick Payment Preset Buttons */}
+                    <div className="grid grid-cols-3 gap-2 pb-1">
+                      <button
+                        type="button"
+                        onClick={() => setSettlementAmount(selectedItemForSettlement.remainingAmount.toString())}
+                        className="py-1.5 px-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 rounded-lg text-[11px] font-black transition-all text-center cursor-pointer"
+                      >
+                        كامل المتبقي ({formatKWD(selectedItemForSettlement.remainingAmount)})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSettlementAmount((Math.round(selectedItemForSettlement.remainingAmount * 0.5 * 1000) / 1000).toString())}
+                        className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-[11px] font-bold transition-all text-center cursor-pointer"
+                      >
+                        النصف 50% ({formatKWD(selectedItemForSettlement.remainingAmount * 0.5)})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSettlementAmount((Math.round(selectedItemForSettlement.remainingAmount * 0.25 * 1000) / 1000).toString())}
+                        className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-[11px] font-bold transition-all text-center cursor-pointer"
+                      >
+                        الربع 25% ({formatKWD(selectedItemForSettlement.remainingAmount * 0.25)})
+                      </button>
+                    </div>
+
                     <input
                       type="number"
                       step="0.001"
@@ -1041,7 +1070,7 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
                       max={selectedItemForSettlement.remainingAmount}
                       value={settlementAmount}
                       onChange={e => setSettlementAmount(e.target.value)}
-                      className="w-full px-5 py-3 bg-gray-50 border border-gray-300 rounded-2xl font-mono text-xl font-black text-center text-emerald-600 outline-none focus:border-emerald-500"
+                      className="w-full px-5 py-3 bg-gray-50 border border-gray-300 rounded-2xl font-mono text-xl font-black text-center text-emerald-600 outline-none focus:border-emerald-500 shadow-inner"
                     />
                   </div>
 

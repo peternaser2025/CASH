@@ -154,10 +154,11 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
       const lastDay = new Date(yearNum, monthNum + 1, 0).getDate();
       const endDate = `${year}-${monthStr}-${String(lastDay).padStart(2, '0')}`;
 
+      // Fetch full report for branch to accurately process targetMonth vs creation date
       const reportData = await gasService.getReport({
         branch: selectedBranch,
-        startDate,
-        endDate
+        startDate: '2020-01-01',
+        endDate: '2030-12-31'
       });
 
       if (!reportData || !reportData.rows) {
@@ -175,9 +176,10 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
       let totalPurchases = 0;
       let unpaidExpenses = 0;
       let unpaidPurchases = 0;
+      let totalSettlements = 0;
 
       reportData.rows.forEach((row: any, idx: number) => {
-        const date = String(getRowValue(row, 0, 'date') || startDate);
+        const date = String(getRowValue(row, 0, 'date') || startDate).split('T')[0];
         const employee = String(getRowValue(row, 1, 'employee') || 'عام');
         const branch = String(getRowValue(row, 2, 'branch') || selectedBranch);
         const type = String(getRowValue(row, 3, 'type') || '').trim();
@@ -188,6 +190,45 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
 
         // Skip internal transfers / custody movements
         if (isTransferType(type, category)) {
+          return;
+        }
+
+        // Extract target month allocation if explicitly specified in description or field
+        const targetMatch = description.match(/\[?\s*(?:سداد\s+مستحقات\/آجل\s+سابق\s*-\s*)?تخص\s+شهر\s*(\d{4}[-/]\d{2})\s*\]?/i) ||
+                            description.match(/تخص\s+شهر\s*(\d{4}[-/]\d{2})/i) ||
+                            description.match(/عن\s+شهر\s*(\d{4}[-/]\d{2})/i) ||
+                            description.match(/\[(\d{4}[-/]\d{2})\]/);
+
+        const targetMonth = getRowValue(row, 9, 'targetMonth') || (targetMatch ? targetMatch[1].replace('/', '-') : null);
+        const rowMonth = date ? date.slice(0, 7) : '';
+        const effectiveMonth = targetMonth || rowMonth;
+
+        const isSettlement = /سداد.*(مستحق|آجل|اجل|دين|دائن|مورد|التزام)|سداد مشتريات|تسوية التزامات/i.test(`${category} ${description}`) ||
+                            description.includes('سداد مستحقات') || 
+                            description.includes('سداد آجل') ||
+                            category.includes('سداد مشتريات');
+
+        if (isSettlement && expenseAmount > 0) {
+          // Include settlement in details if paid in selected month OR allocated to selected month
+          if (rowMonth === selectedMonth || effectiveMonth === selectedMonth) {
+            totalSettlements += expenseAmount;
+            items.push({
+              id: `settle-${idx}`,
+              date,
+              employee,
+              branch,
+              category: category || 'تسوية ديون',
+              description,
+              amount: expenseAmount,
+              operationType: 'سداد مستحقات ديون سابقة'
+            });
+          }
+          return;
+        }
+
+        // For non-settlement transactions (Sales, Expenses, Purchases):
+        // Only include in P&L if effectiveMonth matches the selected report month!
+        if (effectiveMonth !== selectedMonth) {
           return;
         }
 
@@ -209,25 +250,6 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
 
         // 2. Expense / Purchase Transaction
         if (expenseAmount > 0) {
-          const isSettlement = /سداد.*(مستحق|آجل|اجل|دين|دائن|مورد|التزام)|سداد مشتريات|تسوية التزامات/i.test(`${category} ${description}`) ||
-                              description.includes('سداد مستحقات') || 
-                              description.includes('سداد آجل') ||
-                              category.includes('سداد مشتريات');
-
-          if (isSettlement) {
-            items.push({
-              id: `settle-${idx}`,
-              date,
-              employee,
-              branch,
-              category: category || 'تسوية ديون',
-              description,
-              amount: expenseAmount,
-              operationType: 'سداد مستحقات ديون سابقة'
-            });
-            return;
-          }
-
           const isAccrual = /آجل|اجل|مستحق|مستحقة|مستحقه|رواتب مستحقة|دين|دائن|مورد|مؤجل|غير مسدد|لم يسدد|deferred|accrual|credit|due/i.test(`${category} ${description}`);
           const isPurchase = category.includes('مشتريات') || category.includes('شراء') || category.toLowerCase().includes('purchase') || description.includes('شراء');
 
@@ -257,7 +279,7 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
             employee,
             branch,
             category: category || (isPurchase ? 'مشتريات' : 'مصاريف'),
-            description,
+            description: targetMonth && targetMonth !== rowMonth ? `${description} [محول للشهر المستهدف: ${targetMonth}]` : description,
             amount: expenseAmount,
             operationType: opType
           });
