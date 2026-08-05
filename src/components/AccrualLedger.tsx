@@ -170,8 +170,8 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
           const isSettlement = /سداد|تسوية|سداد مشتريات|تسوية التزامات|تسديد|دفع|دفعت|تم دفع|تم السداد|تم تسديد|دفعة من|صافي مدفوع/i.test(combined);
 
           if (isSettlement && expense > 0) {
-            // Extract embedded ACCRUAL_REF ID if present
-            const refMatch = description.match(/ACCRUAL_REF:(row_[^\s\]]+)/) || description.match(/REF:(row_[^\s\]]+)/);
+            // Extract embedded ACCRUAL_REF ID if present (supports row_*, ref_*, etc.)
+            const refMatch = description.match(/ACCRUAL_REF:([^\s\]]+)/) || description.match(/REF:([^\s\]]+)/);
             if (refMatch && refMatch[1]) {
               const refId = refMatch[1];
               sheetsSettlements[refId] = (sheetsSettlements[refId] || 0) + expense;
@@ -248,11 +248,23 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
             let paidFromSheets = sheetsSettlements[itemId] || 0;
 
             if (paidFromSheets === 0) {
+              // Fallback 1: Match by ACCRUAL_REF key ending with date and amount (e.g., _2026-06-22_1210)
+              Object.keys(sheetsSettlements).forEach(refKey => {
+                const amtStr = String(originalAmount);
+                if ((date && refKey.includes(date) && refKey.includes(amtStr)) ||
+                    refKey.endsWith(`_${amtStr}`) ||
+                    refKey.endsWith(`_${amtStr}.000`)) {
+                  paidFromSheets += sheetsSettlements[refKey];
+                }
+              });
+            }
+
+            if (paidFromSheets === 0) {
               const vendorLower = (employee || '').toLowerCase();
               const descLower = description.toLowerCase();
 
               keywordSettlements.forEach(ks => {
-                if ((vendorLower && ks.keyword.includes(vendorLower)) || 
+                if ((vendorLower && vendorLower.length > 2 && ks.keyword.includes(vendorLower)) || 
                     (descLower && descLower.length > 5 && ks.keyword.includes(descLower.slice(0, 15)))) {
                   paidFromSheets += ks.amount;
                 }
