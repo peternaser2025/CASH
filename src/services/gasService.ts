@@ -406,7 +406,7 @@ export const gasService = {
       const text = await response.text();
       return safeParseGasResponse(text, response.ok);
     } catch (error) {
-      console.error('Error adding user to GAS:', error);
+      console.warn('Could not add user to GAS:', error);
       return { success: false, error: 'خطأ في الاتصال بالسيرفر' };
     }
   },
@@ -429,8 +429,40 @@ export const gasService = {
       }
       return safeParseGasResponse(text, response.ok);
     } catch (error) {
-      console.error('Error in GAS login:', error);
+      console.warn('GAS login connection warning:', error);
       return { success: false, error: 'خطأ في الاتصال بالسيرفر' };
+    }
+  },
+
+  async archiveFiscalYear(year: string, onlyCompleted: boolean = true): Promise<{ success: boolean; movedCount?: number; archiveSheetName?: string; message?: string; error?: string }> {
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    }
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({ action: 'archiveFiscalYear', year, onlyCompleted }),
+      });
+      const text = await response.text();
+      this.clearCache();
+      const parsed = safeParseGasResponse(text, response.ok);
+      if (parsed.success) {
+        return {
+          success: true,
+          movedCount: parsed.movedCount !== undefined ? parsed.movedCount : (parsed.count || 0),
+          archiveSheetName: parsed.archiveSheetName || `أرشيف_${year}`,
+          message: parsed.message || `تم أرشفة ونقل معاملات السنة المالية ${year} بنجاح إلى Google Sheets`
+        };
+      }
+      return { success: false, error: parsed.error || 'فشلت أرشفة السنة المالية' };
+    } catch (error: any) {
+      console.warn('Fiscal year archiving connection warning:', error);
+      return { success: false, error: 'خطأ أثناء الاتصال بسيرفر الأرشفة' };
     }
   }
 };

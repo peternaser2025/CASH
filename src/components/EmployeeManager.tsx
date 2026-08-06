@@ -160,6 +160,8 @@ function handleRequest(e, method) {
       result = getSettings(ss);
     } else if (action === "updateSettings") {
       result = updateSettings(ss, requestData.branches, requestData.categories);
+    } else if (action === "archiveFiscalYear") {
+      result = archiveFiscalYear(ss, requestData.year, requestData.onlyCompleted);
     }
     
     return ContentService.createTextOutput(JSON.stringify(result))
@@ -327,6 +329,69 @@ function updateSettings(ss, branches, categories) {
   if (!catFound) sheet.appendRow(["Categories", categoriesStr]);
   
   return { success: true };
+}
+
+// أرشفة السنة المالية
+function archiveFiscalYear(ss, year, onlyCompleted) {
+  var yearStr = String(year || "").trim();
+  if (!yearStr) return { success: false, error: "يرجى تحديد السنة المالية للأرشفة" };
+
+  var archiveSheetName = "أرشيف_" + yearStr;
+  var archiveSheet = ss.getSheetByName(archiveSheetName);
+  if (!archiveSheet) {
+    archiveSheet = ss.insertSheet(archiveSheetName);
+    archiveSheet.appendRow(["الرقم التعريفى", "التاريخ", "النوع", "البند والتصنيف", "الموظف / الصندوق", "المبلغ (د.ك)", "الملاحظات والبيان", "الفرع"]);
+    archiveSheet.getRange("A1:H1").setFontWeight("bold").setBackground("#D5E8D4");
+  }
+
+  var mainSheet = ss.getSheetByName("البيانات") || ss.getSheetByName("Sheet1") || ss.getSheets()[0];
+  if (!mainSheet) return { success: false, error: "جدول البيانات الرئيسي غير موجود" };
+
+  var lastRow = mainSheet.getLastRow();
+  var movedCount = 0;
+
+  if (lastRow > 1) {
+    var values = mainSheet.getRange(2, 1, lastRow - 1, Math.max(8, mainSheet.getLastColumn())).getValues();
+    var rowsToKeep = [];
+
+    for (var i = 0; i < values.length; i++) {
+      var r = values[i];
+      var rDate = String(r[1] || "").split("T")[0];
+      var rowYear = rDate ? rDate.substring(0, 4) : "";
+      var rCat = String(r[3] || "");
+      var rDesc = String(r[6] || "");
+
+      var isTargetYear = (rowYear === yearStr);
+      var isSettled = /مسدد|سداد|خالص|مكتمل/i.test(rCat + " " + rDesc) || (!/مستحق|آجل|اجل|دين/i.test(rCat + " " + rDesc));
+
+      var shouldArchive = isTargetYear;
+      if (onlyCompleted) {
+        shouldArchive = isTargetYear && isSettled;
+      }
+
+      if (shouldArchive) {
+        archiveSheet.appendRow(r);
+        movedCount++;
+      } else {
+        rowsToKeep.push(r);
+      }
+    }
+
+    if (movedCount > 0) {
+      mainSheet.clearContents();
+      mainSheet.appendRow(["الرقم التعريفى", "التاريخ", "النوع", "البند والتصنيف", "الموظف / الصندوق", "المبلغ (د.ك)", "الملاحظات والبيان", "الفرع"]);
+      if (rowsToKeep.length > 0) {
+        mainSheet.getRange(2, 1, rowsToKeep.length, 8).setValues(rowsToKeep);
+      }
+    }
+  }
+
+  return {
+    success: true,
+    movedCount: movedCount,
+    archiveSheetName: archiveSheetName,
+    message: "تم أرشفة " + movedCount + " حركة مالية بنجاح إلى " + archiveSheetName
+  };
 }
 
 // دالة إضافة موظف جديد وإنشاء التب الخاص به تلقائياً في ثوانٍ!

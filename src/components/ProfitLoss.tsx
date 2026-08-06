@@ -27,6 +27,8 @@ import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
 import { formatKWD, isTransferType } from '../utils/format';
 import { exportReportToExcel } from '../utils/excelExport';
+import { exportElementToPDF } from '../utils/pdfExport';
+import { Loader2 } from 'lucide-react';
 
 interface ProfitLossProps {
   branches: string[];
@@ -88,6 +90,30 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
   const [openingStockInput, setOpeningStockInput] = useState<string>('');
   const [closingStockInput, setClosingStockInput] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
+
+  const [pdfLoading, setPdfLoading] = useState<boolean>(false);
+
+  const handleExportPLPDF = async () => {
+    const el = document.getElementById('printable-pl-report');
+    if (!el) return;
+
+    setPdfLoading(true);
+    try {
+      const cleanBranch = selectedBranch.replace(/[/\\?%*:|"<>]/g, '_');
+      const filename = `تقرير_الأرباح_والخسائر_${cleanBranch}_${selectedMonth}.pdf`;
+      await exportElementToPDF(el, {
+        filename,
+        orientation: 'portrait',
+        margins: 'narrow',
+        scale: 100
+      });
+    } catch (err) {
+      console.error('Error generating P&L PDF:', err);
+      alert('حدث خطأ أثناء تحميل تقرير الأرباح والخسائر بصيغة PDF');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   // Autopulled calculations and detailed transaction list
   const [allTransactions, setAllTransactions] = useState<PLDetailItem[]>([]);
@@ -621,6 +647,14 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <button
+            onClick={handleExportPLPDF}
+            disabled={pdfLoading}
+            className="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-full font-bold text-sm transition-all shadow-sm cursor-pointer disabled:opacity-50"
+          >
+            {pdfLoading ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
+            <span>تصدير PDF مباشر</span>
+          </button>
+          <button
             onClick={handleExportCurrentPL}
             className="flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-bold text-sm transition-all shadow-sm cursor-pointer"
           >
@@ -841,7 +875,7 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
           </AnimatePresence>
 
           {/* Dynamic Financial Report Sheet (Aesthetic Print Card) */}
-          <div className="bg-white border-2 border-gray-900 rounded-[2.5rem] shadow-sm overflow-hidden relative print:border-none print:shadow-none print:p-0">
+          <div id="printable-pl-report" className="bg-white border-2 border-gray-900 rounded-[2.5rem] shadow-sm overflow-hidden relative print:border-none print:shadow-none print:p-0">
             
             {/* Elegant Header */}
             <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 print:bg-white print:pb-4 print:p-2">

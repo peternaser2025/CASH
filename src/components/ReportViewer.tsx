@@ -28,6 +28,7 @@ import {
   X
 } from 'lucide-react';
 import { exportReportToExcel } from '../utils/excelExport';
+import { exportElementToPDF } from '../utils/pdfExport';
 import { 
   PieChart, 
   Pie, 
@@ -156,8 +157,34 @@ export default function ReportViewer({ employees, balances, branches, categories
     }
   };
 
+  const [pdfLoading, setPdfLoading] = useState(false);
+
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleExportPDF = async () => {
+    const el = document.getElementById('printable-report');
+    if (!el || !report) return;
+
+    setPdfLoading(true);
+    try {
+      const entity = filters.employee || filters.branch || 'تقرير_كشف_حساب';
+      const cleanEntity = entity.replace(/[/\\?%*:|"<>]/g, '_');
+      const filename = `كشف_حساب_${cleanEntity}_${filters.startDate}_إلى_${filters.endDate}.pdf`;
+
+      await exportElementToPDF(el, {
+        filename,
+        orientation: printSettings.orientation,
+        margins: printSettings.margins,
+        scale: printSettings.scale
+      });
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+      alert('حدث خطأ أثناء إنشاء ملف PDF، يرجى المحاولة مرة أخرى.');
+    } finally {
+      setPdfLoading(false);
+    }
   };
 
   const filteredRows = report ? report.rows.filter(row => {
@@ -367,6 +394,15 @@ export default function ReportViewer({ employees, balances, branches, categories
         </div>
         <div className="flex flex-wrap items-center gap-3 relative">
           <button
+            onClick={handleExportPDF}
+            disabled={!report || pdfLoading}
+            className="flex items-center gap-2 px-6 py-4 bg-red-600 hover:bg-red-700 text-white rounded-full font-bold text-sm shadow-md transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+          >
+            {pdfLoading ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
+            <span>تحميل PDF</span>
+          </button>
+
+          <button
             onClick={handleExportExcel}
             disabled={!report}
             className="flex items-center gap-2 px-6 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-bold text-sm shadow-md transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
@@ -461,27 +497,41 @@ export default function ReportViewer({ employees, balances, branches, categories
                   </div>
                 </div>
 
-                <div className="pt-4 border-t-2 border-gray-100 flex gap-2">
-                  <button
-                    onClick={() => setPrintSettings({
-                      margins: 'narrow',
-                      fontSize: 'normal',
-                      orientation: 'landscape',
-                      scale: 100,
-                      showSummary: true
-                    })}
-                    className="px-4 py-4 bg-gray-100 text-gray-600 rounded-2xl font-black text-sm hover:bg-gray-200 transition-all"
-                  >
-                    إعادة ضبط
-                  </button>
+                <div className="pt-4 border-t-2 border-gray-100 flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setPrintSettings({
+                        margins: 'narrow',
+                        fontSize: 'normal',
+                        orientation: 'landscape',
+                        scale: 100,
+                        showSummary: true
+                      })}
+                      className="px-4 py-3 bg-gray-100 text-gray-600 rounded-2xl font-black text-xs hover:bg-gray-200 transition-all"
+                    >
+                      إعادة ضبط
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowPrintConfig(false);
+                        handlePrint();
+                      }}
+                      className="flex-1 py-3 bg-emerald-600 text-white rounded-2xl font-black text-xs shadow-md shadow-emerald-600/20 active:scale-95 transition-all hover:bg-emerald-700"
+                    >
+                      تطبيق والطباعة
+                    </button>
+                  </div>
+
                   <button
                     onClick={() => {
                       setShowPrintConfig(false);
-                      handlePrint();
+                      handleExportPDF();
                     }}
-                    className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-emerald-600/20 active:scale-95 transition-all hover:bg-emerald-700"
+                    disabled={pdfLoading}
+                    className="w-full py-3 bg-red-600 text-white rounded-2xl font-black text-xs shadow-md shadow-red-600/20 active:scale-95 transition-all hover:bg-red-700 flex items-center justify-center gap-2"
                   >
-                    تطبيق والطباعة
+                    {pdfLoading ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
+                    <span>تنزيل كملف PDF بهذه الإعدادات</span>
                   </button>
                 </div>
               </motion.div>
