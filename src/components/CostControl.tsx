@@ -26,7 +26,7 @@ import {
   PieChart
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
-import { formatKWD, isTransferType, isIncomeType, isExpenseType } from '../utils/format';
+import { formatKWD, isTransferType, isIncomeType, isExpenseType, matchBranch } from '../utils/format';
 import { exportReportToExcel } from '../utils/excelExport';
 
 interface CostControlProps {
@@ -166,6 +166,11 @@ export default function CostControl({ branches, categories, onRefresh }: CostCon
 
       if (reportData && reportData.rows) {
         reportData.rows.forEach((row: any) => {
+          const rowBranch = String(getRowValue(row, 2, 'branch') || 'عام').trim();
+          if (selectedBranch && selectedBranch !== 'All' && !matchBranch(rowBranch, selectedBranch)) {
+            return;
+          }
+
           const type = String(getRowValue(row, 3, 'type') || '').trim();
           const category = String(getRowValue(row, 4, 'category') || 'عام').trim();
           const income = parseFloat(String(getRowValue(row, 5, 'income') || 0)) || 0;

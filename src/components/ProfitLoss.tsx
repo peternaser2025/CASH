@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
-import { formatKWD, isTransferType } from '../utils/format';
+import { formatKWD, isTransferType, matchBranch } from '../utils/format';
 import { exportReportToExcel } from '../utils/excelExport';
 import { exportElementToPDF } from '../utils/pdfExport';
 import { Loader2 } from 'lucide-react';
@@ -208,6 +208,10 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
         const date = String(getRowValue(row, 0, 'date') || startDate).split('T')[0];
         const employee = String(getRowValue(row, 1, 'employee') || 'عام');
         const branch = String(getRowValue(row, 2, 'branch') || selectedBranch);
+
+        if (selectedBranch && selectedBranch !== 'All' && !matchBranch(branch, selectedBranch)) {
+          return;
+        }
         const type = String(getRowValue(row, 3, 'type') || '').trim();
         const category = String(getRowValue(row, 4, 'category') || '').trim();
         const incomeAmount = parseFloat(String(getRowValue(row, 5, 'income') || 0)) || 0;

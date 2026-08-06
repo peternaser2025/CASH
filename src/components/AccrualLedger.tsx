@@ -24,10 +24,28 @@ import {
   Wallet,
   Tag,
   Info,
-  Check
+  Check,
+  TrendingUp,
+  BarChart3,
+  CalendarClock,
+  Layers,
+  Sparkles,
+  ArrowDownRight
 } from 'lucide-react';
+import { 
+  ResponsiveContainer, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  CartesianGrid, 
+  Cell,
+  AreaChart,
+  Area
+} from 'recharts';
 import { gasService } from '../services/gasService';
-import { formatKWD, isTransferType } from '../utils/format';
+import { formatKWD, isTransferType, matchBranch } from '../utils/format';
 import { exportReportToExcel } from '../utils/excelExport';
 
 interface AccrualItem {
@@ -188,6 +206,9 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
         reportData.rows.forEach((row: any, index: number) => {
           const date = String(getRowVal(row, 0, ['date']) || '').split('T')[0];
           const branch = String(getRowVal(row, 2, ['branch']) || 'عام');
+          
+          if (selectedBranch && selectedBranch !== 'All' && !matchBranch(branch, selectedBranch)) return;
+
           const type = String(getRowVal(row, 3, ['type']) || '');
           const category = String(getRowVal(row, 4, ['category']) || '');
           const expense = getRowAmount(row, 'expense');
@@ -489,6 +510,103 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
     };
   }, [items]);
 
+  const [timelineTab, setTimelineTab] = useState<'chart' | 'timeline' | 'vendors'>('chart');
+
+  // Cash planning & current month due commitments timeline logic
+  const cashPlanningData = useMemo(() => {
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth();
+
+    const dueItems = items.filter(i => i.remainingAmount > 0);
+
+    const weeklyDistribution = [
+      { weekName: 'الأسبوع الأول (1-7)', shortLabel: 'الأسبوع 1', totalDue: 0, itemsCount: 0, color: '#f59e0b' },
+      { weekName: 'الأسبوع الثاني (8-14)', shortLabel: 'الأسبوع 2', totalDue: 0, itemsCount: 0, color: '#ef4444' },
+      { weekName: 'الأسبوع الثالث (15-21)', shortLabel: 'الأسبوع 3', totalDue: 0, itemsCount: 0, color: '#3b82f6' },
+      { weekName: 'الأسبوع الرابع واللاحق (22+)', shortLabel: 'الأسبوع 4+', totalDue: 0, itemsCount: 0, color: '#10b981' },
+    ];
+
+    let currentMonthTotalDue = 0;
+    let next7DaysTotalDue = 0;
+    let overdueTotalDue = 0;
+
+    const todayTs = new Date(curYear, curMonth, now.getDate()).getTime();
+    const next7DaysTs = todayTs + 7 * 24 * 60 * 60 * 1000;
+
+    dueItems.forEach(item => {
+      const itemDateStr = item.dueDate || item.date;
+      const itemDate = new Date(itemDateStr);
+
+      if (isNaN(itemDate.getTime())) return;
+
+      const itemYear = itemDate.getFullYear();
+      const itemMonth = itemDate.getMonth();
+      const itemDay = itemDate.getDate();
+
+      const itemTs = new Date(itemYear, itemMonth, itemDay).getTime();
+
+      // Check overdue
+      if (itemTs < todayTs) {
+        overdueTotalDue += item.remainingAmount;
+      }
+
+      // Check next 7 days
+      if (itemTs >= todayTs && itemTs <= next7DaysTs) {
+        next7DaysTotalDue += item.remainingAmount;
+      }
+
+      // Check current month
+      if (itemYear === curYear && itemMonth === curMonth) {
+        currentMonthTotalDue += item.remainingAmount;
+
+        if (itemDay <= 7) {
+          weeklyDistribution[0].totalDue += item.remainingAmount;
+          weeklyDistribution[0].itemsCount += 1;
+        } else if (itemDay <= 14) {
+          weeklyDistribution[1].totalDue += item.remainingAmount;
+          weeklyDistribution[1].itemsCount += 1;
+        } else if (itemDay <= 21) {
+          weeklyDistribution[2].totalDue += item.remainingAmount;
+          weeklyDistribution[2].itemsCount += 1;
+        } else {
+          weeklyDistribution[3].totalDue += item.remainingAmount;
+          weeklyDistribution[3].itemsCount += 1;
+        }
+      }
+    });
+
+    // Chronological due items list
+    const sortedDueItems = [...dueItems].sort((a, b) => {
+      const dateA = a.dueDate || a.date;
+      const dateB = b.dueDate || b.date;
+      return new Date(dateA).getTime() - new Date(dateB).getTime();
+    });
+
+    // Vendor breakdown for due items
+    const vendorMap: Record<string, { vendorName: string; remainingAmount: number; count: number; branch: string }> = {};
+    dueItems.forEach(item => {
+      const v = item.vendorName || 'غير محدد';
+      if (!vendorMap[v]) {
+        vendorMap[v] = { vendorName: v, remainingAmount: 0, count: 0, branch: item.branch };
+      }
+      vendorMap[v].remainingAmount += item.remainingAmount;
+      vendorMap[v].count += 1;
+    });
+
+    const topVendorsDue = Object.values(vendorMap)
+      .sort((a, b) => b.remainingAmount - a.remainingAmount);
+
+    return {
+      currentMonthTotalDue,
+      next7DaysTotalDue,
+      overdueTotalDue,
+      weeklyDistribution,
+      sortedDueItems,
+      topVendorsDue
+    };
+  }, [items]);
+
   const handleExportAccrualsExcel = () => {
     const fileName = `دفتر_المشتريات_والالتزامات_الآجلة_${selectedBranch}_${statusFilter}`;
 
@@ -725,6 +843,268 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
             <p className="text-[11px] font-medium text-slate-400 mt-0.5">تحتاج متابعة وتسديد</p>
           </div>
         </div>
+      </div>
+
+      {/* Cash Planning & Due Commitments Timeline View Section */}
+      <div className="bg-white border-2 border-slate-900 rounded-[2.5rem] p-6 md:p-8 shadow-md space-y-6 relative overflow-hidden no-print">
+        {/* Decorative background glow */}
+        <div className="absolute -top-24 -left-24 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        {/* Section Header with Tabs */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 bg-amber-100 text-amber-900 rounded-md font-bold text-[10px] flex items-center gap-1">
+                <Sparkles size={12} /> تخطيط التدفقات النقدية الخارجية
+              </span>
+              <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <CalendarClock size={20} className="text-amber-600" />
+                الجدول الزمني ومخطط الالتزامات المستحقة (Cash Flow Timeline)
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500 font-medium">
+              توزيع زمني دقيق للمستحقات والالتزامات خلال الشهر الجاري لتسهيل التخطيط النقدي وتجنب انقطاع السيولة.
+            </p>
+          </div>
+
+          {/* Sub Tab Switches */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/80 shrink-0 self-start lg:self-auto">
+            <button
+              onClick={() => setTimelineTab('chart')}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                timelineTab === 'chart'
+                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+              }`}
+            >
+              <BarChart3 size={15} />
+              <span>رسم بياني أسبوعي</span>
+            </button>
+
+            <button
+              onClick={() => setTimelineTab('timeline')}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                timelineTab === 'timeline'
+                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+              }`}
+            >
+              <CalendarClock size={15} />
+              <span>الجدول الزمني التفصيلي ({cashPlanningData.sortedDueItems.length})</span>
+            </button>
+
+            <button
+              onClick={() => setTimelineTab('vendors')}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                timelineTab === 'vendors'
+                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+              }`}
+            >
+              <User size={15} />
+              <span>حسب الموردين والجهات ({cashPlanningData.topVendorsDue.length})</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Quick Summary Highlights for Cash Planning */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-4 bg-amber-50/70 border border-amber-200/80 rounded-2xl flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[11px] font-extrabold text-amber-900">مستحقات الشهر الجاري:</span>
+              <p className="text-xl font-black font-mono text-amber-950">
+                {formatKWD(cashPlanningData.currentMonthTotalDue)} <span className="text-xs font-sans">د.ك</span>
+              </p>
+            </div>
+            <div className="p-2.5 bg-amber-500 text-white rounded-xl shadow-sm">
+              <Calendar size={18} />
+            </div>
+          </div>
+
+          <div className="p-4 bg-rose-50/70 border border-rose-200/80 rounded-2xl flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[11px] font-extrabold text-rose-900">مستحقة الخصم (خلال 7 أيام):</span>
+              <p className="text-xl font-black font-mono text-rose-950">
+                {formatKWD(cashPlanningData.next7DaysTotalDue)} <span className="text-xs font-sans">د.ك</span>
+              </p>
+            </div>
+            <div className="p-2.5 bg-rose-600 text-white rounded-xl shadow-sm">
+              <Clock size={18} />
+            </div>
+          </div>
+
+          <div className="p-4 bg-slate-900 text-white border border-slate-800 rounded-2xl flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[11px] font-extrabold text-slate-300">مستحقات متأخرة واجبة السداد:</span>
+              <p className="text-xl font-black font-mono text-emerald-400">
+                {formatKWD(cashPlanningData.overdueTotalDue)} <span className="text-xs font-sans text-slate-300">د.ك</span>
+              </p>
+            </div>
+            <div className="p-2.5 bg-emerald-500 text-slate-950 rounded-xl shadow-sm">
+              <ShieldAlert size={18} />
+            </div>
+          </div>
+        </div>
+
+        {/* TAB 1: Weekly Distribution Chart View */}
+        {timelineTab === 'chart' && (
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                <BarChart3 size={15} className="text-amber-600" />
+                توزيع الالتزامات المالية المستحقة على أسابيع الشهر الجاري
+              </h4>
+              <span className="text-[10px] text-slate-500 font-bold bg-slate-100 px-2.5 py-1 rounded-full">
+                إجمالي التزامات الشهر: {formatKWD(cashPlanningData.currentMonthTotalDue)} د.ك
+              </span>
+            </div>
+
+            <div className="h-64 w-full bg-slate-50/60 p-4 border border-slate-100 rounded-2xl">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={cashPlanningData.weeklyDistribution} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="shortLabel" tick={{ fontSize: 11, fontWeight: 'bold', fill: '#475569' }} />
+                  <YAxis tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={v => `${v} د.ك`} />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700 shadow-xl text-xs space-y-1">
+                            <p className="font-bold text-amber-400">{data.weekName}</p>
+                            <p className="font-mono font-extrabold text-emerald-400">
+                              المطلوب سداده: {formatKWD(data.totalDue)} د.ك
+                            </p>
+                            <p className="text-[10px] text-slate-300">
+                              عدد الفواتير والالتزامات: {data.itemsCount} فاتورة
+                            </p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Bar dataKey="totalDue" radius={[8, 8, 0, 0]}>
+                    {cashPlanningData.weeklyDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: Detailed Chronological Timeline Schedule */}
+        {timelineTab === 'timeline' && (
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                <CalendarClock size={15} className="text-amber-600" />
+                الجدول الزمني للالتزامات مرتبة حسـب تاريخ الاستحقاق
+              </h4>
+              <span className="text-[10px] font-bold text-slate-500">
+                عدد الفواتير المستحقة: {cashPlanningData.sortedDueItems.length}
+              </span>
+            </div>
+
+            {cashPlanningData.sortedDueItems.length === 0 ? (
+              <div className="p-8 text-center bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                <CheckCircle2 size={32} className="mx-auto text-emerald-500" />
+                <p className="text-xs font-black text-slate-700">لا توجد أي التزامات أو مستحقات قائمة مسجلة حالياً</p>
+                <p className="text-[11px] text-slate-500">جميع الفواتير والمشتريات الآجلة مسددة بالكامل.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 max-h-96 overflow-y-auto pr-1">
+                {cashPlanningData.sortedDueItems.map(item => {
+                  const dueDateVal = item.dueDate || item.date;
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-4 bg-slate-50/80 hover:bg-slate-100/80 border border-slate-200/90 rounded-2xl flex flex-col justify-between gap-3 transition-all shadow-2xs"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-slate-900">{item.vendorName}</span>
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-900 rounded text-[10px] font-bold">
+                              {item.branch}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 font-medium line-clamp-2">{item.description}</p>
+                        </div>
+
+                        <div className="text-left shrink-0">
+                          <span className="text-[10px] text-slate-400 block font-mono">المتبقي</span>
+                          <span className="text-sm font-extrabold font-mono text-rose-600">
+                            {formatKWD(item.remainingAmount)} <span className="text-[10px]">د.ك</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between border-t border-slate-200/60 pt-2.5 text-xs">
+                        <div className="flex items-center gap-1.5 text-slate-500 font-mono text-[11px] font-bold">
+                          <Calendar size={13} className="text-slate-400" />
+                          <span>الاستحقاق: {dueDateVal}</span>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            setSelectedItemForSettlement(item);
+                            setSettlementAmount(String(item.remainingAmount));
+                            setSettlementEmployee(employees.includes(item.employee) ? item.employee : '');
+                          }}
+                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+                        >
+                          <CreditCard size={12} />
+                          <span>تسديد الدفعة</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: Due Liabilities by Vendor */}
+        {timelineTab === 'vendors' && (
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                <User size={15} className="text-amber-600" />
+                توزيع المبالغ المستحقة حسب المورد والجهة الدائنة
+              </h4>
+              <span className="text-[10px] font-bold text-slate-500">
+                إجمالي الدائنين: {cashPlanningData.topVendorsDue.length} جهة
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {cashPlanningData.topVendorsDue.map((v, idx) => (
+                <div
+                  key={idx}
+                  className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center justify-between gap-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-800 font-black text-xs flex items-center justify-center shrink-0 border border-amber-300/40">
+                      #{idx + 1}
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-slate-900">{v.vendorName}</p>
+                      <p className="text-[10px] font-bold text-slate-500">{v.count} فواتير/التزامات مستحقة - {v.branch}</p>
+                    </div>
+                  </div>
+
+                  <div className="text-left font-mono font-black text-slate-900 text-sm">
+                    {formatKWD(v.remainingAmount)} <span className="text-xs font-sans text-slate-500">د.ك</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Filter and Search Bar */}

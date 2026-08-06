@@ -44,7 +44,17 @@ import {
 } from 'recharts';
 import { gasService } from '../services/gasService';
 import { ReportFilter, ReportData, EmployeeBalance } from '../types';
-import { formatKWD, isIncomeType, isExpenseType, isTransferType, isAccrualType, getAccountingOperationType } from '../utils/format';
+import { 
+  formatKWD, 
+  isIncomeType, 
+  isExpenseType, 
+  isTransferType, 
+  isAccrualType, 
+  getAccountingOperationType,
+  matchBranch,
+  parseReportRow,
+  NormalizedReportRow
+} from '../utils/format';
 
 interface ReportViewerProps {
   employees: string[];
@@ -187,47 +197,84 @@ export default function ReportViewer({ employees, balances, branches, categories
     }
   };
 
-  const filteredRows = report ? report.rows.filter(row => {
-    const type = String(row[3] || '');
-    const category = String(row[4] || '');
-    const description = row.length > 8 ? String(row[8] || '') : '';
-    
-    const isTransactionAccrued = isAccrualType(type, category, description);
+  // Parse all raw rows from backend response into standardized object representations
+  const rawRows = report ? report.rows.map(parseReportRow) : [];
+
+  // Filter rows by Branch, Employee, and Accrual status with strict Arabic normalization
+  const filteredRows = rawRows.filter(pRow => {
+    // Branch Filter
+    if (filters.branch && filters.branch !== 'كافة الفروع' && filters.branch !== 'الكل') {
+      if (!matchBranch(pRow.branch, filters.branch)) {
+        return false;
+      }
+    }
+
+    // Employee Filter
+    if (filters.employee && filters.employee !== 'كافة الموظفين' && filters.employee !== 'الكل') {
+      if (pRow.employee && pRow.employee !== 'عام' && pRow.employee.trim().toLowerCase() !== filters.employee.trim().toLowerCase()) {
+        return false;
+      }
+    }
+
+    const isTransactionAccrued = isAccrualType(pRow.type, pRow.category, pRow.description);
 
     if (accrualFilter === 'Due') return isTransactionAccrued;
     if (accrualFilter === 'Paid') return !isTransactionAccrued;
     return true;
-  }) : [];
+  });
 
-  const isUnpaidAccrualRow = (row: any) => {
-    const type = String(row[3] || '');
-    const category = String(row[4] || '');
-    const description = row.length > 8 ? String(row[8] || '') : '';
-    return isAccrualType(type, category, description);
+  // Sort rows strictly in chronological order (Oldest -> Newest) for correct running balance calculation
+  const sortedFilteredRows = [...filteredRows].sort((a, b) => {
+    const timeA = new Date(a.date).getTime() || 0;
+    const timeB = new Date(b.date).getTime() || 0;
+    if (timeA !== timeB) return timeA - timeB;
+    return String(a.id || '').localeCompare(String(b.id || ''));
+  });
+
+  // Calculate dynamic running balances and accounting operation types in exact chronological order
+  const initialOpeningBalance = parseFloat(report?.openingBalance || '0') || 0;
+  let runningAcc = initialOpeningBalance;
+
+  const computedRows = sortedFilteredRows.map(pRow => {
+    const isAccrued = isAccrualType(pRow.type, pRow.category, pRow.description);
+    if (!isAccrued) {
+      if (isTransferType(pRow.type, pRow.category)) {
+        if (filters.employee && pRow.employee === filters.employee) {
+          runningAcc += pRow.income - pRow.expense;
+        }
+      } else {
+        runningAcc += pRow.income - pRow.expense;
+      }
+    }
+    const opType = getAccountingOperationType(pRow.type, pRow.category, pRow.description, pRow.income, pRow.expense);
+    return {
+      ...pRow,
+      isAccrued,
+      computedBalance: runningAcc,
+      opType
+    };
+  });
+
+  const isUnpaidAccrualRow = (row: NormalizedReportRow) => {
+    return isAccrualType(row.type, row.category, row.description);
   };
 
-  const filteredIn = filteredRows.reduce((acc, row) => {
-    const type = String(row[3] || '');
-    const category = String(row[4] || '');
-    if (isTransferType(type, category)) return acc;
-    return acc + (parseFloat(row[5]) || 0);
+  const filteredIn = computedRows.reduce((acc, row) => {
+    if (isTransferType(row.type, row.category)) return acc;
+    return acc + row.income;
   }, 0);
 
   // Actual cash paid out from treasury/box (EXCLUDES unpaid credit purchases)
-  const filteredCashOut = filteredRows.reduce((acc, row) => {
-    const type = String(row[3] || '');
-    const category = String(row[4] || '');
-    if (isTransferType(type, category)) return acc;
+  const filteredCashOut = computedRows.reduce((acc, row) => {
+    if (isTransferType(row.type, row.category)) return acc;
     if (isUnpaidAccrualRow(row)) return acc; // DO NOT deduct unpaid accruals from cash outflow!
-    return acc + (parseFloat(row[6]) || 0);
+    return acc + row.expense;
   }, 0);
 
   // Unpaid credit accruals (tracked separately - no cash impact)
-  const filteredUnpaidAccruals = filteredRows.reduce((acc, row) => {
-    const type = String(row[3] || '');
-    const category = String(row[4] || '');
-    if (isTransferType(type, category)) return acc;
-    if (isUnpaidAccrualRow(row)) return acc + (parseFloat(row[6]) || 0);
+  const filteredUnpaidAccruals = computedRows.reduce((acc, row) => {
+    if (isTransferType(row.type, row.category)) return acc;
+    if (isUnpaidAccrualRow(row)) return acc + row.expense;
     return acc;
   }, 0);
 
@@ -235,7 +282,7 @@ export default function ReportViewer({ employees, balances, branches, categories
   const filteredTotalCosts = filteredCashOut + filteredUnpaidAccruals;
 
   // Actual Cash Box Balance (السيولة النقدية المتوفرة بالخزنة)
-  const cashEndingBalance = (parseFloat(report?.openingBalance || '0') || 0) + filteredIn - filteredCashOut;
+  const cashEndingBalance = initialOpeningBalance + filteredIn - filteredCashOut;
 
   const handleExportExcel = () => {
     if (!report) return;
@@ -253,9 +300,6 @@ export default function ReportViewer({ employees, balances, branches, categories
       'صادر (-)',
       'الرصيد التراكمي (د.ك)'
     ];
-
-    const initialOpeningBalance = parseFloat(report.openingBalance || '0') || 0;
-    let runningBalance = initialOpeningBalance;
 
     // Opening Balance row
     const rows: (string | number)[][] = [
@@ -276,48 +320,26 @@ export default function ReportViewer({ employees, balances, branches, categories
     // Category breakdown accumulator
     const categoryTotals: Record<string, { count: number; totalExpense: number; totalIncome: number }> = {};
     
-    filteredRows.forEach(row => {
-      const date = String(row[0] || '');
-      const emp = String(row[1] || 'عام');
-      const branch = String(row[2] || 'عام');
-      const type = String(row[3] || (parseFloat(row[5]) > 0 ? 'إيرادات' : 'مصروفات'));
-      const cat = String(row[4] || (isTransferType(type, '') ? 'تحويل مالي' : 'عام'));
-      const inc = parseFloat(row[5]) || 0;
-      const exp = parseFloat(row[6]) || 0;
-      const desc = row.length > 8 ? String(row[8] || '-') : (row[7] ? String(row[7]) : '-');
-      const isAccrued = isUnpaidAccrualRow(row);
-      
-      if (!isAccrued) {
-        if (isTransferType(type, cat)) {
-          if (filters.employee && emp === filters.employee) {
-            runningBalance += inc - exp;
-          }
-        } else {
-          runningBalance += inc - exp;
-        }
-      }
-
+    computedRows.forEach(row => {
       // Track categories for purchase/expense itemization
-      if (!categoryTotals[cat]) {
-        categoryTotals[cat] = { count: 0, totalExpense: 0, totalIncome: 0 };
+      if (!categoryTotals[row.category]) {
+        categoryTotals[row.category] = { count: 0, totalExpense: 0, totalIncome: 0 };
       }
-      categoryTotals[cat].count += 1;
-      categoryTotals[cat].totalExpense += exp;
-      categoryTotals[cat].totalIncome += inc;
-
-      const opType = getAccountingOperationType(type, cat, desc, inc, exp);
+      categoryTotals[row.category].count += 1;
+      categoryTotals[row.category].totalExpense += row.expense;
+      categoryTotals[row.category].totalIncome += row.income;
 
       rows.push([
-        date,
-        branch,
-        emp,
-        opType,
-        cat,
-        desc,
-        isAccrued ? 'آجل / غير مدفوع' : 'نقدي / مسدد',
-        inc > 0 ? inc : 0,
-        exp > 0 ? exp : 0,
-        runningBalance
+        row.date,
+        row.branch,
+        row.employee,
+        row.opType,
+        row.category,
+        row.description,
+        row.isAccrued ? 'آجل / غير مدفوع' : 'نقدي / مسدد',
+        row.income > 0 ? row.income : 0,
+        row.expense > 0 ? row.expense : 0,
+        row.computedBalance
       ]);
     });
 
@@ -1001,74 +1023,25 @@ export default function ReportViewer({ employees, balances, branches, categories
                     <td className="px-4 py-3 text-center no-print text-slate-300">---</td>
                   </tr>
 
-                  {filteredRows.map((row, i) => {
-                    const isObj = typeof row === 'object' && !Array.isArray(row);
-                    const date = isObj ? String(row.date || '') : String(row[0] || '');
-                    const employee = isObj ? String(row.employee || row.emp || '') : String(row[1] || '');
-                    const branch = isObj ? String(row.branch || 'عام') : String(row[2] || 'عام');
-                    const type = isObj ? String(row.type || '') : String(row[3] || '');
-                    const category = isObj ? String(row.category || row.cat || '') : String(row[4] || '');
+                  {computedRows.map((row, i) => {
+                    const date = row.date;
+                    const employee = row.employee;
+                    const branch = row.branch;
+                    const type = row.type;
+                    const category = row.category;
+                    const income = row.income;
+                    const expense = row.expense;
+                    const balance = row.computedBalance;
+                    const description = row.description;
+                    const targetMonth = row.targetMonth;
                     
-                    let income = 0;
-                    let expense = 0;
-                    if (isObj) {
-                      income = parseFloat(row.income) || 0;
-                      expense = parseFloat(row.expense) || 0;
-                      if (income === 0 && expense === 0 && row.amount !== undefined) {
-                        const amt = parseFloat(row.amount) || 0;
-                        if (type === 'Income' || type === 'إيراد') income = amt;
-                        else expense = amt;
-                      }
-                    } else {
-                      income = parseFloat(row[5]) || 0;
-                      expense = parseFloat(row[6]) || 0;
-                    }
-
-                    const balance = isObj ? (row.balance !== undefined ? row.balance : 0) : row[7];
-                    const description = isObj 
-                      ? String(row.description || row.desc || '-') 
-                      : (row.length > 8 ? String(row[8] || '-') : '-');
-                    const targetMonth = isObj 
-                      ? String(row.targetMonth || '') 
-                      : (row.length > 9 ? String(row[9] || '') : '');
-                    
-                    let rawRowId: any = null;
-                    if (isObj) {
-                      rawRowId = row.id ?? row.rowId ?? row.rowIndex ?? null;
-                    } else {
-                      rawRowId = row.length > 10 && row[10] !== undefined && row[10] !== null && row[10] !== '' 
-                        ? row[10] 
-                        : (row[0] && typeof row[0] === 'number' ? row[0] : null);
-                    }
-
-                    const originalIndex = report ? report.rows.indexOf(row) : -1;
-                    const calculatedRowId = (rawRowId !== null && rawRowId !== undefined && rawRowId !== '') 
-                      ? rawRowId 
-                      : (originalIndex !== -1 ? originalIndex + 2 : i + 2);
-                    const rowIndexInSheet = isObj && row.rowIndex ? row.rowIndex : (originalIndex !== -1 ? originalIndex + 2 : i + 2);
+                    const calculatedRowId = row.id || (i + 2);
+                    const rowIndexInSheet = (typeof row.raw === 'object' && row.raw?.rowIndex) ? row.raw.rowIndex : (i + 2);
 
                     const isIncome = isIncomeType(type) || (income > 0 && !isTransferType(type));
                     const isTransfer = isTransferType(type);
-
-                    const isTransactionAccrued = 
-                      category.includes('مستحق') || 
-                      category.includes('مستحقة') || 
-                      category.includes('آجل') || 
-                      category.includes('مؤجل') || 
-                      category.includes('رواتب مستحقة') ||
-                      description.includes('مستحق') || 
-                      description.includes('مستحقة') || 
-                      description.includes('آجل') || 
-                      description.includes('مؤجل') || 
-                      description.includes('غير مسدد') || 
-                      description.includes('لم يسدد') || 
-                      description.includes('دين') ||
-                      category.toLowerCase().includes('due') ||
-                      category.toLowerCase().includes('accrued') ||
-                      description.toLowerCase().includes('due') ||
-                      description.toLowerCase().includes('accrued');
-
-                    const opType = getAccountingOperationType(type, category, description, income, expense);
+                    const isTransactionAccrued = row.isAccrued;
+                    const opType = row.opType;
 
                     return (
                       <tr key={i} className="hover:bg-slate-50 transition-colors">
