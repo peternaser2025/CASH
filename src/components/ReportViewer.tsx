@@ -421,7 +421,7 @@ export default function ReportViewer({ employees, balances, branches, categories
             className="flex items-center gap-2 px-6 py-4 bg-red-600 hover:bg-red-700 text-white rounded-full font-bold text-sm shadow-md transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
           >
             {pdfLoading ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
-            <span>تحميل PDF</span>
+            <span>تصدير كـ PDF</span>
           </button>
 
           <button
@@ -776,7 +776,7 @@ export default function ReportViewer({ employees, balances, branches, categories
             ` }} />
 
             {/* Professional Header - Enterprise Bank Statement Style */}
-            <div className="hidden print:block mb-8 p-6 border-b-2 border-slate-900">
+            <div className="hidden print:block print-only mb-8 p-6 border-b-2 border-slate-900">
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 mb-2">
@@ -827,6 +827,14 @@ export default function ReportViewer({ employees, balances, branches, categories
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                <button
+                  onClick={handleExportPDF}
+                  disabled={!report || pdfLoading}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer disabled:opacity-40"
+                >
+                  {pdfLoading ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
+                  <span>تصدير كـ PDF</span>
+                </button>
                 <button
                   onClick={handleExportExcel}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
