@@ -16,7 +16,8 @@ import {
   TrendingUp,
   ShieldAlert,
   Search,
-  Receipt
+  Receipt,
+  BellRing
 } from 'lucide-react';
 import { 
   onAuthStateChanged, 
@@ -55,6 +56,16 @@ export default function App() {
   const [branches, setBranches] = useState<string[]>(BRANCHES);
   const [categories, setCategories] = useState<string[]>(CATEGORIES);
   const [loadingData, setLoadingData] = useState(false);
+  const [prefilledEmployee, setPrefilledEmployee] = useState<string | undefined>(undefined);
+
+  const activeCustodyAlertsCount = useMemo(() => {
+    let savedThreshold = 50;
+    try {
+      const saved = localStorage.getItem('custody_alert_threshold');
+      if (saved) savedThreshold = parseFloat(saved);
+    } catch {}
+    return balances.filter(b => b.balance <= savedThreshold).length;
+  }, [balances]);
 
   // Email/Password login fields
   const [email, setEmail] = useState('admin');
@@ -618,6 +629,20 @@ export default function App() {
                 جاري تحديث البيانات...
               </div>
             )}
+            {/* Custody Alert Bell Notification */}
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className="relative p-2.5 bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-800 rounded-2xl border border-slate-200 transition-all cursor-pointer group"
+              title="رادار تنبيهات العهد والإشعار المسبق"
+            >
+              <BellRing size={20} className={activeCustodyAlertsCount > 0 ? 'text-amber-600 animate-pulse' : 'text-slate-500'} />
+              {activeCustodyAlertsCount > 0 && (
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-rose-600 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce">
+                  {activeCustodyAlertsCount}
+                </span>
+              )}
+            </button>
+
             <div className="text-left">
               <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider">اليوم والتاريخ</p>
               <p className="text-sm font-black text-gray-900 mt-0.5">
@@ -642,18 +667,29 @@ export default function App() {
                 <Dashboard 
                   balances={balances} 
                   loading={loadingData} 
-                  onRefresh={() => fetchData(true)} 
+                  onRefresh={() => fetchData(true)}
+                  onFeedCustody={(emp) => {
+                    setPrefilledEmployee(emp);
+                    setActiveTab('new-transaction');
+                  }}
+                  onViewReport={(emp) => {
+                    setPrefilledEmployee(emp);
+                    setActiveTab('reports');
+                  }}
                 />
               )}
               {activeTab === 'new-transaction' && (
                 <TransactionForm 
                   onComplete={() => {
+                    setPrefilledEmployee(undefined);
                     setActiveTab('reports');
                     fetchData(true);
                   }} 
                   employees={employeeNames} 
                   branches={branches} 
-                  categories={categories} 
+                  categories={categories}
+                  initialEmployee={prefilledEmployee}
+                  initialType={prefilledEmployee ? 'Transfer' : 'Expense'}
                 />
               )}
               {activeTab === 'reports' && (
@@ -661,7 +697,8 @@ export default function App() {
                   employees={employeeNames} 
                   balances={balances} 
                   branches={branches} 
-                  categories={categories} 
+                  categories={categories}
+                  initialEmployee={prefilledEmployee}
                 />
               )}
               {activeTab === 'employees' && (

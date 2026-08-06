@@ -31,6 +31,8 @@ export const workspaceService = {
     provider.addScope('https://www.googleapis.com/auth/drive');
     provider.addScope('https://www.googleapis.com/auth/documents');
     provider.addScope('https://www.googleapis.com/auth/tasks');
+    provider.addScope('https://www.googleapis.com/auth/calendar');
+    provider.addScope('https://www.googleapis.com/auth/calendar.events');
     
     try {
       const result = await signInWithPopup(auth, provider);
@@ -312,5 +314,65 @@ export const workspaceService = {
       // Fallback: Simulate sending via successful message or webhook integration info
       return { success: true, simulated: true, text };
     }
+  },
+
+  // 6. GOOGLE CALENDAR API
+  async listCalendarEvents(calendarId: string = 'primary'): Promise<any[]> {
+    const token = this.getAccessToken();
+    if (!token) throw new Error('يرجى الاتصال بـ Google أولاً');
+
+    try {
+      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?maxResults=25&orderBy=startTime&singleEvents=true&timeMin=${new Date().toISOString()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.items || [];
+    } catch (e) {
+      console.error('Error fetching calendar events:', e);
+      return [];
+    }
+  },
+
+  async createCalendarEvent(calendarId: string = 'primary', eventData: {
+    summary: string;
+    description?: string;
+    startDate: string;
+    endDate?: string;
+  }): Promise<any> {
+    const token = this.getAccessToken();
+    if (!token) throw new Error('يرجى الاتصال بـ Google أولاً');
+
+    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        summary: eventData.summary,
+        description: eventData.description,
+        start: {
+          date: eventData.startDate
+        },
+        end: {
+          date: eventData.endDate || eventData.startDate
+        },
+        reminders: {
+          useDefault: false,
+          overrides: [
+            { method: 'popup', minutes: 1440 }, // 1 day before
+            { method: 'email', minutes: 1440 }, // 1 day before
+            { method: 'popup', minutes: 180 }   // 3 hours before
+          ]
+        }
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || 'فشل إضافة الموعد إلى تقويم Google');
+    }
+    return await res.json();
   }
 };

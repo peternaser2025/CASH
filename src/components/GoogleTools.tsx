@@ -375,8 +375,16 @@ export default function GoogleTools({ balances, onRefresh }: GoogleToolsProps) {
   const [isConnected, setIsConnected] = useState(workspaceService.hasActiveToken());
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
-  const [activeSubTab, setActiveSubTab] = useState<'script' | 'archive' | 'sheets' | 'drive' | 'docs' | 'tasks' | 'chat'>('archive');
+  const [activeSubTab, setActiveSubTab] = useState<'script' | 'archive' | 'sheets' | 'drive' | 'docs' | 'tasks' | 'chat' | 'calendar'>('archive');
   const [copiedScript, setCopiedScript] = useState(false);
+
+  // Google Calendar states
+  const [calendarEvents, setCalendarEvents] = useState<any[]>([]);
+  const [accrualObligations, setAccrualObligations] = useState<any[]>([]);
+  const [accrualsLoading, setAccrualsLoading] = useState<boolean>(false);
+  const [calendarLoading, setCalendarLoading] = useState<boolean>(false);
+  const [calendarFilterEmployee, setCalendarFilterEmployee] = useState<string>('All');
+  const [syncedEventIds, setSyncedEventIds] = useState<string[]>([]);
 
   // Fiscal Year Archiving states
   const [archiveYear, setArchiveYear] = useState<string>((new Date().getFullYear() - 1).toString());
@@ -836,6 +844,180 @@ export default function GoogleTools({ balances, onRefresh }: GoogleToolsProps) {
     }
   };
 
+  // CALENDAR: Fetch accruals for Google Calendar
+  const fetchAccrualsForCalendar = async () => {
+    setAccrualsLoading(true);
+    try {
+      const reportData = await gasService.getReport({ branch: 'All', startDate: '2020-01-01', endDate: '2030-12-31' });
+      if (reportData && reportData.rows) {
+        const accrualItems: any[] = [];
+        reportData.rows.forEach((row: any, idx: number) => {
+          let category = '';
+          let description = '';
+          let date = '';
+          let branch = '';
+          let employee = '';
+          let amount = 0;
+          let type = '';
+
+          if (Array.isArray(row)) {
+            type = String(row[2] || '');
+            category = String(row[4] || row[3] || '');
+            description = String(row[8] || row[6] || '');
+            date = String(row[1] || '').split('T')[0];
+            branch = String(row[7] || 'الفرع الرئيسي');
+            employee = String(row[3] || row[4] || 'إدارة');
+            amount = parseFloat(String(row[5] || row[6] || 0)) || 0;
+          } else if (typeof row === 'object' && row !== null) {
+            type = String(row.type || '');
+            category = String(row.category || '');
+            description = String(row.description || row.notes || '');
+            date = String(row.date || '').split('T')[0];
+            branch = String(row.branch || 'الفرع الرئيسي');
+            employee = String(row.employee || 'إدارة');
+            amount = parseFloat(String(row.amount || row.expense || 0)) || 0;
+          }
+
+          const combined = `${category} ${description}`;
+          const isAccrual = /آجل|مستحق|دين|فاتورة آجلة|ذمم|مشتريات آجلة|التزام/i.test(combined) || type === 'آجل' || category === 'مشتريات آجلة ومستحقات';
+          const isSettlement = /سداد|تسوية|سداد مشتريات|تسوية التزامات/i.test(combined);
+
+          if (isAccrual && !isSettlement) {
+            let vendorName = 'مورد / جهة دائنة';
+            const vendorMatch = description.match(/مورد:([^\s\-،]+)/) || description.match(/شركة:([^\s\-،]+)/) || description.match(/جهة:([^\s\-،]+)/);
+            if (vendorMatch) vendorName = vendorMatch[1].trim();
+
+            let dueDate = date;
+            const dueMatch = description.match(/تاريخ الاستحقاق:([0-9]{4}-[0-9]{2}-[0-9]{2})/) || description.match(/تاريخ:([0-9]{4}-[0-9]{2}-[0-9]{2})/);
+            if (dueMatch) dueDate = dueMatch[1];
+
+            accrualItems.push({
+              id: row.id || `accrual_${idx}`,
+              date: date || new Date().toISOString().split('T')[0],
+              dueDate: dueDate || date || new Date().toISOString().split('T')[0],
+              vendorName,
+              branch,
+              employee,
+              category: category || 'مشتريات آجلة',
+              description: description || 'سداد التزام مستحق',
+              amount
+            });
+          }
+        });
+        setAccrualObligations(accrualItems);
+      }
+    } catch (e) {
+      console.error('Error fetching accruals for calendar:', e);
+    } finally {
+      setAccrualsLoading(false);
+    }
+  };
+
+  // CALENDAR: Effect to refresh calendar events and accruals
+  useEffect(() => {
+    if (activeSubTab === 'calendar' && isConnected) {
+      fetchAccrualsForCalendar();
+      workspaceService.listCalendarEvents().then(setCalendarEvents).catch(console.error);
+    }
+  }, [activeSubTab, isConnected]);
+
+  // CALENDAR: Sync single item to Google Calendar
+  const handleSyncToCalendar = async (item: any) => {
+    setCalendarLoading(true);
+    setStatus(null);
+    try {
+      const summary = `📌 موعد سداد التزام: ${item.vendorName || item.category} (${item.amount} د.ك)`;
+      const description = 
+        `تذكير بموعد سداد التزام آجل ومستحق مسجل في KWD Finance Pro\n\n` +
+        `👤 الموظف المسؤول: ${item.employee}\n` +
+        `🏬 المورد / الجهة الدائنة: ${item.vendorName}\n` +
+        `💰 المبلغ المستحق: ${item.amount} د.ك\n` +
+        `🏢 الفرع: ${item.branch}\n` +
+        `📋 التصنيف والبيان: ${item.description}\n` +
+        `📆 تاريخ تسجيل المعاملة: ${item.date}\n` +
+        `⏳ تاريخ الاستحقاق: ${item.dueDate}`;
+
+      await workspaceService.createCalendarEvent('primary', {
+        summary,
+        description,
+        startDate: item.dueDate || item.date
+      });
+
+      setSyncedEventIds(prev => [...prev, item.id]);
+      setStatus({
+        type: 'success',
+        message: `تم إضافة موعد سداد الالتزام للجهة (${item.vendorName}) برسم الموظف المسؤول (${item.employee}) تلقائياً إلى تقويم Google بنجاح! 📅`
+      });
+
+      const events = await workspaceService.listCalendarEvents();
+      setCalendarEvents(events);
+    } catch (err: any) {
+      setStatus({
+        type: 'error',
+        message: err.message || 'فشل إضافة الموعد لتقويم Google. يرجى التأكد من صلاحيات التقويم.'
+      });
+    } finally {
+      setCalendarLoading(false);
+    }
+  };
+
+  // CALENDAR: Bulk sync items to Google Calendar
+  const handleBulkSyncToCalendar = async () => {
+    const itemsToSync = calendarFilterEmployee === 'All' 
+      ? accrualObligations 
+      : accrualObligations.filter(item => item.employee === calendarFilterEmployee);
+
+    if (itemsToSync.length === 0) {
+      setStatus({ type: 'error', message: 'لا توجد التزامات مستحقة مطابقة للفلتر المحدد' });
+      return;
+    }
+
+    const confirmMsg = `هل تريد إضافة (${itemsToSync.length}) موعد سداد التزام مستحق تلقائياً إلى تقويم Google الخاص بالموضف المسؤول (${calendarFilterEmployee === 'All' ? 'كافة الموظفين' : calendarFilterEmployee})؟`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setCalendarLoading(true);
+    setStatus(null);
+    let successCount = 0;
+
+    try {
+      for (const item of itemsToSync) {
+        const summary = `📌 موعد سداد التزام: ${item.vendorName || item.category} (${item.amount} د.ك)`;
+        const description = 
+          `تذكير بموعد سداد التزام آجل ومستحق مسجل في KWD Finance Pro\n\n` +
+          `👤 الموظف المسؤول: ${item.employee}\n` +
+          `🏬 المورد / الجهة الدائنة: ${item.vendorName}\n` +
+          `💰 المبلغ المستحق: ${item.amount} د.ك\n` +
+          `🏢 الفرع: ${item.branch}\n` +
+          `📋 التصنيف والبيان: ${item.description}\n` +
+          `📆 تاريخ تسجيل المعاملة: ${item.date}\n` +
+          `⏳ تاريخ الاستحقاق: ${item.dueDate}`;
+
+        await workspaceService.createCalendarEvent('primary', {
+          summary,
+          description,
+          startDate: item.dueDate || item.date
+        });
+        successCount++;
+        setSyncedEventIds(prev => [...prev, item.id]);
+      }
+
+      setStatus({
+        type: 'success',
+        message: `تم إضافة (${successCount}) موعد سداد التزام بنجاح إلى تقويم Google!`
+      });
+
+      const events = await workspaceService.listCalendarEvents();
+      setCalendarEvents(events);
+    } catch (err: any) {
+      setStatus({
+        type: 'error',
+        message: `تم إضافة (${successCount}) موعد وتوقف بسبب: ${err.message || 'خطأ في الربط'}`
+      });
+    } finally {
+      setCalendarLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-8" dir="rtl">
       {/* Intro Header */}
@@ -1034,6 +1216,21 @@ export default function GoogleTools({ balances, onRefresh }: GoogleToolsProps) {
                 <span>Google Chat</span>
               </div>
               <span className="text-[10px] opacity-80 bg-black/10 px-2 py-0.5 rounded-full">تنبيهات</span>
+            </button>
+
+            <button
+              onClick={() => setActiveSubTab('calendar')}
+              className={`w-full flex items-center justify-between p-4 rounded-2xl text-right font-black transition-all ${
+                activeSubTab === 'calendar'
+                  ? 'bg-emerald-600 text-white shadow-lg'
+                  : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-100'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Calendar size={20} />
+                <span>تقويم Google (المواعيد)</span>
+              </div>
+              <span className="text-[10px] bg-amber-400 text-slate-900 px-2 py-0.5 rounded-full font-black animate-pulse">جديد</span>
             </button>
 
             <div className="p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/10 mt-6">
@@ -1894,6 +2091,197 @@ export default function GoogleTools({ balances, onRefresh }: GoogleToolsProps) {
                         💡 يدعم هذا التكامل التنسيق الغني للمستندات (Markdown) كاستخدام النجوم (*) لتثخين الخطوط لإبراز الأرقام وتنبيهات الأرصدة المنخفضة للعهد.
                       </div>
                     </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* 6. GOOGLE CALENDAR */}
+              {activeSubTab === 'calendar' && (
+                <motion.div
+                  key="calendar"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="bg-white border border-slate-100 rounded-[2.5rem] p-8 md:p-10 shadow-sm space-y-8"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-5">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 bg-amber-100 text-amber-900 rounded-md font-bold text-[10px] flex items-center gap-1">
+                          <Sparkles size={12} /> مزامنة تلقائية 📅
+                        </span>
+                        <h2 className="text-xl font-black text-gray-900">تقويم Google ومواعيد الالتزامات (Google Calendar)</h2>
+                      </div>
+                      <p className="text-xs text-gray-500 font-medium mt-1">
+                        جدولة ومزامنة مواعيد سداد الالتزامات الآجلة والمستحقات المسجلة في دفتر الالتزامات (AccrualLedger) تلقائياً في تقويم Google للموظف المسؤول.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={fetchAccrualsForCalendar}
+                        disabled={accrualsLoading}
+                        className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <RefreshCw size={14} className={accrualsLoading ? 'animate-spin' : ''} />
+                        تحديث الالتزامات
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Actions & Filters Header */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                      <span className="text-xs font-black text-slate-700 shrink-0">تصفية حسب الموظف المسؤول:</span>
+                      <select
+                        value={calendarFilterEmployee}
+                        onChange={e => setCalendarFilterEmployee(e.target.value)}
+                        className="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 outline-none cursor-pointer w-full sm:w-auto"
+                      >
+                        <option value="All">كافة الموظفين المسؤولين</option>
+                        {balances.map(b => (
+                          <option key={b.name} value={b.name}>{b.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button
+                      onClick={handleBulkSyncToCalendar}
+                      disabled={calendarLoading || accrualObligations.length === 0}
+                      className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black rounded-xl transition-all text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/10 cursor-pointer"
+                    >
+                      {calendarLoading ? <RefreshCw size={16} className="animate-spin" /> : <Calendar size={16} />}
+                      <span>مزامنة كافة الالتزامات لتقويم Google</span>
+                    </button>
+                  </div>
+
+                  {/* Accrual Obligations List */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                        <span>الالتزامات الآجلة والمستحقات القائمة بالدفتر ({
+                          calendarFilterEmployee === 'All' 
+                            ? accrualObligations.length 
+                            : accrualObligations.filter(i => i.employee === calendarFilterEmployee).length
+                        })</span>
+                      </h3>
+                      <span className="text-[11px] text-slate-500 font-bold">تاريخ الاستحقاق والموظف المسؤول</span>
+                    </div>
+
+                    {accrualsLoading ? (
+                      <div className="p-8 text-center text-slate-500 text-xs font-bold space-y-2">
+                        <RefreshCw size={20} className="animate-spin mx-auto text-emerald-600" />
+                        <p>جاري جلب الالتزامات المستحقة...</p>
+                      </div>
+                    ) : accrualObligations.length === 0 ? (
+                      <div className="p-8 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center text-slate-500 text-xs font-bold">
+                        👏 لا توجد التزامات أو ديون مستحقة مسجلة حالياً بالدفتر.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {(calendarFilterEmployee === 'All' 
+                          ? accrualObligations 
+                          : accrualObligations.filter(i => i.employee === calendarFilterEmployee)
+                        ).map((item) => {
+                          const isSynced = syncedEventIds.includes(item.id);
+                          return (
+                            <div 
+                              key={item.id}
+                              className="p-5 bg-white border border-slate-200 hover:border-emerald-300 rounded-2xl shadow-sm space-y-3 transition-all relative overflow-hidden"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="space-y-1">
+                                  <span className="px-2.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded text-[10px] font-bold">
+                                    {item.category}
+                                  </span>
+                                  <h4 className="text-sm font-black text-slate-900">{item.vendorName}</h4>
+                                </div>
+                                <div className="text-left font-mono">
+                                  <span className="text-base font-black text-rose-600">{item.amount}</span>
+                                  <span className="text-[10px] text-slate-400 font-sans mr-1">د.ك</span>
+                                </div>
+                              </div>
+
+                              <p className="text-xs text-slate-600 font-medium line-clamp-2">{item.description}</p>
+
+                              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-bold">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[11px] text-slate-400">المسؤول:</span>
+                                  <span className="text-emerald-700 font-black">{item.employee}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                                  <span>الاستحقاق:</span>
+                                  <span className="text-slate-900 font-black">{item.dueDate || item.date}</span>
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={() => handleSyncToCalendar(item)}
+                                disabled={calendarLoading}
+                                className={`w-full py-2.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm ${
+                                  isSynced
+                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                    : 'bg-slate-900 hover:bg-emerald-600 text-white'
+                                }`}
+                              >
+                                {calendarLoading ? (
+                                  <RefreshCw size={14} className="animate-spin" />
+                                ) : isSynced ? (
+                                  <CheckCircle size={14} className="text-emerald-600" />
+                                ) : (
+                                  <Calendar size={14} />
+                                )}
+                                <span>{isSynced ? 'تمت الإضافة لتقويم Google ✅' : 'إضافة إلى تقويم Google'}</span>
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Google Calendar Synced Events List */}
+                  <div className="pt-6 border-t border-slate-100 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                        <Calendar className="text-emerald-600" size={18} />
+                        <span>الأحداث والمواعيد المجدولة في تقويم Google ({calendarEvents.length})</span>
+                      </h3>
+                      <button
+                        onClick={() => workspaceService.listCalendarEvents().then(setCalendarEvents)}
+                        className="text-xs text-emerald-700 hover:underline font-bold"
+                      >
+                        تحديث قائمة التقويم
+                      </button>
+                    </div>
+
+                    {calendarEvents.length === 0 ? (
+                      <p className="text-xs text-slate-400 font-medium">لا توجد أحداث مجدولة قادمة في التقويم المتصل.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {calendarEvents.map((ev, i) => (
+                          <div key={ev.id || i} className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
+                            <div className="space-y-0.5">
+                              <span className="font-black text-slate-900">{ev.summary}</span>
+                              <p className="text-[11px] text-slate-500 font-mono">
+                                التاريخ: {ev.start?.date || ev.start?.dateTime?.split('T')[0] || 'غير محدد'}
+                              </p>
+                            </div>
+                            {ev.htmlLink && (
+                              <a
+                                href={ev.htmlLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-3 py-1.5 bg-white border border-slate-200 hover:border-emerald-500 text-slate-700 hover:text-emerald-700 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all"
+                              >
+                                <span>فتح بالتقويم</span>
+                                <ExternalLink size={12} />
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )}

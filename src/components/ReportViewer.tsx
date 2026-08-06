@@ -25,7 +25,11 @@ import {
   Trash2,
   BarChart3,
   PieChart as PieChartIcon,
-  X
+  X,
+  Columns,
+  Check,
+  SlidersHorizontal,
+  Settings2
 } from 'lucide-react';
 import { exportReportToExcel } from '../utils/excelExport';
 import { exportElementToPDF } from '../utils/pdfExport';
@@ -56,16 +60,31 @@ import {
   NormalizedReportRow
 } from '../utils/format';
 
+export type ReportColumnId = 'date' | 'branch' | 'opType' | 'category' | 'description' | 'paymentStatus' | 'income' | 'expense' | 'balance';
+
+export const ALL_COLUMNS: { id: ReportColumnId; label: string; desc: string }[] = [
+  { id: 'date', label: 'التاريخ', desc: 'تاريخ تنفيذ الحركة المالية' },
+  { id: 'branch', label: 'الفرع', desc: 'الفرع التابع للعملية' },
+  { id: 'opType', label: 'نوع العملية', desc: 'مبيعات / مشتريات / مصاريف / تسوية' },
+  { id: 'category', label: 'التصنيف / الموظف', desc: 'تصنيف البند والموظف المسؤول' },
+  { id: 'description', label: 'البيان والتفاصيل', desc: 'ملاحظات وتفاصيل المعاملة' },
+  { id: 'paymentStatus', label: 'حالة الدفع', desc: 'نقدي مسدد أو آجل مستحق' },
+  { id: 'income', label: 'وارد (+)', desc: 'المبالغ المقبوضة والتوريدات' },
+  { id: 'expense', label: 'صادر (-)', desc: 'المصاريف والمشتريات المدفوعة' },
+  { id: 'balance', label: 'الرصيد التراكمي', desc: 'رصيد العهدة/الصندوق بعد الحركة' },
+];
+
 interface ReportViewerProps {
   employees: string[];
   balances: EmployeeBalance[];
   branches: string[];
   categories: string[];
+  initialEmployee?: string;
 }
 
-export default function ReportViewer({ employees, balances, branches, categories }: ReportViewerProps) {
+export default function ReportViewer({ employees, balances, branches, categories, initialEmployee }: ReportViewerProps) {
   const [filters, setFilters] = useState<ReportFilter>({
-    employee: '',
+    employee: initialEmployee || '',
     branch: '',
     type: 'All',
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
@@ -79,6 +98,85 @@ export default function ReportViewer({ employees, balances, branches, categories
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [accrualFilter, setAccrualFilter] = useState<'All' | 'Due' | 'Paid'>('All');
+
+  // PDF & Printable Column Customization State
+  const [visibleColumns, setVisibleColumns] = useState<Record<ReportColumnId, boolean>>({
+    date: true,
+    branch: true,
+    opType: true,
+    category: true,
+    description: true,
+    paymentStatus: true,
+    income: true,
+    expense: true,
+    balance: true,
+  });
+  const [showColumnModal, setShowColumnModal] = useState(false);
+
+  const toggleColumn = (colId: ReportColumnId) => {
+    setVisibleColumns(prev => {
+      const updated = { ...prev, [colId]: !prev[colId] };
+      // Prevent hiding all columns
+      if (!Object.values(updated).some(Boolean)) return prev;
+      return updated;
+    });
+  };
+
+  const selectAllColumns = () => {
+    setVisibleColumns({
+      date: true,
+      branch: true,
+      opType: true,
+      category: true,
+      description: true,
+      paymentStatus: true,
+      income: true,
+      expense: true,
+      balance: true,
+    });
+  };
+
+  const applyPreset = (preset: 'all' | 'essential' | 'financial' | 'nodetails') => {
+    if (preset === 'all') {
+      selectAllColumns();
+    } else if (preset === 'essential') {
+      setVisibleColumns({
+        date: true,
+        branch: false,
+        opType: true,
+        category: true,
+        description: true,
+        paymentStatus: false,
+        income: true,
+        expense: true,
+        balance: true,
+      });
+    } else if (preset === 'financial') {
+      setVisibleColumns({
+        date: true,
+        branch: false,
+        opType: false,
+        category: true,
+        description: false,
+        paymentStatus: false,
+        income: true,
+        expense: true,
+        balance: true,
+      });
+    } else if (preset === 'nodetails') {
+      setVisibleColumns({
+        date: true,
+        branch: true,
+        opType: true,
+        category: true,
+        description: false,
+        paymentStatus: true,
+        income: true,
+        expense: true,
+        balance: true,
+      });
+    }
+  };
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -288,34 +386,32 @@ export default function ReportViewer({ employees, balances, branches, categories
     if (!report) return;
     const fileName = `كشف_حساب_${filters.employee || 'كل_الموظفين'}_${filters.startDate}_إلى_${filters.endDate}`;
     
-    const headers = [
-      'التاريخ',
-      'الفرع',
-      'الموظف المسؤول',
-      'نوع الحركة',
-      'التصنيف / البند',
-      'البيان والتفاصيل الشاملة',
-      'حالة الدفع',
-      'وارد (+)',
-      'صادر (-)',
-      'الرصيد التراكمي (د.ك)'
-    ];
+    const headers: string[] = [];
+    if (visibleColumns.date) headers.push('التاريخ');
+    if (visibleColumns.branch) headers.push('الفرع');
+    if (visibleColumns.category) headers.push('الموظف المسؤول');
+    if (visibleColumns.opType) headers.push('نوع الحركة');
+    if (visibleColumns.category) headers.push('التصنيف / البند');
+    if (visibleColumns.description) headers.push('البيان والتفاصيل الشاملة');
+    if (visibleColumns.paymentStatus) headers.push('حالة الدفع');
+    if (visibleColumns.income) headers.push('وارد (+)');
+    if (visibleColumns.expense) headers.push('صادر (-)');
+    if (visibleColumns.balance) headers.push('الرصيد التراكمي (د.ك)');
 
     // Opening Balance row
-    const rows: (string | number)[][] = [
-      [
-        '---',
-        filters.branch || 'كافة الفروع',
-        filters.employee || 'كافة الموظفين',
-        'رصيد افتتاحي',
-        'رصيد سابق',
-        'الرصيد المرحل بداية الفترة المالية',
-        'مباشر',
-        0,
-        0,
-        initialOpeningBalance
-      ]
-    ];
+    const openingRow: (string | number)[] = [];
+    if (visibleColumns.date) openingRow.push('---');
+    if (visibleColumns.branch) openingRow.push(filters.branch || 'كافة الفروع');
+    if (visibleColumns.category) openingRow.push(filters.employee || 'كافة الموظفين');
+    if (visibleColumns.opType) openingRow.push('رصيد افتتاحي');
+    if (visibleColumns.category) openingRow.push('رصيد سابق');
+    if (visibleColumns.description) openingRow.push('الرصيد المرحل بداية الفترة المالية');
+    if (visibleColumns.paymentStatus) openingRow.push('مباشر');
+    if (visibleColumns.income) openingRow.push(0);
+    if (visibleColumns.expense) openingRow.push(0);
+    if (visibleColumns.balance) openingRow.push(initialOpeningBalance);
+
+    const rows: (string | number)[][] = [openingRow];
 
     // Category breakdown accumulator
     const categoryTotals: Record<string, { count: number; totalExpense: number; totalIncome: number }> = {};
@@ -329,18 +425,19 @@ export default function ReportViewer({ employees, balances, branches, categories
       categoryTotals[row.category].totalExpense += row.expense;
       categoryTotals[row.category].totalIncome += row.income;
 
-      rows.push([
-        row.date,
-        row.branch,
-        row.employee,
-        row.opType,
-        row.category,
-        row.description,
-        row.isAccrued ? 'آجل / غير مدفوع' : 'نقدي / مسدد',
-        row.income > 0 ? row.income : 0,
-        row.expense > 0 ? row.expense : 0,
-        row.computedBalance
-      ]);
+      const r: (string | number)[] = [];
+      if (visibleColumns.date) r.push(row.date);
+      if (visibleColumns.branch) r.push(row.branch);
+      if (visibleColumns.category) r.push(row.employee);
+      if (visibleColumns.opType) r.push(row.opType);
+      if (visibleColumns.category) r.push(row.category);
+      if (visibleColumns.description) r.push(row.description);
+      if (visibleColumns.paymentStatus) r.push(row.isAccrued ? 'آجل / غير مدفوع' : 'نقدي / مسدد');
+      if (visibleColumns.income) r.push(row.income > 0 ? row.income : 0);
+      if (visibleColumns.expense) r.push(row.expense > 0 ? row.expense : 0);
+      if (visibleColumns.balance) r.push(row.computedBalance);
+
+      rows.push(r);
     });
 
     // Build Itemized Category Breakdown Section
@@ -416,6 +513,18 @@ export default function ReportViewer({ employees, balances, branches, categories
         </div>
         <div className="flex flex-wrap items-center gap-3 relative">
           <button
+            onClick={() => setShowColumnModal(true)}
+            disabled={!report}
+            className="flex items-center gap-2 px-5 py-4 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-full font-black text-sm shadow-md transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+          >
+            <Columns size={18} />
+            <span>تحديد أعمدة الـ PDF</span>
+            <span className="px-2 py-0.5 bg-slate-900 text-amber-400 rounded-full text-[10px] font-black mr-1">
+              {Object.values(visibleColumns).filter(Boolean).length}/{ALL_COLUMNS.length}
+            </span>
+          </button>
+
+          <button
             onClick={handleExportPDF}
             disabled={!report || pdfLoading}
             className="flex items-center gap-2 px-6 py-4 bg-red-600 hover:bg-red-700 text-white rounded-full font-bold text-sm shadow-md transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
@@ -448,7 +557,7 @@ export default function ReportViewer({ employees, balances, branches, categories
                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                className="absolute left-0 top-full mt-4 w-80 bg-white border-2 border-gray-900 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] rounded-3xl p-6 z-50 space-y-6"
+                className="absolute left-0 top-full mt-4 w-88 bg-white border-2 border-gray-900 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] rounded-3xl p-6 z-50 space-y-6"
               >
                 <div className="space-y-3">
                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">حجم الهوامش (Margins)</p>
@@ -498,6 +607,38 @@ export default function ReportViewer({ employees, balances, branches, categories
                         {o === 'portrait' ? 'طولي (Portrait)' : 'عرضي (Landscape)'}
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">تحديد أعمدة الـ PDF والطباعة</p>
+                    <button
+                      onClick={selectAllColumns}
+                      className="text-[10px] font-bold text-emerald-600 hover:underline"
+                    >
+                      تحديد الكل
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto p-1.5 border border-gray-200 rounded-2xl bg-gray-50/50">
+                    {ALL_COLUMNS.map(col => {
+                      const isChecked = visibleColumns[col.id];
+                      return (
+                        <button
+                          key={col.id}
+                          type="button"
+                          onClick={() => toggleColumn(col.id)}
+                          className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all text-right cursor-pointer ${
+                            isChecked
+                              ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                              : 'bg-white border-gray-200 text-gray-400'
+                          }`}
+                        >
+                          <span className="truncate">{col.label}</span>
+                          {isChecked ? <Check size={12} className="shrink-0 mr-1 text-amber-400" /> : <X size={12} className="shrink-0 mr-1 opacity-40" />}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -996,38 +1137,46 @@ export default function ReportViewer({ employees, balances, branches, categories
               <table className="w-full text-right border-collapse border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                 <thead>
                   <tr className="bg-slate-900 text-slate-100">
-                    <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800">التاريخ</th>
-                    <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800">الفرع</th>
-                    <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800 text-center">نوع العملية</th>
-                    <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800">التصنيف / الموظف</th>
-                    <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800">البيان والتفاصيل</th>
-                    <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800 text-center">حالة الدفع</th>
-                    <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800 text-emerald-400">وارد (+)</th>
-                    <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800 text-rose-400">صادر (-)</th>
-                    <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800">الرصيد التراكمي</th>
+                    {visibleColumns.date && <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800">التاريخ</th>}
+                    {visibleColumns.branch && <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800">الفرع</th>}
+                    {visibleColumns.opType && <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800 text-center">نوع العملية</th>}
+                    {visibleColumns.category && <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800">التصنيف / الموظف</th>}
+                    {visibleColumns.description && <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800">البيان والتفاصيل</th>}
+                    {visibleColumns.paymentStatus && <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800 text-center">حالة الدفع</th>}
+                    {visibleColumns.income && <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800 text-emerald-400">وارد (+)</th>}
+                    {visibleColumns.expense && <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800 text-rose-400">صادر (-)</th>}
+                    {visibleColumns.balance && <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800">الرصيد التراكمي</th>}
                     <th className="px-4 py-3.5 font-bold text-xs border-b border-slate-800 text-center no-print">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200/80 bg-white">
                   {/* Opening Balance Row */}
                   <tr className="bg-slate-50/70">
-                    <td className="px-4 py-3 text-center text-slate-400 font-mono text-xs">---</td>
-                    <td className="px-4 py-3 text-center text-slate-400 text-xs">---</td>
-                    <td className="px-4 py-3 text-center font-bold text-xs text-slate-500 bg-slate-100/60 rounded">
-                      رصيد دفتري
-                    </td>
-                    <td className="px-4 py-3 font-bold text-xs text-slate-700">
-                      رصيد افتتاحي
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 text-xs italic">
-                      الرصيد المرحل من السجلات السابقة
-                    </td>
-                    <td className="px-4 py-3 text-center text-slate-400 text-xs">---</td>
-                    <td className="px-4 py-3 text-center font-mono text-xs text-slate-300">0.000</td>
-                    <td className="px-4 py-3 text-center font-mono text-xs text-slate-300">0.000</td>
-                    <td className="px-4 py-3 font-mono text-sm font-extrabold text-slate-900">
-                      {formatKWD(report.openingBalance)}
-                    </td>
+                    {visibleColumns.date && <td className="px-4 py-3 text-center text-slate-400 font-mono text-xs">---</td>}
+                    {visibleColumns.branch && <td className="px-4 py-3 text-center text-slate-400 text-xs">---</td>}
+                    {visibleColumns.opType && (
+                      <td className="px-4 py-3 text-center font-bold text-xs text-slate-500 bg-slate-100/60 rounded">
+                        رصيد دفتري
+                      </td>
+                    )}
+                    {visibleColumns.category && (
+                      <td className="px-4 py-3 font-bold text-xs text-slate-700">
+                        رصيد افتتاحي
+                      </td>
+                    )}
+                    {visibleColumns.description && (
+                      <td className="px-4 py-3 text-slate-500 text-xs italic">
+                        الرصيد المرحل من السجلات السابقة
+                      </td>
+                    )}
+                    {visibleColumns.paymentStatus && <td className="px-4 py-3 text-center text-slate-400 text-xs">---</td>}
+                    {visibleColumns.income && <td className="px-4 py-3 text-center font-mono text-xs text-slate-300">0.000</td>}
+                    {visibleColumns.expense && <td className="px-4 py-3 text-center font-mono text-xs text-slate-300">0.000</td>}
+                    {visibleColumns.balance && (
+                      <td className="px-4 py-3 font-mono text-sm font-extrabold text-slate-900">
+                        {formatKWD(report.openingBalance)}
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-center no-print text-slate-300">---</td>
                   </tr>
 
@@ -1053,65 +1202,83 @@ export default function ReportViewer({ employees, balances, branches, categories
 
                     return (
                       <tr key={i} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-3 text-xs font-mono font-semibold text-slate-600">
-                          {date}
-                          {targetMonth && (
-                            <span className="mr-1.5 px-1.5 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded border border-blue-200/60 inline-block">
-                              يخص: {targetMonth}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-xs font-bold text-slate-700">
-                          {branch}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`px-2.5 py-1 rounded-lg text-xs font-black border inline-block ${
-                            opType === 'مبيعات' ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
-                            opType === 'مشتريات' ? 'bg-blue-100 text-blue-900 border-blue-300' :
-                            opType === 'مصاريف' ? 'bg-red-100 text-red-900 border-red-300' :
-                            opType === 'مشتريات آجلة' ? 'bg-orange-100 text-orange-950 border-orange-300 font-extrabold' :
-                            opType === 'مصاريف مستحقة' ? 'bg-amber-100 text-amber-950 border-amber-300 font-extrabold' :
-                            opType === 'سداد مستحقات' ? 'bg-purple-100 text-purple-900 border-purple-300' :
-                            opType === 'إغلاق وتصفية صندوق' ? 'bg-teal-100 text-teal-900 border-teal-300 font-black' :
-                            'bg-slate-100 text-slate-800 border-slate-300'
-                          }`}>
-                            {opType}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-col">
-                            <span className={`text-xs font-bold ${
-                              isTransfer ? 'text-blue-700' : isIncome ? 'text-emerald-700' : 'text-slate-900'
+                        {visibleColumns.date && (
+                          <td className="px-4 py-3 text-xs font-mono font-semibold text-slate-600">
+                            {date}
+                            {targetMonth && (
+                              <span className="mr-1.5 px-1.5 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded border border-blue-200/60 inline-block">
+                                يخص: {targetMonth}
+                              </span>
+                            )}
+                          </td>
+                        )}
+                        {visibleColumns.branch && (
+                          <td className="px-4 py-3 text-xs font-bold text-slate-700">
+                            {branch}
+                          </td>
+                        )}
+                        {visibleColumns.opType && (
+                          <td className="px-4 py-3 text-center">
+                            <span className={`px-2.5 py-1 rounded-lg text-xs font-black border inline-block ${
+                              opType === 'مبيعات' ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
+                              opType === 'مشتريات' ? 'bg-blue-100 text-blue-900 border-blue-300' :
+                              opType === 'مصاريف' ? 'bg-red-100 text-red-900 border-red-300' :
+                              opType === 'مشتريات آجلة' ? 'bg-orange-100 text-orange-950 border-orange-300 font-extrabold' :
+                              opType === 'مصاريف مستحقة' ? 'bg-amber-100 text-amber-950 border-amber-300 font-extrabold' :
+                              opType === 'سداد مستحقات' ? 'bg-purple-100 text-purple-900 border-purple-300' :
+                              opType === 'إغلاق وتصفية صندوق' ? 'bg-teal-100 text-teal-900 border-teal-300 font-black' :
+                              'bg-slate-100 text-slate-800 border-slate-300'
                             }`}>
-                              {category || (isTransfer ? 'تحويل مالي' : 'عام')}
+                              {opType}
                             </span>
-                            {employee && <span className="text-[10px] font-medium text-slate-400">{employee}</span>}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-xs text-slate-800 font-medium leading-relaxed max-w-[300px]">
-                          {description}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {isTransactionAccrued ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-800 rounded-lg border border-amber-200/80 text-xs font-bold">
-                              <span>آجل / غير مدفوع</span>
-                              <span className="text-[10px] text-amber-600">(لم يُخصم)</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200/80 text-xs font-bold">
-                              <span>نقدي / مسدد</span>
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 font-mono font-bold text-sm text-emerald-600">
-                          {income > 0 ? income.toFixed(3) : '0.000'}
-                        </td>
-                        <td className="px-4 py-3 font-mono font-bold text-sm text-rose-600">
-                          {expense > 0 ? expense.toFixed(3) : '0.000'}
-                        </td>
-                        <td className="px-4 py-3 font-mono font-extrabold text-sm text-slate-900 bg-slate-50/50">
-                          {formatKWD(balance)}
-                        </td>
+                          </td>
+                        )}
+                        {visibleColumns.category && (
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col">
+                              <span className={`text-xs font-bold ${
+                                isTransfer ? 'text-blue-700' : isIncome ? 'text-emerald-700' : 'text-slate-900'
+                              }`}>
+                                {category || (isTransfer ? 'تحويل مالي' : 'عام')}
+                              </span>
+                              {employee && <span className="text-[10px] font-medium text-slate-400">{employee}</span>}
+                            </div>
+                          </td>
+                        )}
+                        {visibleColumns.description && (
+                          <td className="px-4 py-3 text-xs text-slate-800 font-medium leading-relaxed max-w-[300px]">
+                            {description}
+                          </td>
+                        )}
+                        {visibleColumns.paymentStatus && (
+                          <td className="px-4 py-3 text-center">
+                            {isTransactionAccrued ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-800 rounded-lg border border-amber-200/80 text-xs font-bold">
+                                <span>آجل / غير مدفوع</span>
+                                <span className="text-[10px] text-amber-600">(لم يُخصم)</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200/80 text-xs font-bold">
+                                <span>نقدي / مسدد</span>
+                              </span>
+                            )}
+                          </td>
+                        )}
+                        {visibleColumns.income && (
+                          <td className="px-4 py-3 font-mono font-bold text-sm text-emerald-600">
+                            {income > 0 ? income.toFixed(3) : '0.000'}
+                          </td>
+                        )}
+                        {visibleColumns.expense && (
+                          <td className="px-4 py-3 font-mono font-bold text-sm text-rose-600">
+                            {expense > 0 ? expense.toFixed(3) : '0.000'}
+                          </td>
+                        )}
+                        {visibleColumns.balance && (
+                          <td className="px-4 py-3 font-mono text-extrabold text-sm text-slate-900 bg-slate-50/50">
+                            {formatKWD(balance)}
+                          </td>
+                        )}
                         <td className="px-4 py-3 text-center no-print">
                           <div className="flex items-center justify-center gap-1">
                             <button
@@ -1168,20 +1335,44 @@ export default function ReportViewer({ employees, balances, branches, categories
                     );
                   })}
                 </tbody>
-                <tfoot className="bg-slate-900 text-white font-bold text-xs">
-                  <tr>
-                    <td colSpan={5} className="px-4 py-3 text-left">إجمالي الكشف التدقيقي:</td>
-                    <td className="px-4 py-3 font-mono text-emerald-400 font-extrabold text-sm">
-                      {formatKWD(report.rows.reduce((acc, row) => acc + (parseFloat(row[5]) || 0), 0))}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-rose-400 font-extrabold text-sm">
-                      {formatKWD(report.rows.reduce((acc, row) => acc + (parseFloat(row[6]) || 0), 0))}
-                    </td>
-                    <td colSpan={2} className="px-4 py-3 font-mono text-white font-black text-sm">
-                      الرصيد: {formatKWD(report.finalBalance)}
-                    </td>
-                  </tr>
-                </tfoot>
+                {(() => {
+                  let leadingColSpan = 0;
+                  if (visibleColumns.date) leadingColSpan++;
+                  if (visibleColumns.branch) leadingColSpan++;
+                  if (visibleColumns.opType) leadingColSpan++;
+                  if (visibleColumns.category) leadingColSpan++;
+                  if (visibleColumns.description) leadingColSpan++;
+                  if (visibleColumns.paymentStatus) leadingColSpan++;
+
+                  let trailingColSpan = 0;
+                  if (visibleColumns.balance) trailingColSpan++;
+
+                  return (
+                    <tfoot className="bg-slate-900 text-white font-bold text-xs">
+                      <tr>
+                        {leadingColSpan > 0 && (
+                          <td colSpan={leadingColSpan} className="px-4 py-3 text-left">إجمالي الكشف التدقيقي:</td>
+                        )}
+                        {visibleColumns.income && (
+                          <td className="px-4 py-3 font-mono text-emerald-400 font-extrabold text-sm">
+                            {formatKWD(report.rows.reduce((acc, row) => acc + (parseFloat(row[5]) || 0), 0))}
+                          </td>
+                        )}
+                        {visibleColumns.expense && (
+                          <td className="px-4 py-3 font-mono text-rose-400 font-extrabold text-sm">
+                            {formatKWD(report.rows.reduce((acc, row) => acc + (parseFloat(row[6]) || 0), 0))}
+                          </td>
+                        )}
+                        {trailingColSpan > 0 && (
+                          <td colSpan={trailingColSpan} className="px-4 py-3 font-mono text-white font-black text-sm">
+                            الرصيد: {formatKWD(report.finalBalance)}
+                          </td>
+                        )}
+                        <td className="px-4 py-3 no-print"></td>
+                      </tr>
+                    </tfoot>
+                  );
+                })()}
               </table>
             </div>
 
@@ -1658,6 +1849,111 @@ export default function ReportViewer({ employees, balances, branches, categories
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Dedicated Column Customization Modal */}
+        {showColumnModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-100"
+            >
+              <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-500/20 text-blue-400 rounded-xl">
+                    <Columns size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base">تخصيص أعمدة التقرير المطبوع / PDF</h3>
+                    <p className="text-xs text-slate-400">حدد الأعمدة المطلوبة للظهور في تقرير الـ PDF المصدّر</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowColumnModal(false)}
+                  className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3">نماذج جاهزة</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => applyPreset('all')}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all"
+                    >
+                      عرض الكل
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyPreset('essential')}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all"
+                    >
+                      أساسي
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyPreset('financial')}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all"
+                    >
+                      مالي فقط
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyPreset('nodetails')}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all"
+                    >
+                      مختصر
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3">الأعمدة المتاحة</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {ALL_COLUMNS.map((col) => {
+                      const isChecked = visibleColumns[col.id];
+                      return (
+                        <label
+                          key={col.id}
+                          onClick={() => toggleColumn(col.id)}
+                          className={`flex items-center gap-3 p-3 rounded-2xl border transition-all cursor-pointer ${
+                            isChecked
+                              ? 'bg-blue-50/70 border-blue-200 text-blue-900 font-bold'
+                              : 'bg-slate-50 border-slate-100 text-slate-500 font-medium hover:bg-slate-100'
+                          }`}
+                        >
+                          <div className={`w-5 h-5 rounded-lg flex items-center justify-center transition-colors ${
+                            isChecked ? 'bg-blue-600 text-white' : 'border border-slate-300 bg-white'
+                          }`}>
+                            {isChecked && <CheckCircle2 size={14} />}
+                          </div>
+                          <span className="text-xs">{col.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="pt-2 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowColumnModal(false)}
+                    className="flex-1 bg-slate-900 text-white py-3.5 rounded-2xl font-bold text-xs hover:bg-black transition-all flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 size={16} />
+                    اعتماد وتطبيق التخصيص
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}

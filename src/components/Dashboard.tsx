@@ -4,14 +4,17 @@ import { Wallet, TrendingUp, TrendingDown, RefreshCw, Users, Activity, ArrowUpRi
 import { EmployeeBalance } from '../types';
 import { formatKWD } from '../utils/format';
 import { exportReportToExcel } from '../utils/excelExport';
+import CustodyAlertRadar from './CustodyAlertRadar';
 
 interface DashboardProps {
   balances: EmployeeBalance[];
   loading: boolean;
   onRefresh: () => void;
+  onFeedCustody?: (employeeName: string) => void;
+  onViewReport?: (employeeName: string) => void;
 }
 
-export default function Dashboard({ balances, loading, onRefresh }: DashboardProps) {
+export default function Dashboard({ balances, loading, onRefresh, onFeedCustody, onViewReport }: DashboardProps) {
   const [searchFilter, setSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'positive' | 'negative'>('all');
 
@@ -96,6 +99,13 @@ export default function Dashboard({ balances, loading, onRefresh }: DashboardPro
           </button>
         </div>
       </div>
+
+      {/* Smart Custody Alert Radar Section */}
+      <CustodyAlertRadar 
+        balances={balances} 
+        onFeedCustody={onFeedCustody} 
+        onViewReport={onViewReport} 
+      />
 
       {/* Hero Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

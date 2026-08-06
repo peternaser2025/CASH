@@ -9,22 +9,24 @@ interface TransactionFormProps {
   employees: string[];
   branches: string[];
   categories: string[];
+  initialEmployee?: string;
+  initialType?: TransactionType;
 }
 
-export default function TransactionForm({ onComplete, employees, branches, categories }: TransactionFormProps) {
-  const [type, setType] = useState<TransactionType>('Expense');
+export default function TransactionForm({ onComplete, employees, branches, categories, initialEmployee, initialType }: TransactionFormProps) {
+  const [type, setType] = useState<TransactionType>(initialType || 'Expense');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
-    employee: '',
+    employee: initialEmployee || '',
     branch: '',
     category: '',
     amount: '',
-    description: '',
+    description: initialEmployee ? `تغذية وتزويد عهدة الموظف ${initialEmployee}` : '',
     sender: '',
-    receiver: '',
+    receiver: initialEmployee || '',
     hasTargetMonth: false,
     targetMonth: new Date().toISOString().slice(0, 7), // YYYY-MM
     isAccrual: false,
