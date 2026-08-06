@@ -17,7 +17,8 @@ import {
   ShieldAlert,
   Search,
   Receipt,
-  BellRing
+  BellRing,
+  ShieldCheck
 } from 'lucide-react';
 import { 
   onAuthStateChanged, 
@@ -45,11 +46,12 @@ import ProfitLoss from './components/ProfitLoss';
 import CostControl from './components/CostControl';
 import AccrualLedger from './components/AccrualLedger';
 import GlobalSearch from './components/GlobalSearch';
+import DataIntegrityPanel from './components/DataIntegrityPanel';
 
 export default function App() {
   const [user, setUser] = useState<User | any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'reports' | 'employees' | 'google-tools' | 'profit-loss' | 'cost-control' | 'accruals' | 'global-search'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'reports' | 'employees' | 'google-tools' | 'profit-loss' | 'cost-control' | 'accruals' | 'global-search' | 'data-integrity'>('dashboard');
 
   // App Data State
   const [balances, setBalances] = useState<EmployeeBalance[]>([]);
@@ -553,6 +555,12 @@ export default function App() {
             onClick={() => setActiveTab('global-search')} 
           />
           <SidebarItem 
+            icon={<ShieldCheck size={20} />} 
+            label="أمان وحفظ البيانات" 
+            active={activeTab === 'data-integrity'} 
+            onClick={() => setActiveTab('data-integrity')} 
+          />
+          <SidebarItem 
             icon={<Cloud size={20} />} 
             label="أدوات Google" 
             active={activeTab === 'google-tools'} 
@@ -736,6 +744,9 @@ export default function App() {
                   categories={categories} 
                   employees={employeeNames} 
                 />
+              )}
+              {activeTab === 'data-integrity' && (
+                <DataIntegrityPanel />
               )}
               {activeTab === 'google-tools' && (
                 <GoogleTools 
