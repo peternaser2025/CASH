@@ -80,8 +80,13 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
 
   const [selectedBranch, setSelectedBranch] = useState<string>('All');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [selectedEmployeeFilter, setSelectedEmployeeFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Due' | 'PartiallyPaid' | 'Paid'>('Due');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  
+  // Advanced Sort Options
+  const [sortField, setSortField] = useState<'date' | 'amount' | 'remainingAmount' | 'vendorName'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   
   // Date Range Filters
   const [startDate, setStartDate] = useState<string>(defaultStartDate);
@@ -474,12 +479,41 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
     }
   };
 
-  // Filter items with memoization
+  // Reset all filters to default state
+  const handleResetFilters = () => {
+    setSelectedBranch('All');
+    setSelectedCategory('All');
+    setSelectedEmployeeFilter('All');
+    setStatusFilter('All');
+    setSearchQuery('');
+    setSortField('date');
+    setSortOrder('desc');
+  };
+
+  // Toggle table header sort
+  const handleHeaderSort = (field: 'date' | 'amount' | 'remainingAmount' | 'vendorName') => {
+    if (sortField === field) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder('desc');
+    }
+  };
+
+  // Filter and Sort items with memoization
   const filteredItems = useMemo(() => {
-    return items.filter(item => {
+    let result = items.filter(item => {
       if (selectedCategory !== 'All' && !item.category.includes(selectedCategory)) return false;
       if (statusFilter !== 'All' && item.status !== statusFilter) return false;
 
+      // Filter by Responsible Employee
+      if (selectedEmployeeFilter !== 'All') {
+        const selEmp = selectedEmployeeFilter.trim().toLowerCase();
+        const itemEmp = (item.employee || '').trim().toLowerCase();
+        if (itemEmp !== selEmp) return false;
+      }
+
+      // Search Query matching Vendor, Responsible Employee, Category, Description, Branch, Amounts
       if (searchQuery.trim() !== '') {
         const q = searchQuery.toLowerCase().trim();
         const matchCat = item.category.toLowerCase().includes(q);
@@ -488,12 +522,33 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
         const matchEmp = item.employee.toLowerCase().includes(q);
         const matchBranch = item.branch.toLowerCase().includes(q);
         const matchAmount = item.amount.toString().includes(q);
-        return matchCat || matchDesc || matchVendor || matchEmp || matchBranch || matchAmount;
+        const matchRemaining = item.remainingAmount.toString().includes(q);
+        return matchCat || matchDesc || matchVendor || matchEmp || matchBranch || matchAmount || matchRemaining;
       }
 
       return true;
     });
-  }, [items, selectedCategory, statusFilter, searchQuery]);
+
+    // Apply Sorting according to selected field and order
+    result.sort((a, b) => {
+      let comparison = 0;
+      if (sortField === 'date') {
+        const timeA = new Date(a.dueDate || a.date).getTime() || 0;
+        const timeB = new Date(b.dueDate || b.date).getTime() || 0;
+        comparison = timeA - timeB;
+      } else if (sortField === 'amount') {
+        comparison = a.amount - b.amount;
+      } else if (sortField === 'remainingAmount') {
+        comparison = a.remainingAmount - b.remainingAmount;
+      } else if (sortField === 'vendorName') {
+        comparison = a.vendorName.localeCompare(b.vendorName, 'ar');
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [items, selectedCategory, statusFilter, selectedEmployeeFilter, searchQuery, sortField, sortOrder]);
 
   // Calculate totals with memoization
   const { totalAccruedLiabilities, totalPaidLiabilities, totalRemainingLiabilities, dueItemsCount } = useMemo(() => {
@@ -1107,29 +1162,114 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
         )}
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3 no-print">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* Search box */}
-          <div className="relative lg:col-span-2">
-            <Search size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="ابحث باسم المورد، البيان، رقم الفاتورة، أو الموظف المسؤول..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pr-10 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-900 outline-none focus:border-slate-400 focus:bg-white transition-all"
-            />
+      {/* Advanced Filter and Search Bar */}
+      <div className="bg-white border-2 border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 no-print">
+        {/* Top Header Row of Filter Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-amber-500/10 text-amber-700 rounded-xl">
+              <Search size={18} />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-slate-900">شريط البحث والتصفية المتقدم</h3>
+              <p className="text-[11px] font-bold text-slate-500">فلترة الديون والالتزامات حسب المورد، الموظف المسؤول، القيمة، أو التاريخ</p>
+            </div>
           </div>
 
-          {/* Branch filter */}
-          <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200">
-            <Building size={15} className="text-slate-500" />
-            <span className="text-xs font-bold text-slate-500 shrink-0">الفرع:</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full font-bold text-xs border border-slate-200">
+              نتائج البحث: <strong className="text-amber-700 font-mono font-black">{filteredItems.length}</strong> من أصل <span className="font-mono">{items.length}</span>
+            </span>
+
+            {(searchQuery || selectedBranch !== 'All' || selectedEmployeeFilter !== 'All' || statusFilter !== 'All' || selectedCategory !== 'All' || sortField !== 'date' || sortOrder !== 'desc') && (
+              <button
+                onClick={handleResetFilters}
+                className="px-3 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                title="إعادة ضبط كافة الفلاتر والبحث"
+              >
+                <span>إعادة ضبط الفلاتر ↺</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Search Input & Core Controls */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
+          {/* Main Search Input */}
+          <div className="relative lg:col-span-4">
+            <Search size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-amber-600" />
+            <input
+              type="text"
+              placeholder="بحث باسم المورد، الموظف المسؤول، الفاتورة أو البيان..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full pr-10 pl-8 py-2.5 bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white rounded-xl font-bold text-xs text-slate-900 outline-none transition-all placeholder:text-slate-400 placeholder:font-normal"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold text-xs p-1"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Employee Filter */}
+          <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 lg:col-span-3 focus-within:border-amber-500 focus-within:bg-white transition-all">
+            <User size={15} className="text-amber-600 shrink-0" />
+            <span className="text-xs font-bold text-slate-500 shrink-0">الموظف المسؤول:</span>
+            <select
+              value={selectedEmployeeFilter}
+              onChange={e => setSelectedEmployeeFilter(e.target.value)}
+              className="w-full bg-transparent font-bold text-xs text-slate-900 outline-none cursor-pointer"
+            >
+              <option value="All">كافة الموظفين / المسئولين</option>
+              {employees.map(emp => (
+                <option key={emp} value={emp}>{emp}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Sort Field Selection */}
+          <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 lg:col-span-3 focus-within:border-amber-500 focus-within:bg-white transition-all">
+            <Filter size={15} className="text-amber-600 shrink-0" />
+            <span className="text-xs font-bold text-slate-500 shrink-0">ترتيب حسب:</span>
+            <select
+              value={sortField}
+              onChange={e => setSortField(e.target.value as any)}
+              className="w-full bg-transparent font-bold text-xs text-slate-900 outline-none cursor-pointer"
+            >
+              <option value="date">تاريخ الاستحقاق / التسجيل</option>
+              <option value="amount">القيمة الكلية للالتزام</option>
+              <option value="remainingAmount">المبلغ المتبقي المستحق</option>
+              <option value="vendorName">اسم المورد / الجهة الدائنة</option>
+            </select>
+          </div>
+
+          {/* Sort Order Toggle Button */}
+          <div className="lg:col-span-2">
+            <button
+              onClick={() => setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
+              className="w-full h-full py-2.5 px-3 bg-slate-100 hover:bg-amber-50 text-slate-800 hover:text-amber-900 border border-slate-200 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-98"
+              title="تغيير اتجاه الفرز (تصاعدي / تنازلي)"
+            >
+              <span>{sortOrder === 'desc' ? 'تنازلي (الأعلى/الأحدث)' : 'تصاعدي (الأقل/الأقدم)'}</span>
+              {sortOrder === 'desc' ? <ArrowDownRight size={15} className="text-rose-600" /> : <ArrowUpRight size={15} className="text-emerald-600" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Second Row: Secondary Filters (Branch, Status, Category) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+          {/* Branch Filter */}
+          <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200 text-xs">
+            <Building size={14} className="text-slate-500 shrink-0" />
+            <span className="font-bold text-slate-500 shrink-0">الفرع:</span>
             <select
               value={selectedBranch}
               onChange={e => setSelectedBranch(e.target.value)}
-              className="w-full bg-transparent font-bold text-xs text-slate-900 outline-none cursor-pointer"
+              className="w-full bg-transparent font-bold text-slate-900 outline-none cursor-pointer"
             >
               <option value="All">كافة الفروع</option>
               {branches.map(b => (
@@ -1138,19 +1278,35 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
             </select>
           </div>
 
-          {/* Status filter */}
-          <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200">
-            <Filter size={15} className="text-slate-500" />
-            <span className="text-xs font-bold text-slate-500 shrink-0">الحالة:</span>
+          {/* Status Filter */}
+          <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200 text-xs">
+            <Clock size={14} className="text-slate-500 shrink-0" />
+            <span className="font-bold text-slate-500 shrink-0">حالة السداد:</span>
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value as any)}
-              className="w-full bg-transparent font-bold text-xs text-slate-900 outline-none cursor-pointer"
+              className="w-full bg-transparent font-bold text-slate-900 outline-none cursor-pointer"
             >
               <option value="All">كافة الحالات</option>
               <option value="Due">غير مسددة (مستحقة ⚠️)</option>
               <option value="PartiallyPaid">مسددة جزئياً (⏳)</option>
               <option value="Paid">مسددة بالكامل (✅)</option>
+            </select>
+          </div>
+
+          {/* Category Filter */}
+          <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200 text-xs">
+            <Tag size={14} className="text-slate-500 shrink-0" />
+            <span className="font-bold text-slate-500 shrink-0">التصنيف:</span>
+            <select
+              value={selectedCategory}
+              onChange={e => setSelectedCategory(e.target.value)}
+              className="w-full bg-transparent font-bold text-slate-900 outline-none cursor-pointer"
+            >
+              <option value="All">كافة التصنيفات</option>
+              {categories.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -1209,7 +1365,7 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div>
             <h3 className="text-lg font-black text-slate-900">سجل الفواتير والمستحقات المكتشفة ({filteredItems.length})</h3>
-            <p className="text-xs font-medium text-slate-500 mt-0.5">كشف تفصيلي بكافة المشتريات والمصاريف ذات الصبغة الآجلة والمستحقة</p>
+            <p className="text-xs font-medium text-slate-500 mt-0.5">كشف تفصيلي بكافة المشتريات والمصاريف ذات الصبغة الآجلة والمستحقة (اضغط رأس العمود للفرز السريع)</p>
           </div>
           <div className="flex items-center gap-2 no-print">
             <button
@@ -1237,21 +1393,57 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
         ) : filteredItems.length === 0 ? (
           <div className="py-12 text-center space-y-2 bg-slate-50 rounded-xl border border-dashed border-slate-200">
             <BadgeAlert size={36} className="text-slate-300 mx-auto" />
-            <p className="font-bold text-slate-700 text-sm">لا توجد فواتير مستحقة أو مشتريات آجلة مطابقة للبحث</p>
-            <p className="text-xs font-medium text-slate-400">يمكنك تسليم فاتورة آجل جديدة من زر الإضافة بالأعلى.</p>
+            <p className="font-bold text-slate-700 text-sm">لا توجد فواتير مستحقة أو مشتريات آجلة مطابقة للشروط والبحث</p>
+            <p className="text-xs font-medium text-slate-400">يمكنك تعديل معايير البحث أو زر إعادة ضبط الفلاتر بالأعلى.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-right border-collapse border border-slate-200 rounded-xl overflow-hidden shadow-sm">
               <thead>
-                <tr className="bg-slate-900 text-slate-100 text-xs font-bold">
-                  <th className="px-4 py-3 border-b border-slate-800">التاريخ</th>
+                <tr className="bg-slate-900 text-slate-100 text-xs font-bold select-none">
+                  <th 
+                    onClick={() => handleHeaderSort('date')}
+                    className="px-4 py-3 border-b border-slate-800 cursor-pointer hover:bg-slate-800 transition-colors"
+                    title="انقر للفرز حسب التاريخ"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>التاريخ</span>
+                      {sortField === 'date' && (sortOrder === 'asc' ? '⬆️' : '⬇️')}
+                    </div>
+                  </th>
                   <th className="px-4 py-3 border-b border-slate-800">الفرع</th>
-                  <th className="px-4 py-3 border-b border-slate-800">المورد / الجهة الدائنة</th>
+                  <th 
+                    onClick={() => handleHeaderSort('vendorName')}
+                    className="px-4 py-3 border-b border-slate-800 cursor-pointer hover:bg-slate-800 transition-colors"
+                    title="انقر للفرز حسب اسم المورد"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>المورد / الجهة / الموظف</span>
+                      {sortField === 'vendorName' && (sortOrder === 'asc' ? '⬆️' : '⬇️')}
+                    </div>
+                  </th>
                   <th className="px-4 py-3 border-b border-slate-800">التصنيف والبيان</th>
-                  <th className="px-4 py-3 border-b border-slate-800 text-center">المبلغ الأصلي</th>
+                  <th 
+                    onClick={() => handleHeaderSort('amount')}
+                    className="px-4 py-3 border-b border-slate-800 text-center cursor-pointer hover:bg-slate-800 transition-colors"
+                    title="انقر للفرز حسب المبلغ الأصلي"
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <span>المبلغ الأصلي</span>
+                      {sortField === 'amount' && (sortOrder === 'asc' ? '⬆️' : '⬇️')}
+                    </div>
+                  </th>
                   <th className="px-4 py-3 border-b border-slate-800 text-center">المسدد</th>
-                  <th className="px-4 py-3 border-b border-slate-800 text-center">المتبقي</th>
+                  <th 
+                    onClick={() => handleHeaderSort('remainingAmount')}
+                    className="px-4 py-3 border-b border-slate-800 text-center cursor-pointer hover:bg-slate-800 transition-colors"
+                    title="انقر للفرز حسب المبلغ المتبقي المستحق"
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <span>المتبقي المستحق</span>
+                      {sortField === 'remainingAmount' && (sortOrder === 'asc' ? '⬆️' : '⬇️')}
+                    </div>
+                  </th>
                   <th className="px-4 py-3 border-b border-slate-800 text-center">حالة السداد</th>
                   <th className="px-4 py-3 text-center no-print border-b border-slate-800">إجراء التسديد</th>
                 </tr>
