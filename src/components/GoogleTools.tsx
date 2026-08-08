@@ -1538,13 +1538,28 @@ export default function GoogleTools({ balances, onRefresh }: GoogleToolsProps) {
                     </div>
                   </div>
 
+                  {/* Syntax Error Troubleshooting Alert */}
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-xs space-y-2 leading-relaxed text-amber-900">
+                    <div className="flex items-center gap-2 text-amber-800 font-black text-sm">
+                      <ShieldAlert size={18} className="text-amber-600 shrink-0" />
+                      <span>حل خطأ التجميع: SyntaxError: Cannot use import statement outside a module</span>
+                    </div>
+                    <p className="text-amber-800 font-bold">
+                      إذا ظهر لك هذا الخطأ عند حفظ أو تشغيل السكريبت في Google Apps Script:
+                    </p>
+                    <ul className="list-disc list-inside space-y-1 text-amber-900 pr-1 text-[11px] font-bold">
+                      <li><strong>السبب:</strong> تم نسخ كود يحتوي على كلمات <code className="bg-amber-200/60 px-1 py-0.5 rounded font-mono">import</code> أو <code className="bg-amber-200/60 px-1 py-0.5 rounded font-mono">export</code> المخصصة لتطبيقات React/TypeScript والتي لا تدعمها بيئة Google Apps Script العادية.</li>
+                      <li><strong>الحل الفوري:</strong> اضغط على زر <strong>"نسخ الكود بنقرة واحدة"</strong> بالأعلى. ثم افتح محرّر Apps Script واصح مسح <u>كافة المحتويات القديمة بالكامل</u> والصق هذا الكود النقي المصمم خصيصاً لـ Apps Script بدون أي جمل import، ثم اضغط حفظ (Ctrl + S).</li>
+                    </ul>
+                  </div>
+
                   {/* Instructions */}
                   <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs space-y-2 leading-relaxed font-bold text-slate-700">
                     <p className="font-black text-slate-900 text-sm">خطوات تحديث الإسكربت في ملف Google Sheets الخاص بك:</p>
                     <ol className="list-decimal list-inside space-y-1 text-slate-600 pr-1">
                       <li>افتح ملف جوجل شيت الخاص بك.</li>
                       <li>من القائمة العلوية اختار: <strong>توسيع (Extensions)</strong> &larr; <strong>Apps Script</strong>.</li>
-                      <li>قم بتحديد كل الكود القديم الموجود واستبداله بالكود المحدث بالأسفل (باستخدام زر النسخ بالضغط بالعلوي).</li>
+                      <li>قم باختيار ملف <code className="bg-slate-200 px-1 py-0.5 rounded font-mono text-slate-900">Code.gs</code> واحتفِ بكافة المحتويات الموجودة فيه، ثم الصق الكود المنسوخ أدناه.</li>
                       <li>اضغط <strong>حفظ (Save)</strong> ثم <strong>نشر (Deploy)</strong> &larr; <strong>تطوير جديد (New deployment)</strong> &larr; اختيار النوع <strong>Web app</strong> &larr; تنفيذ باسمك والصلاحية <strong>Anyone (أي شخص)</strong> &larr; اضغط <strong>Deploy</strong>.</li>
                     </ol>
                   </div>
