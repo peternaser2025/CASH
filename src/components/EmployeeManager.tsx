@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { UserPlus, Users, CheckCircle2, AlertCircle, Loader2, ShieldCheck, UserCheck, Search, Trash2, Key, Copy, Check, FileSpreadsheet, Lock, Scale, Coins, CalendarClock, X, Printer } from 'lucide-react';
+import { UserPlus, Users, CheckCircle2, AlertCircle, Loader2, ShieldCheck, UserCheck, Search, Trash2, Key, Copy, Check, FileSpreadsheet, Lock, Scale, Coins, CalendarClock, X, Printer, FileText, Award } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
 import { formatKWD } from '../utils/format';
 import { exportReportToExcel } from '../utils/excelExport';
+import VoucherModal, { VoucherData } from './VoucherModal';
+import { tafqeetKWD } from '../utils/tafqeet';
 
 interface EmployeeManagerProps {
   balances: EmployeeBalance[];
@@ -17,6 +19,10 @@ export default function EmployeeManager({ balances, onRefresh }: EmployeeManager
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Voucher print state for clearance & custody certificates
+  const [activeVoucher, setActiveVoucher] = useState<VoucherData | null>(null);
+  const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
 
   // Month-end Cash Box Closing Modal state
   const [closingModal, setClosingModal] = useState<{
@@ -960,7 +966,22 @@ function generateReport(ss, filters) {
           </div>
 
           <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl shadow-gray-200/40 overflow-hidden">
-            <div className="p-8 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
+            {/* Print Only Official Letterhead */}
+            <div className="print-only p-6 border-b-2 border-slate-900">
+              <div className="flex justify-between items-start">
+                <div className="space-y-1">
+                  <h1 className="text-xl font-black text-slate-950">كشف بيان أرصدة العهد والمسؤولين المعتمدين</h1>
+                  <p className="text-xs text-slate-600 font-bold">الإدارة المالية والمحاسبية — كشف تدقيق ومطابقة أرصدة الصناديق والعهد المالية</p>
+                  <p className="text-[10px] text-slate-500 font-mono">AUTHORIZED CUSTODIANS & CASH BALANCES REGISTER</p>
+                </div>
+                <div className="text-left space-y-1 text-xs border border-slate-300 p-2.5 rounded-xl bg-slate-50 font-mono">
+                  <div><span className="font-bold text-slate-500">تاريخ الكشف: </span><span className="font-black text-slate-900">{new Date().toLocaleDateString('ar-KW')}</span></div>
+                  <div><span className="font-bold text-slate-500">إجمالي العهد: </span><span className="font-black text-slate-900">{balances.length} مسؤول</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-8 border-b border-gray-50 flex items-center justify-between bg-gray-50/30 no-print">
               <div className="flex items-center gap-3">
                 <div className="w-2 h-8 bg-emerald-500 rounded-full"></div>
                 <h3 className="text-xl font-black text-gray-900">قائمة الموظفين المعتمدين</h3>
@@ -989,7 +1010,7 @@ function generateReport(ss, filters) {
                     <th className="px-8 py-6">الموظف</th>
                     <th className="px-8 py-6">حالة الحساب</th>
                     <th className="px-8 py-6">الرصيد التراكمي</th>
-                    <th className="px-8 py-6 text-left">إدارة</th>
+                    <th className="px-8 py-6 text-left no-print">إدارة</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -1025,8 +1046,32 @@ function generateReport(ss, filters) {
                           </span>
                         </div>
                       </td>
-                      <td className="px-8 py-6 text-left">
+                      <td className="px-8 py-6 text-left no-print">
                         <div className="flex items-center gap-2 justify-end">
+                          <button
+                            onClick={() => {
+                              setActiveVoucher({
+                                voucherNo: `CLR-${new Date().toISOString().slice(0,10).replace(/-/g, '')}-${emp.name.replace(/\s+/g, '').slice(0, 4)}`,
+                                voucherType: emp.balance >= 0 ? 'Receipt' : 'Payment',
+                                date: new Date().toISOString().split('T')[0],
+                                amount: Math.abs(emp.balance),
+                                beneficiary: emp.balance < 0 ? emp.name : 'الشركة / الخزينة العامة',
+                                payer: emp.balance >= 0 ? emp.name : 'الشركة / الخزينة العامة',
+                                employee: emp.name,
+                                branch: 'كافة الفروع والعمليات',
+                                category: 'تسوية وإخلاء طرف عهدة مالية',
+                                description: `محضر براءة ذمة واستلام وتسليم عهدة نقدية للموظف: ${emp.name} - الرصيد الحالي المسجل بالمنظومة: ${emp.balance.toFixed(3)} د.ك (${emp.balance >= 0 ? 'متبقي لدى الموظف ويجب توريده للخزينة' : 'مستحق للموظف واجب الصرف'})`,
+                                paymentMethod: 'Cash'
+                              });
+                              setIsVoucherModalOpen(true);
+                            }}
+                            className="px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-xl text-xs font-bold border border-indigo-200 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                            title="طباعة محضر براءة ذمة وتسليم عهدة نقدية رسمية"
+                          >
+                            <Award size={14} />
+                            <span>براءة ذمة</span>
+                          </button>
+
                           <button
                             onClick={() => {
                               setClosingModal({
@@ -1217,6 +1262,13 @@ function generateReport(ss, filters) {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Official Voucher Print Modal */}
+      <VoucherModal
+        isOpen={isVoucherModalOpen}
+        onClose={() => setIsVoucherModalOpen(false)}
+        voucher={activeVoucher}
+      />
     </div>
   );
 }

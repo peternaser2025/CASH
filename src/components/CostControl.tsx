@@ -388,6 +388,22 @@ export default function CostControl({ branches, categories, onRefresh }: CostCon
   return (
     <div className="space-y-8 pb-20">
       
+      {/* Official Printable Header */}
+      <div className="print-only mb-6 border-b-2 border-slate-900 pb-4">
+        <div className="flex justify-between items-start">
+          <div className="space-y-1">
+            <h1 className="text-xl font-black text-slate-950">تقرير ضبط وترشيد التكاليف والمصروفات التشغيلية</h1>
+            <p className="text-xs text-slate-600 font-bold">الإدارة المالية والمحاسبية — كشف مطابقة ومقارنة المصاريف الفعلية بأسقف الميزانية</p>
+            <p className="text-[10px] text-slate-500 font-mono">COST CONTROL & BUDGET VARIANCE ANALYSIS DOCKET</p>
+          </div>
+          <div className="text-left space-y-1 text-xs border border-slate-300 p-2.5 rounded-xl bg-slate-50 font-mono">
+            <div><span className="font-bold text-slate-500">الفرع المستهدف: </span><span className="font-black text-slate-900">{selectedBranch}</span></div>
+            <div><span className="font-bold text-slate-500">شهر التقرير: </span><span className="font-black text-slate-900">{selectedMonth}</span></div>
+            <div><span className="font-bold text-slate-500">تاريخ الطباعة: </span><span className="font-black text-slate-900">{new Date().toLocaleDateString('ar-KW')}</span></div>
+          </div>
+        </div>
+      </div>
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-gray-200 pb-8 no-print">
         <div className="space-y-3">
@@ -725,6 +741,25 @@ export default function CostControl({ branches, categories, onRefresh }: CostCon
               })}
             </tbody>
           </table>
+
+          {/* Official Printable Signatures Block */}
+          <div className="print-signatures-block p-6 border-t-2 border-dashed border-gray-300">
+            <div className="print-signature-box">
+              <span className="block font-black text-xs text-gray-900">إعداد / محاسب التكاليف والفرع</span>
+              <p className="text-[10px] text-gray-500 mt-0.5">التوقيع والتاريخ</p>
+              <div className="print-signature-line">التوقيع: ....................</div>
+            </div>
+            <div className="print-signature-box">
+              <span className="block font-black text-xs text-gray-900">مراجعة وتدقيق رئيس الحسابات</span>
+              <p className="text-[10px] text-gray-500 mt-0.5">التوقيع والتاريخ</p>
+              <div className="print-signature-line">المراجع المالي: ....................</div>
+            </div>
+            <div className="print-signature-box">
+              <span className="block font-black text-xs text-gray-900">اعتماد خطة الترشيد والمدير العام</span>
+              <p className="text-[10px] text-gray-500 mt-0.5">المدير العام / المفوض</p>
+              <div className="print-signature-line">الختم والاعتماد: ....................</div>
+            </div>
+          </div>
         </div>
       </div>
 

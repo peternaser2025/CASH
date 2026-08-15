@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { Wallet, TrendingUp, TrendingDown, RefreshCw, Users, Activity, ArrowUpRight, ArrowDownRight, FileSpreadsheet, Search, Filter, ShieldCheck, Scale } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, RefreshCw, Users, Activity, ArrowUpRight, ArrowDownRight, FileSpreadsheet, Search, Filter, ShieldCheck, Scale, Printer, Building, Calendar, FileText } from 'lucide-react';
 import { EmployeeBalance } from '../types';
 import { formatKWD } from '../utils/format';
 import { exportReportToExcel } from '../utils/excelExport';
@@ -84,19 +84,42 @@ export default function Dashboard({ balances, loading, onRefresh, onFeedCustody,
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <button
+            onClick={() => window.print()}
+            className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-gray-900 hover:bg-gray-900 hover:text-white rounded-2xl font-bold text-sm transition-all shadow-sm cursor-pointer no-print"
+          >
+            <Printer size={18} />
+            طباعة المركز المالي
+          </button>
+          <button
             onClick={handleExportDashboardExcel}
-            className="flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-sm transition-all shadow-sm cursor-pointer"
+            className="flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-sm transition-all shadow-sm cursor-pointer no-print"
           >
             <FileSpreadsheet size={18} />
             تصدير المركز المالي (Excel)
           </button>
           <button 
             onClick={onRefresh}
-            className="flex items-center justify-center gap-2 px-6 py-3 bg-white border border-gray-200 rounded-2xl hover:bg-gray-50 transition-all shadow-sm hover:shadow-md text-sm font-bold text-gray-700 active:scale-95 cursor-pointer"
+            className="flex items-center justify-center gap-2 px-6 py-3 bg-white border border-gray-200 rounded-2xl hover:bg-gray-50 transition-all shadow-sm hover:shadow-md text-sm font-bold text-gray-700 active:scale-95 cursor-pointer no-print"
           >
             <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
             تحديث البيانات
           </button>
+        </div>
+      </div>
+
+      {/* Official Printable Header */}
+      <div className="print-only mb-6 border-b-2 border-slate-900 pb-4">
+        <div className="flex justify-between items-start">
+          <div className="space-y-1">
+            <h1 className="text-xl font-black text-slate-950">تقرير المركز المالي الشامل والسيولة النقدية</h1>
+            <p className="text-xs text-slate-600 font-bold">الإدارة المالية والمحاسبية — كشف موقف السيولة النقدية وأرصدة العهد</p>
+            <p className="text-[10px] text-slate-500 font-mono">FINANCIAL LIQUIDITY & CUSTODY POSITION REPORT</p>
+          </div>
+          <div className="text-left space-y-1 text-xs border border-slate-300 p-2.5 rounded-xl bg-slate-50 font-mono">
+            <div><span className="font-bold text-slate-500">التاريخ: </span><span className="font-black text-slate-900">{new Date().toLocaleDateString('ar-KW')}</span></div>
+            <div><span className="font-bold text-slate-500">إجمالي السيولة: </span><span className="font-black text-emerald-700">{formatKWD(totalBalance)} د.ك</span></div>
+            <div><span className="font-bold text-slate-500">عدد العهد: </span><span className="font-black text-slate-900">{balances.length} مسؤول</span></div>
+          </div>
         </div>
       </div>
 
@@ -324,6 +347,25 @@ export default function Dashboard({ balances, loading, onRefresh, onFeedCustody,
               )}
             </tbody>
           </table>
+
+          {/* Official Executive Print Signatures Block */}
+          <div className="print-signatures-block p-6 mt-4 border-t-2 border-dashed border-gray-300">
+            <div className="print-signature-box">
+              <span className="block font-black text-xs text-gray-900">إعداد / محاسب الخزينة والعهد</span>
+              <p className="text-[10px] text-gray-500 mt-0.5">التوقيع والتاريخ</p>
+              <div className="print-signature-line">التوقيع: ....................</div>
+            </div>
+            <div className="print-signature-box">
+              <span className="block font-black text-xs text-gray-900">مراجعة وتدقيق رئيس الحسابات</span>
+              <p className="text-[10px] text-gray-500 mt-0.5">التوقيع والتاريخ</p>
+              <div className="print-signature-line">المراجع المالي: ....................</div>
+            </div>
+            <div className="print-signature-box">
+              <span className="block font-black text-xs text-gray-900">اعتماد الإدارة العليا والمفوض</span>
+              <p className="text-[10px] text-gray-500 mt-0.5">المدير العام / المفوض بالتوقيع</p>
+              <div className="print-signature-line">الختم والاعتماد: ....................</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
