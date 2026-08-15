@@ -21,7 +21,10 @@ import {
   ShieldCheck,
   Menu,
   X,
-  ChevronLeft
+  ChevronLeft,
+  FileCheck2,
+  BookOpen,
+  Target
 } from 'lucide-react';
 import { 
   onAuthStateChanged, 
@@ -50,11 +53,14 @@ import CostControl from './components/CostControl';
 import AccrualLedger from './components/AccrualLedger';
 import GlobalSearch from './components/GlobalSearch';
 import DataIntegrityPanel from './components/DataIntegrityPanel';
+import SettlementsManager from './components/SettlementsManager';
+import JournalEntries from './components/JournalEntries';
+import BudgetManager from './components/BudgetManager';
 
 export default function App() {
   const [user, setUser] = useState<User | any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'reports' | 'employees' | 'google-tools' | 'profit-loss' | 'cost-control' | 'accruals' | 'global-search' | 'data-integrity'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'reports' | 'settlements' | 'journal-entries' | 'budgets' | 'employees' | 'google-tools' | 'profit-loss' | 'cost-control' | 'accruals' | 'global-search' | 'data-integrity'>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // App Data State
@@ -504,6 +510,9 @@ export default function App() {
       case 'dashboard': return 'المركز المالي للعهد والسيولة';
       case 'new-transaction': return 'تسجيل حركة مالية جديدة';
       case 'reports': return 'تقارير وكشوف الحسابات';
+      case 'settlements': return 'محاضر جرد وتصفية وتسوية العهدة النقدية';
+      case 'journal-entries': return 'دفتر ومولد القيود المحاسبية اليومية المزدوجة';
+      case 'budgets': return 'سقف الموازنات التقديرية وضبط الانحرافات';
       case 'employees': return 'إدارة الموظفين وصلاحيات العهد';
       case 'profit-loss': return 'حساب ومطابقة الأرباح والخسائر للفروع';
       case 'cost-control': return 'رادار ضبط التكاليف وكشف الهدر المالي';
@@ -516,8 +525,8 @@ export default function App() {
   };
 
   const getSectionCategory = () => {
-    if (['dashboard', 'new-transaction', 'reports'].includes(activeTab)) return 'العمليات والتقارير';
-    if (['profit-loss', 'cost-control', 'accruals', 'global-search'].includes(activeTab)) return 'الرقابة والتحليل';
+    if (['dashboard', 'new-transaction', 'reports', 'settlements'].includes(activeTab)) return 'العمليات والتقارير';
+    if (['journal-entries', 'budgets', 'profit-loss', 'cost-control', 'accruals', 'global-search'].includes(activeTab)) return 'الرقابة والتحليل';
     return 'النظام والإدارة';
   };
 
@@ -588,6 +597,14 @@ export default function App() {
               active={activeTab === 'reports'} 
               onClick={() => navigateTo('reports')} 
             />
+            <SidebarItem 
+              icon={<FileCheck2 size={18} />} 
+              label="محاضر جرد وتصفية العهد" 
+              active={activeTab === 'settlements'} 
+              badge="رسمي"
+              badgeType="neutral"
+              onClick={() => navigateTo('settlements')} 
+            />
           </div>
 
           {/* Group 2: Financial Control & Auditing */}
@@ -596,6 +613,20 @@ export default function App() {
               <span>الرقابة والتحليل المالي</span>
               <span className="text-[9px] text-slate-600 font-mono">02</span>
             </div>
+            <SidebarItem 
+              icon={<BookOpen size={18} />} 
+              label="دفتر القيود المحاسبية (Dr/Cr)" 
+              active={activeTab === 'journal-entries'} 
+              badge="مزدوج"
+              badgeType="success"
+              onClick={() => navigateTo('journal-entries')} 
+            />
+            <SidebarItem 
+              icon={<Target size={18} />} 
+              label="سقف الموازنات والانحرافات" 
+              active={activeTab === 'budgets'} 
+              onClick={() => navigateTo('budgets')} 
+            />
             <SidebarItem 
               icon={<TrendingUp size={18} />} 
               label="الأرباح والخسائر بالفروع" 
@@ -823,6 +854,31 @@ export default function App() {
                   branches={branches} 
                   categories={categories}
                   initialEmployee={prefilledEmployee}
+                />
+              )}
+              {activeTab === 'settlements' && (
+                <SettlementsManager 
+                  balances={balances}
+                  branches={branches}
+                  categories={categories}
+                  employees={employeeNames}
+                  onRefresh={() => fetchData(true)}
+                />
+              )}
+              {activeTab === 'journal-entries' && (
+                <JournalEntries 
+                  balances={balances}
+                  branches={branches}
+                  categories={categories}
+                  employees={employeeNames}
+                  onRefresh={() => fetchData(true)}
+                />
+              )}
+              {activeTab === 'budgets' && (
+                <BudgetManager 
+                  branches={branches}
+                  categories={categories}
+                  onRefresh={() => fetchData(true)}
                 />
               )}
               {activeTab === 'employees' && (
