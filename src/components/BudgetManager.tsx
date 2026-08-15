@@ -13,7 +13,8 @@ import {
   DollarSign,
   PieChart as PieIcon,
   Percent,
-  Sliders
+  Sliders,
+  Printer
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 
@@ -220,6 +221,30 @@ export default function BudgetManager({
             {savedSuccess ? <CheckCircle2 size={14} /> : <Save size={14} />}
             <span>{savedSuccess ? 'تم حفظ التعديلات' : 'حفظ سقف الموازنات'}</span>
           </button>
+
+          <button
+            onClick={() => window.print()}
+            className="p-2.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 rounded-xl border border-slate-600 transition-all cursor-pointer"
+            title="طباعة تقرير الموازنة التقديرية والانحرافات"
+          >
+            <Printer size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Printable Letterhead */}
+      <div className="hidden print:block mb-6 p-4 border-b-2 border-slate-900 bg-white">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-xl font-black text-slate-950">تقرير الموازنة التقديرية وتحليل الانحرافات المالية</h1>
+            <p className="text-xs text-slate-600 font-bold mt-1">نظام إدارة العهد والمصروفات — دولة الكويت • لشهر: {selectedMonth}</p>
+            <p className="text-[10px] text-slate-500 font-mono mt-0.5">تاريخ الطباعة: {new Date().toLocaleDateString('ar-KW')} - {new Date().toLocaleTimeString('ar-KW')}</p>
+          </div>
+          <div className="text-left bg-slate-50 p-2.5 rounded-xl border border-slate-300">
+            <span className="text-[9px] text-slate-500 font-bold block">إجمالي الموازنة المعتمدة:</span>
+            <span className="text-base font-black font-mono text-slate-900">{budgetAnalytics.totalBudget.toFixed(3)} د.ك</span>
+            <span className="text-[9px] text-slate-600 font-bold block mt-0.5">المنصرف الفعلي: {budgetAnalytics.totalActual.toFixed(3)} د.ك ({budgetAnalytics.overallPercentage.toFixed(1)}%)</span>
+          </div>
         </div>
       </div>
 
@@ -456,6 +481,22 @@ export default function BudgetManager({
               </tr>
             </tfoot>
           </table>
+        </div>
+      </div>
+
+      {/* Official Signatures Footer Block for Printing */}
+      <div className="hidden print:block print-signatures-block">
+        <div className="print-signature-box">
+          <p>مسؤول التخطيط والموازنة</p>
+          <div className="print-signature-line">التوقيع والتاريخ</div>
+        </div>
+        <div className="print-signature-box">
+          <p>رئيس الحسابات / المراجع المالي</p>
+          <div className="print-signature-line">التوقيع والتاريخ</div>
+        </div>
+        <div className="print-signature-box">
+          <p>اعتماد المدير المالي العام</p>
+          <div className="print-signature-line">الختم والاعتماد</div>
         </div>
       </div>
     </div>

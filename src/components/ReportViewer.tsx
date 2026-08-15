@@ -48,6 +48,7 @@ import {
 } from 'recharts';
 import { gasService } from '../services/gasService';
 import { ReportFilter, ReportData, EmployeeBalance } from '../types';
+import VoucherModal, { VoucherData } from './VoucherModal';
 import { 
   formatKWD, 
   isIncomeType, 
@@ -98,6 +99,8 @@ export default function ReportViewer({ employees, balances, branches, categories
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [accrualFilter, setAccrualFilter] = useState<'All' | 'Due' | 'Paid'>('All');
+  const [activeVoucher, setActiveVoucher] = useState<VoucherData | null>(null);
+  const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
 
   // PDF & Printable Column Customization State
   const [visibleColumns, setVisibleColumns] = useState<Record<ReportColumnId, boolean>>({
@@ -1283,6 +1286,34 @@ export default function ReportViewer({ employees, balances, branches, categories
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => {
+                                const isIncome = income > 0;
+                                const isExp = expense > 0;
+                                const vType = isTransfer ? 'Transfer' : (isIncome ? 'Receipt' : 'Payment');
+                                const amt = isIncome ? income : expense;
+                                setActiveVoucher({
+                                  voucherNo: `VCH-${date.replace(/-/g, '')}-${rowIndexInSheet}`,
+                                  voucherType: vType,
+                                  date: date,
+                                  amount: amt,
+                                  beneficiary: isIncome ? 'الشركة / الصندوق العام' : (employee || branch),
+                                  payer: isIncome ? (employee || branch) : undefined,
+                                  employee: employee,
+                                  branch: branch,
+                                  category: category,
+                                  description: description || (isIncome ? 'توريد نقدية' : 'مصروف عهدة'),
+                                  paymentMethod: isTransactionAccrued ? 'Accrual' : 'Cash',
+                                  targetMonth: targetMonth,
+                                  referenceNo: `ROW-${rowIndexInSheet}`
+                                });
+                                setIsVoucherModalOpen(true);
+                              }}
+                              className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                              title="طباعة سند مالي معتمد (صرف / قبض / تحويل)"
+                            >
+                              <Printer size={15} />
+                            </button>
+                            <button
+                              onClick={() => {
                                 setEditingTransaction({
                                   id: calculatedRowId,
                                   rowIndex: rowIndexInSheet,
@@ -1958,6 +1989,13 @@ export default function ReportViewer({ employees, balances, branches, categories
           </div>
         )}
       </AnimatePresence>
+
+      {/* Official Voucher Print Modal */}
+      <VoucherModal
+        isOpen={isVoucherModalOpen}
+        onClose={() => setIsVoucherModalOpen(false)}
+        voucher={activeVoucher}
+      />
     </div>
   );
 }

@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
+import VoucherModal, { VoucherData } from './VoucherModal';
 
 interface SettlementsManagerProps {
   balances: EmployeeBalance[];
@@ -70,6 +71,8 @@ export default function SettlementsManager({
   // Search in itemized purchases
   const [purchaseSearch, setPurchaseSearch] = useState('');
   const [selectedBranchFilter, setSelectedBranchFilter] = useState('all');
+  const [activeVoucher, setActiveVoucher] = useState<VoucherData | null>(null);
+  const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
 
   useEffect(() => {
     if (employees.length > 0 && !selectedEmployee) {
@@ -796,6 +799,7 @@ export default function SettlementsManager({
                       <th className="p-2.5">المستلم منه (من مين)</th>
                       <th className="p-2.5">البيان</th>
                       <th className="p-2.5 text-left">المبلغ (د.ك)</th>
+                      <th className="p-2.5 text-center w-12 no-print">سند</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-bold">
@@ -805,11 +809,34 @@ export default function SettlementsManager({
                         <td className="p-2.5 font-black text-emerald-950">{t.fromWhom}</td>
                         <td className="p-2.5 text-slate-600 truncate max-w-[120px] text-[11px]">{t.description}</td>
                         <td className="p-2.5 text-left font-mono font-black text-emerald-600">{t.amount.toFixed(3)}</td>
+                        <td className="p-2.5 text-center no-print">
+                          <button
+                            onClick={() => {
+                              setActiveVoucher({
+                                voucherNo: `TR-IN-${t.date.replace(/-/g, '')}-${idx + 1}`,
+                                voucherType: 'Transfer',
+                                date: t.date,
+                                amount: t.amount,
+                                beneficiary: selectedEmployee,
+                                payer: t.fromWhom,
+                                employee: selectedEmployee,
+                                category: 'تغذية وتحويل عهدة',
+                                description: `استلام تغذية عهدة نقدية: ${t.description || 'من ' + t.fromWhom}`,
+                                paymentMethod: 'Cash'
+                              });
+                              setIsVoucherModalOpen(true);
+                            }}
+                            className="p-1 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors cursor-pointer"
+                            title="طباعة سند تحويل واستلام عهدة"
+                          >
+                            <Printer size={13} />
+                          </button>
+                        </td>
                       </tr>
                     ))}
                     {settlementStats.incomingTransfers.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="p-4 text-center text-slate-400">لا توجد تغذيات مستلمة</td>
+                        <td colSpan={5} className="p-4 text-center text-slate-400">لا توجد تغذيات مستلمة</td>
                       </tr>
                     )}
                   </tbody>
@@ -832,6 +859,7 @@ export default function SettlementsManager({
                       <th className="p-2.5">المحول إليه (لمين)</th>
                       <th className="p-2.5">البيان</th>
                       <th className="p-2.5 text-left">المبلغ (د.ك)</th>
+                      <th className="p-2.5 text-center w-12 no-print">سند</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-bold">
@@ -841,11 +869,34 @@ export default function SettlementsManager({
                         <td className="p-2.5 font-black text-rose-950">{t.toWhom}</td>
                         <td className="p-2.5 text-slate-600 truncate max-w-[120px] text-[11px]">{t.description}</td>
                         <td className="p-2.5 text-left font-mono font-black text-rose-600">{t.amount.toFixed(3)}</td>
+                        <td className="p-2.5 text-center no-print">
+                          <button
+                            onClick={() => {
+                              setActiveVoucher({
+                                voucherNo: `TR-OUT-${t.date.replace(/-/g, '')}-${idx + 1}`,
+                                voucherType: 'Transfer',
+                                date: t.date,
+                                amount: t.amount,
+                                beneficiary: t.toWhom,
+                                payer: selectedEmployee,
+                                employee: selectedEmployee,
+                                category: 'تحويل وتسليم عهدة',
+                                description: `تحويل عهدة نقدية إلى ${t.toWhom}: ${t.description || ''}`,
+                                paymentMethod: 'Cash'
+                              });
+                              setIsVoucherModalOpen(true);
+                            }}
+                            className="p-1 text-slate-500 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                            title="طباعة سند تحويل وتسليم عهدة"
+                          >
+                            <Printer size={13} />
+                          </button>
+                        </td>
                       </tr>
                     ))}
                     {settlementStats.outgoingTransfers.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="p-4 text-center text-slate-400">لا توجد تحويلات صادرة لأشخاص آخرين</td>
+                        <td colSpan={5} className="p-4 text-center text-slate-400">لا توجد تحويلات صادرة لأشخاص آخرين</td>
                       </tr>
                     )}
                   </tbody>
@@ -897,6 +948,7 @@ export default function SettlementsManager({
                     <th className="p-2.5">البيان وتفاصيل الفاتورة / المورد / المواد</th>
                     <th className="p-2.5 w-24">طريقة الصرف</th>
                     <th className="p-2.5 text-left w-28">المبلغ (د.ك)</th>
+                    <th className="p-2.5 text-center w-12 no-print">سند</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-800 font-bold">
@@ -917,11 +969,35 @@ export default function SettlementsManager({
                       <td className="p-2.5 text-left font-mono font-black text-rose-600">
                         {p.amount.toFixed(3)}
                       </td>
+                      <td className="p-2.5 text-center no-print">
+                        <button
+                          onClick={() => {
+                            setActiveVoucher({
+                              voucherNo: `PUR-${p.date.replace(/-/g, '')}-${i + 1}`,
+                              voucherType: 'Payment',
+                              date: p.date,
+                              amount: p.amount,
+                              beneficiary: p.category || p.branch,
+                              payer: selectedEmployee,
+                              employee: selectedEmployee,
+                              branch: p.branch,
+                              category: p.category,
+                              description: `فاتورة مشتريات ومصروفات: ${p.description || ''}`,
+                              paymentMethod: p.isAccrual ? 'Accrual' : 'Cash'
+                            });
+                            setIsVoucherModalOpen(true);
+                          }}
+                          className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+                          title="طباعة سند صرف / فاتورة مشتريات"
+                        >
+                          <Printer size={13} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {filteredPurchases.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="p-6 text-center text-slate-400">
+                      <td colSpan={8} className="p-6 text-center text-slate-400">
                         لا توجد مشتريات مسجلة مطابقة لمعايير البحث
                       </td>
                     </tr>
@@ -933,6 +1009,7 @@ export default function SettlementsManager({
                     <td className="p-3 text-left font-mono text-sm text-rose-600 font-black">
                       {settlementStats.totalItemizedPurchases.toFixed(3)} د.ك
                     </td>
+                    <td className="no-print"></td>
                   </tr>
                 </tfoot>
               </table>
@@ -1027,6 +1104,13 @@ export default function SettlementsManager({
         </div>
 
       </div>
+
+      {/* Official Voucher Print Modal */}
+      <VoucherModal
+        isOpen={isVoucherModalOpen}
+        onClose={() => setIsVoucherModalOpen(false)}
+        voucher={activeVoucher}
+      />
     </div>
   );
 }

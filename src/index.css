@@ -38,27 +38,14 @@ body {
 /* World-class Print Styles for Reports, Ledgers & Financial Statements */
 @media print {
   @page {
-    size: A4 portrait;
-    margin: 8mm 8mm 10mm 8mm;
+    size: A4 auto;
+    margin: 8mm 8mm 12mm 8mm;
   }
 
-  /* Hide navigation, sidebars, interactive controls, inputs, and search bars */
-  aside, 
-  header, 
-  .no-print, 
-  button.no-print, 
-  nav, 
-  .fixed:not(.printable-modal), 
-  .backdrop-blur-sm:not(.printable-modal),
-  input[type="text"],
-  input[type="search"],
-  select {
-    display: none !important;
-  }
-
-  /* Expand main container to full printable width */
-  body, html, #root, main, [dir="rtl"] {
+  /* Universal print visibility fixes */
+  html, body, #root, main, [dir="rtl"] {
     background: white !important;
+    background-color: white !important;
     color: #0f172a !important;
     box-shadow: none !important;
     overflow: visible !important;
@@ -69,18 +56,34 @@ body {
     margin: 0 !important;
     padding: 0 !important;
     position: static !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* Force grid and flex containers to expand to 100% width without column truncation */
+  /* Hide interactive non-printable controls */
+  aside, 
+  header, 
+  nav,
+  .no-print, 
+  button.no-print, 
+  .fixed:not(.printable-modal):not(.printable-voucher), 
+  .backdrop-blur-sm,
+  .backdrop-blur-xs,
+  input[type="text"]:not(.printable-input),
+  input[type="search"],
+  select:not(.printable-select),
+  [role="dialog"]:not(.printable-modal) {
+    display: none !important;
+  }
+
+  /* Force grid and flex containers to expand to full printable width without column truncation */
   .grid, .flex {
-    display: block !important;
     width: 100% !important;
   }
 
   [class*="col-span-"], .lg\:col-span-7, .lg\:col-span-5, .lg\:col-span-12, .col-span-12 {
     width: 100% !important;
     max-width: 100% !important;
-    grid-column: span 12 / span 12 !important;
   }
 
   /* Force print display for printable components */
@@ -88,23 +91,33 @@ body {
     display: block !important;
   }
 
-  /* Table formatting for high precision printing */
+  /* Table formatting for high precision multi-page accounting printing */
   table {
     width: 100% !important;
     border-collapse: collapse !important;
-    margin-top: 8px !important;
-    margin-bottom: 8px !important;
-    font-size: 8.5pt !important;
-    page-break-inside: auto;
+    margin-top: 6px !important;
+    margin-bottom: 6px !important;
+    font-size: 8pt !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
   }
 
   tr {
     page-break-inside: avoid !important;
-    page-break-after: auto;
+    break-inside: avoid !important;
+    page-break-after: auto !important;
   }
 
   th, td {
-    border: 1px solid #475569 !important;
+    border: 1px solid #64748b !important;
     padding: 4px 6px !important;
     text-align: right !important;
   }
@@ -120,20 +133,24 @@ body {
   /* Cards & containers print styles */
   .rounded-\[2\.5rem\], .rounded-\[2rem\], .rounded-3xl, .rounded-2xl {
     border-radius: 4px !important;
-    border: 1px solid #94a3b8 !important;
+    border: 1px solid #cbd5e1 !important;
     box-shadow: none !important;
-    padding: 12px !important;
-    margin-bottom: 12px !important;
+    padding: 8px !important;
+    margin-bottom: 10px !important;
     overflow: visible !important;
   }
 
-  /* High contrast text & background colors for print */
+  /* High contrast colors for print */
   .text-emerald-600, .text-emerald-700, .text-emerald-800, .text-emerald-950 {
     color: #047857 !important;
   }
 
-  .text-rose-600, .text-rose-700, .text-red-600 {
+  .text-rose-600, .text-rose-700, .text-red-600, .text-red-700 {
     color: #b91c1c !important;
+  }
+
+  .text-blue-600, .text-blue-700, .text-blue-800, .text-blue-950 {
+    color: #1d4ed8 !important;
   }
 
   .text-purple-600, .text-purple-700, .text-purple-900, .text-purple-950 {
@@ -147,7 +164,7 @@ body {
     print-color-adjust: exact !important;
   }
 
-  .bg-gray-900, .bg-slate-900 {
+  .bg-slate-900, .bg-gray-900 {
     background-color: #0f172a !important;
     color: white !important;
     -webkit-print-color-adjust: exact !important;
@@ -155,7 +172,7 @@ body {
   }
 
   /* Printable Voucher / Modal Exception */
-  .printable-modal {
+  .printable-modal, #printable-voucher {
     position: static !important;
     background: white !important;
     padding: 0 !important;
@@ -163,6 +180,7 @@ body {
     border: none !important;
     max-width: 100% !important;
     width: 100% !important;
+    overflow: visible !important;
   }
 
   /* Signature approval block styling for official prints */
@@ -174,6 +192,7 @@ body {
     padding-top: 12px !important;
     border-top: 2px dashed #94a3b8 !important;
     page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
   .print-signature-box {
@@ -181,30 +200,19 @@ body {
     font-size: 7.5pt !important;
     font-weight: bold !important;
     color: #334155 !important;
-    border: 1px solid #e2e8f0 !important;
-    padding: 8px !important;
+    border: 1px solid #cbd5e1 !important;
+    padding: 6px !important;
     border-radius: 4px !important;
-    background: #fafafa !important;
+    background: #f8fafc !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   .print-signature-line {
-    margin-top: 20px !important;
+    margin-top: 18px !important;
     border-top: 1px solid #475569 !important;
     padding-top: 4px !important;
     font-size: 7pt !important;
     color: #64748b !important;
-  }
-
-  /* Official Header Watermark & Document Title */
-  body::before {
-    content: "نظام الإدارة المالية المحاسبي للعهد والمصروفات — تقرير رسمي معتمد | KWD Finance Pro";
-    display: block;
-    text-align: center;
-    font-size: 8.5pt;
-    font-weight: 800;
-    color: #0f172a;
-    padding-bottom: 4px;
-    margin-bottom: 8px;
-    border-bottom: 2px solid #0f172a;
   }
 }

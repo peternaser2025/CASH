@@ -15,10 +15,12 @@ import {
   Building,
   Calendar,
   User,
-  Scale
+  Scale,
+  FileText
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
+import VoucherModal, { VoucherData } from './VoucherModal';
 
 interface JournalEntriesProps {
   balances: EmployeeBalance[];
@@ -57,6 +59,8 @@ export default function JournalEntries({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const [activeVoucher, setActiveVoucher] = useState<VoucherData | null>(null);
+  const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -408,6 +412,22 @@ export default function JournalEntries({
         </div>
       </div>
 
+      {/* Printable Letterhead - Visible only when printing */}
+      <div className="hidden print:block mb-6 p-4 border-b-2 border-slate-900 bg-white">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-xl font-black text-slate-950">دفتر اليومية العامة وسجل القيود المحاسبية</h1>
+            <p className="text-xs text-slate-600 font-bold mt-1">نظام إدارة العهد والمصروفات — دولة الكويت</p>
+            <p className="text-[10px] text-slate-500 font-mono mt-0.5">تاريخ الاستخراج والطباعة: {new Date().toLocaleDateString('ar-KW')} - {new Date().toLocaleTimeString('ar-KW')}</p>
+          </div>
+          <div className="text-left bg-slate-50 p-2.5 rounded-xl border border-slate-300">
+            <span className="text-[9px] text-slate-500 font-bold block">إجمالي توازن القيود (Dr = Cr)</span>
+            <span className="text-lg font-black font-mono text-slate-900">{totals.totalDebit.toFixed(3)} د.ك</span>
+            <span className="text-[9px] text-emerald-700 font-bold block mt-0.5">قيود متوازنة ومعتمدة 100%</span>
+          </div>
+        </div>
+      </div>
+
       {/* Main Journal Table */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden print:border-none print:shadow-none">
         <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -433,6 +453,7 @@ export default function JournalEntries({
                 <th className="p-3.5 text-left w-28 text-blue-800">مدين Dr. (د.ك)</th>
                 <th className="p-3.5 text-left w-28 text-indigo-800">دائن Cr. (د.ك)</th>
                 <th className="p-3.5 w-24">الفرع</th>
+                <th className="p-3.5 w-24 text-center no-print">طباعة السند</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-bold">
@@ -462,6 +483,31 @@ export default function JournalEntries({
                     <td rowSpan={2} className="p-3.5 text-slate-500 align-top text-[11px]">
                       {e.branch}
                     </td>
+                    <td rowSpan={2} className="p-3.5 align-top text-center no-print border-r border-slate-100">
+                      <button
+                        onClick={() => {
+                          setActiveVoucher({
+                            voucherNo: e.voucherNo,
+                            voucherType: 'Journal',
+                            date: e.date,
+                            amount: e.debit,
+                            employee: e.employee,
+                            branch: e.branch,
+                            category: e.category,
+                            description: e.statement,
+                            accountDebit: e.accountDebit,
+                            accountCredit: e.accountCredit,
+                            paymentMethod: 'Cash'
+                          });
+                          setIsVoucherModalOpen(true);
+                        }}
+                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-900 hover:text-white text-slate-700 rounded-lg text-[10px] font-black transition-all flex items-center justify-center gap-1 mx-auto cursor-pointer"
+                        title="معاينة وطباعة سند قيد اليومية"
+                      >
+                        <FileText size={12} />
+                        <span>سند</span>
+                      </button>
+                    </td>
                   </tr>
 
                   {/* Credit Line */}
@@ -482,7 +528,7 @@ export default function JournalEntries({
 
               {filteredEntries.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400 font-bold">
+                  <td colSpan={8} className="p-8 text-center text-slate-400 font-bold">
                     لا توجد قيود محاسبية مطابقة لمعايير البحث الحالية
                   </td>
                 </tr>
@@ -504,11 +550,35 @@ export default function JournalEntries({
                 <td className="p-4 text-center text-[10px] text-emerald-400">
                   متطابق ✅
                 </td>
+                <td className="no-print"></td>
               </tr>
             </tfoot>
           </table>
         </div>
       </div>
+
+      {/* Official Signatures Footer Block for Printing */}
+      <div className="hidden print:block print-signatures-block">
+        <div className="print-signature-box">
+          <p>إعداد المحاسب القانوني</p>
+          <div className="print-signature-line">التوقيع والتاريخ</div>
+        </div>
+        <div className="print-signature-box">
+          <p>المراجع والمدقق المالي</p>
+          <div className="print-signature-line">التوقيع والتاريخ</div>
+        </div>
+        <div className="print-signature-box">
+          <p>اعتماد الإدارة المالية العامة</p>
+          <div className="print-signature-line">الختم والاعتماد</div>
+        </div>
+      </div>
+
+      {/* Voucher Print Modal */}
+      <VoucherModal
+        isOpen={isVoucherModalOpen}
+        onClose={() => setIsVoucherModalOpen(false)}
+        voucher={activeVoucher}
+      />
     </div>
   );
 }

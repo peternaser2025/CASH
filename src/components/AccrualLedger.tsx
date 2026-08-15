@@ -47,6 +47,7 @@ import {
 import { gasService } from '../services/gasService';
 import { formatKWD, isTransferType, matchBranch } from '../utils/format';
 import { exportReportToExcel } from '../utils/excelExport';
+import VoucherModal, { VoucherData } from './VoucherModal';
 
 interface AccrualItem {
   id: string;
@@ -121,6 +122,9 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
   const [submittingNewItem, setSubmittingNewItem] = useState<boolean>(false);
 
   // Load saved local settlements
+  const [activeVoucher, setActiveVoucher] = useState<VoucherData | null>(null);
+  const [isVoucherModalOpen, setIsVoucherModalOpen] = useState<boolean>(false);
+
   useEffect(() => {
     const savedSettlements = localStorage.getItem('kwd_accrual_settlements');
     if (savedSettlements) {
@@ -1504,6 +1508,30 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
 
                       <td className="px-4 py-3 text-center no-print">
                         <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              setActiveVoucher({
+                                voucherNo: `ACC-${item.date.replace(/-/g, '')}-${item.rowIndex}`,
+                                voucherType: 'Payment',
+                                date: item.date,
+                                amount: item.amount,
+                                beneficiary: item.vendorName,
+                                employee: item.employee,
+                                branch: item.branch,
+                                category: item.category,
+                                description: `فاتورة والتزام مستحق: ${item.description}`,
+                                paymentMethod: item.status === 'Paid' ? 'Cash' : 'Accrual',
+                                referenceNo: `REF-${item.rowIndex}`
+                              });
+                              setIsVoucherModalOpen(true);
+                            }}
+                            className="px-2 py-1.5 bg-slate-100 hover:bg-slate-900 hover:text-white text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                            title="معاينة وطباعة سند الصرف / الفاتورة"
+                          >
+                            <Printer size={12} />
+                            <span>سند</span>
+                          </button>
+
                           {item.remainingAmount > 0 && (
                             <button
                               onClick={() => {
@@ -1867,6 +1895,12 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
         )}
       </AnimatePresence>
 
+      {/* Official Voucher Print Modal */}
+      <VoucherModal
+        isOpen={isVoucherModalOpen}
+        onClose={() => setIsVoucherModalOpen(false)}
+        voucher={activeVoucher}
+      />
     </div>
   );
 }
