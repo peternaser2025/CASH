@@ -16,7 +16,15 @@ import {
   ClipboardList,
   ShieldCheck,
   Building,
-  Sparkles
+  Sparkles,
+  ArrowRightLeft,
+  ShoppingBag,
+  SlidersHorizontal,
+  Download,
+  Eye,
+  FileText,
+  Building2,
+  Receipt
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
@@ -28,6 +36,8 @@ interface SettlementsManagerProps {
   employees: string[];
   onRefresh: () => void;
 }
+
+type PrintMode = 'all' | 'summary' | 'transfers' | 'purchases' | 'branches';
 
 export default function SettlementsManager({
   balances,
@@ -48,6 +58,18 @@ export default function SettlementsManager({
   const [reportRows, setReportRows] = useState<any[]>([]);
   const [actualCashCount, setActualCashCount] = useState<string>('');
   const [settlementNotes, setSettlementNotes] = useState<string>('');
+  const [companyName, setCompanyName] = useState<string>('شركة دار السلام للتجارة العامة والمقاولات');
+
+  // Print mode and visible sections toggle
+  const [printMode, setPrintMode] = useState<PrintMode>('all');
+  const [showBranchesSection, setShowBranchesSection] = useState(true);
+  const [showTransfersSection, setShowTransfersSection] = useState(true);
+  const [showPurchasesSection, setShowPurchasesSection] = useState(true);
+  const [showSummaryTable, setShowSummaryTable] = useState(true);
+
+  // Search in itemized purchases
+  const [purchaseSearch, setPurchaseSearch] = useState('');
+  const [selectedBranchFilter, setSelectedBranchFilter] = useState('all');
 
   useEffect(() => {
     if (employees.length > 0 && !selectedEmployee) {
@@ -85,22 +107,119 @@ export default function SettlementsManager({
     return found ? found.balance : 0;
   }, [balances, selectedEmployee]);
 
-  // Calculate detailed settlement metrics
+  // Categorize and compute deep settlement analytics
   const settlementStats = useMemo(() => {
-    let totalFeeding = 0; // Inflows / Transfers in
-    let totalExpenses = 0; // Regular expenses
+    let totalFeeding = 0; // Total cash inflows / feeding
+    let totalExpenses = 0; // Total cash expenses
     let expenseByCategory: { [cat: string]: number } = {};
+    let expenseByBranch: { [branch: string]: { amount: number; count: number } } = {};
+    
+    // Transfers Analysis
+    const incomingTransfers: Array<{
+      date: string;
+      fromWhom: string;
+      description: string;
+      amount: number;
+      refNo: string;
+    }> = [];
 
-    reportRows.forEach(row => {
+    const outgoingTransfers: Array<{
+      date: string;
+      toWhom: string;
+      description: string;
+      amount: number;
+      refNo: string;
+    }> = [];
+
+    // Detailed Itemized Purchases / Expenses
+    const purchasesList: Array<{
+      index: number;
+      date: string;
+      branch: string;
+      category: string;
+      description: string;
+      amount: number;
+      isAccrual: boolean;
+      type: string;
+    }> = [];
+
+    reportRows.forEach((row, idx) => {
+      const date = String(row.date || row[1] || '').split('T')[0];
+      const type = String(row.type || row[2] || '');
+      const cat = String(row.category || row[3] || 'عام');
+      const desc = String(row.description || row[4] || '');
       const inc = parseFloat(String(row.income !== undefined ? row.income : (row[5] || 0))) || 0;
       const exp = parseFloat(String(row.expense !== undefined ? row.expense : (row[6] || 0))) || 0;
-      const cat = String(row.category || row[3] || 'عام');
+      const branch = String(row.branch || row[8] || 'المركز الرئيسي');
+      const emp = String(row.employee || row[9] || selectedEmployee);
       
-      totalFeeding += inc;
-      totalExpenses += exp;
+      const isSettlement = /سداد|تسوية/i.test(cat + " " + desc);
+      const isAccrual = isSettlement ? false : /آجل|اجل|مستحق|مستحقة|مستحقه|رواتب مستحقة|دين|دائن|مورد|مؤجل|غير مسدد|لم يسدد/i.test(cat + " " + desc);
+      const isTransfer = type.includes('تحويل') || desc.includes('تحويل') || cat.includes('تحويل');
+
+      if (inc > 0) {
+        totalFeeding += inc;
+
+        if (isTransfer) {
+          // Inflow transfer
+          // Extract who sent it if mentioned in description
+          let fromParty = 'الخزينة العامة / البنك';
+          const matchFrom = desc.match(/من\s+([^\s,،]+(?:\s+[^\s,،]+)?)/i);
+          if (matchFrom && matchFrom[1]) {
+            fromParty = matchFrom[1].replace(/عهدة|حساب/g, '').trim() || fromParty;
+          }
+
+          incomingTransfers.push({
+            date,
+            fromWhom: fromParty,
+            description: desc || `تغذية عهدة نقدية للموظف ${emp}`,
+            amount: inc,
+            refNo: `TR-IN-${String(idx + 1).padStart(4, '0')}`
+          });
+        }
+      }
 
       if (exp > 0) {
+        totalExpenses += exp;
+
+        // Group by category
         expenseByCategory[cat] = (expenseByCategory[cat] || 0) + exp;
+
+        // Group by branch
+        if (!expenseByBranch[branch]) {
+          expenseByBranch[branch] = { amount: 0, count: 0 };
+        }
+        expenseByBranch[branch].amount += exp;
+        expenseByBranch[branch].count += 1;
+
+        if (isTransfer) {
+          // Outflow transfer
+          let toParty = 'موظف / فرع آخر';
+          const matchTo = desc.match(/إلى\s+([^\s,،]+(?:\s+[^\s,،]+)?)|الي\s+([^\s,،]+(?:\s+[^\s,،]+)?)/i);
+          if (matchTo && (matchTo[1] || matchTo[2])) {
+            toParty = (matchTo[1] || matchTo[2]).replace(/عهدة|حساب/g, '').trim() || toParty;
+          }
+
+          outgoingTransfers.push({
+            date,
+            toWhom: toParty,
+            description: desc || `تحويل صادر من عهدة ${emp}`,
+            amount: exp,
+            refNo: `TR-OUT-${String(idx + 1).padStart(4, '0')}`
+          });
+        } else {
+          // Regular purchase / expense item
+          purchasesList.push({
+            index: idx + 1,
+            date,
+            branch,
+            category: cat,
+            description: desc,
+            amount: exp,
+            isAccrual,
+            type
+          });
+        }
       }
     });
 
@@ -108,26 +227,85 @@ export default function SettlementsManager({
     const actualCash = parseFloat(actualCashCount) || 0;
     const variance = actualCashCount !== '' ? actualCash - calculatedBookBalance : 0;
 
+    const totalIncomingTransfers = incomingTransfers.reduce((acc, t) => acc + t.amount, 0);
+    const totalOutgoingTransfers = outgoingTransfers.reduce((acc, t) => acc + t.amount, 0);
+    const totalItemizedPurchases = purchasesList.reduce((acc, p) => acc + p.amount, 0);
+
     return {
       totalFeeding,
       totalExpenses,
       expenseByCategory,
+      expenseByBranch,
+      incomingTransfers,
+      outgoingTransfers,
+      totalIncomingTransfers,
+      totalOutgoingTransfers,
+      purchasesList,
+      totalItemizedPurchases,
       calculatedBookBalance,
       actualCash,
       variance,
       hasCount: actualCashCount !== '',
-      expenseCount: reportRows.filter(r => (parseFloat(String(r.expense !== undefined ? r.expense : (r[6] || 0))) || 0) > 0).length
+      expenseCount: purchasesList.length + outgoingTransfers.length
     };
-  }, [reportRows, currentEmployeeBalance, actualCashCount]);
+  }, [reportRows, currentEmployeeBalance, actualCashCount, selectedEmployee]);
 
-  const handlePrint = () => {
-    window.print();
+  // Filtered purchases list
+  const filteredPurchases = useMemo(() => {
+    return settlementStats.purchasesList.filter(p => {
+      if (selectedBranchFilter !== 'all' && p.branch !== selectedBranchFilter) return false;
+      if (purchaseSearch) {
+        const q = purchaseSearch.toLowerCase();
+        const matches = 
+          p.description.toLowerCase().includes(q) ||
+          p.category.toLowerCase().includes(q) ||
+          p.branch.toLowerCase().includes(q) ||
+          p.date.includes(q);
+        if (!matches) return false;
+      }
+      return true;
+    });
+  }, [settlementStats.purchasesList, selectedBranchFilter, purchaseSearch]);
+
+  const handlePrint = (mode: PrintMode = 'all') => {
+    setPrintMode(mode);
+    setTimeout(() => {
+      window.print();
+    }, 150);
+  };
+
+  const exportSettlementCSV = () => {
+    const headers = ['م', 'التاريخ', 'الفرع المستفيد', 'التصنيف المحاسبي', 'البيان وتفاصيل الفاتورة / المورد', 'المبلغ (د.ك)', 'النوع'];
+    const rows = settlementStats.purchasesList.map((p, i) => [
+      i + 1,
+      `"${p.date}"`,
+      `"${p.branch}"`,
+      `"${p.category}"`,
+      `"${p.description.replace(/"/g, '""')}"`,
+      p.amount.toFixed(3),
+      `"${p.isAccrual ? 'آجل / مستحق' : 'نقداً من العهدة'}"`
+    ]);
+
+    const csvContent = '\uFEFF' + [
+      `"محضر جرد وتصفية عهدة: ${selectedEmployee}"`,
+      `"الفترة: من ${startDate} إلى ${endDate}"`,
+      `"الرصيد الدفتري: ${settlementStats.calculatedBookBalance.toFixed(3)} د.ك"`,
+      '',
+      headers.join(','),
+      ...rows.map(r => r.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `Settlement_${selectedEmployee}_${startDate}_${endDate}.csv`;
+    link.click();
   };
 
   return (
     <div className="space-y-8" dir="rtl">
-      {/* Header Banner - Hidden on print */}
-      <div className="no-print bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-6 sm:p-8 rounded-3xl border border-slate-700 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+      {/* Top Banner - Hidden on print */}
+      <div className="no-print bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-6 sm:p-8 rounded-3xl border border-slate-700 shadow-xl flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
           <div className="p-3.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-2xl shrink-0">
             <FileCheck2 size={30} />
@@ -135,37 +313,57 @@ export default function SettlementsManager({
           <div>
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-[10px] font-black uppercase tracking-wider">
-                قسم الرقابة والتدقيق المالي
+                قسم الرقابة والتدقيق المالي الشامل
               </span>
-              <span className="text-xs text-slate-400 font-bold">• KWD 0.000</span>
+              <span className="text-xs text-slate-400 font-bold">• تدقيق الفروع والتحويلات والمشتريات</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black mt-1">محاضر جرد وتصفية وتسوية العهدة النقدية</h1>
             <p className="text-xs text-slate-300 font-bold mt-1">
-              إصدار تقرير جرد رسمي، مطابقة المصروفات والفواتير المرفقة، واحتساب فروق العهدة النقدية بدقة الفلس
+              تقرير جرد تفصيلي معتمد: توزيع المصروفات بالفروع، كشف تحويلات العهد (لمن ومن أين)، وسجل تفصيلي للمشتريات
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto">
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
           <button
             onClick={() => {
               loadEmployeeData();
               onRefresh();
             }}
             disabled={loading}
-            className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-black rounded-xl border border-slate-600 transition-all cursor-pointer"
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-black rounded-xl border border-slate-600 transition-all cursor-pointer"
           >
-            <RefreshCw size={15} className={loading ? 'animate-spin text-emerald-400' : ''} />
-            <span>تحديث البيانات</span>
+            <RefreshCw size={14} className={loading ? 'animate-spin text-emerald-400' : ''} />
+            <span>تحديث</span>
           </button>
 
           <button
-            onClick={handlePrint}
-            className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-black rounded-xl shadow-lg shadow-emerald-600/20 transition-all cursor-pointer"
+            onClick={exportSettlementCSV}
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-black rounded-xl border border-slate-600 transition-all cursor-pointer"
           >
-            <Printer size={16} />
-            <span>طباعة المحضر الرسمي</span>
+            <Download size={14} />
+            <span>تصدير Excel</span>
           </button>
+
+          {/* Quick Print Menu */}
+          <div className="flex items-center gap-1 bg-emerald-600 rounded-xl p-1 shadow-lg shadow-emerald-600/20">
+            <button
+              onClick={() => handlePrint('all')}
+              className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white text-xs font-black rounded-lg transition-all cursor-pointer"
+              title="طباعة التقرير الشامل بكل الملاحق"
+            >
+              <Printer size={15} />
+              <span>طباعة المحضر الشامل</span>
+            </button>
+            <button
+              onClick={() => handlePrint('summary')}
+              className="px-2 py-1.5 text-[11px] font-black text-emerald-100 hover:text-white hover:bg-emerald-700/50 rounded-lg transition-all"
+              title="طباعة الملخص التنفيذي صفحة واحدة"
+            >
+              ملخص صفحة واحدة
+            </button>
+          </div>
         </div>
       </div>
 
@@ -236,20 +434,72 @@ export default function SettlementsManager({
           </div>
         </div>
 
-        {/* Additional Notes for the Settlement */}
-        <div>
-          <label className="block text-xs font-black text-slate-700 mb-1.5">ملاحظات وقرار رئيس الحسابات بخصوص التسوية</label>
-          <input
-            type="text"
-            placeholder="مثال: تم تدقيق كافة الفواتير ومطابقتها مع السندات الأصلية وإبراء ذمة الموظف عن الفترة المذكورة."
-            value={settlementNotes}
-            onChange={(e) => setSettlementNotes(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-800 font-bold focus:outline-none focus:border-emerald-500"
-          />
+        {/* Company Name & Settlement Notes */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
+          <div>
+            <label className="block text-xs font-black text-slate-700 mb-1.5">اسم المنشأة في الترويسة المطبوعة</label>
+            <input
+              type="text"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-800 font-bold focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-xs font-black text-slate-700 mb-1.5">قرار وملاحظات رئيس الحسابات والمدير المالي</label>
+            <input
+              type="text"
+              placeholder="مثال: تم تدقيق كافة الفواتير ومطابقتها مع السندات الأصلية وإبراء ذمة الموظف عن الفترة المذكورة."
+              value={settlementNotes}
+              onChange={(e) => setSettlementNotes(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-800 font-bold focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+        </div>
+
+        {/* Section Visibility Toggles (Custom Printing) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 text-xs">
+          <span className="font-black text-slate-600 flex items-center gap-1.5">
+            <SlidersHorizontal size={14} className="text-emerald-600" />
+            <span>تخصيص أقسام وملاحق محضر الجرد:</span>
+          </span>
+
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showBranchesSection}
+                onChange={(e) => setShowBranchesSection(e.target.checked)}
+                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+              />
+              <span className="font-bold text-slate-700">تحليل الفروع ومراكز التكلفة</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showTransfersSection}
+                onChange={(e) => setShowTransfersSection(e.target.checked)}
+                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+              />
+              <span className="font-bold text-slate-700">كشف حركة التحويلات (لمن ومن أين)</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showPurchasesSection}
+                onChange={(e) => setShowPurchasesSection(e.target.checked)}
+                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+              />
+              <span className="font-bold text-slate-700">سجل الفواتير والمشتريات التفصيلي</span>
+            </label>
+          </div>
         </div>
       </div>
 
-      {/* Summary KPI Cards - High Level Financial Metrics */}
+      {/* Summary KPI Cards - High Level Financial Metrics (Hidden on print) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 no-print">
         {/* Total Expenses */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
@@ -258,7 +508,9 @@ export default function SettlementsManager({
             <p className="text-xl font-black text-rose-600 mt-1 font-mono">
               {settlementStats.totalExpenses.toFixed(3)} <span className="text-xs">د.ك</span>
             </p>
-            <p className="text-[10px] text-slate-400 font-bold mt-0.5">{settlementStats.expenseCount} فواتير مسجلة</p>
+            <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+              {settlementStats.purchasesList.length} مشتريات • {settlementStats.outgoingTransfers.length} تحويلات صادرة
+            </p>
           </div>
           <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl">
             <ArrowDownLeft size={22} />
@@ -272,7 +524,9 @@ export default function SettlementsManager({
             <p className="text-xl font-black text-emerald-600 mt-1 font-mono">
               {settlementStats.totalFeeding.toFixed(3)} <span className="text-xs">د.ك</span>
             </p>
-            <p className="text-[10px] text-slate-400 font-bold mt-0.5">خلال الفترة المحددة</p>
+            <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+              {settlementStats.incomingTransfers.length} حركات استلام وتغذية
+            </p>
           </div>
           <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
             <ArrowUpRight size={22} />
@@ -340,37 +594,41 @@ export default function SettlementsManager({
         </div>
       </div>
 
-      {/* Official Settlement Form (Document Preview & Printable Layout) */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-md p-8 sm:p-12 print:border-none print:shadow-none print:p-2">
-        {/* Official Header */}
-        <div className="border-b-2 border-slate-900 pb-6 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      {/* ========================================================================= */}
+      {/* OFFICIAL SETTLEMENT FORM - HIGH PRECISION PRINTABLE & PREVIEW CONTAINER */}
+      {/* ========================================================================= */}
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-md p-8 sm:p-12 print:border-none print:shadow-none print:p-2 space-y-8">
+        
+        {/* Official Letterhead Header */}
+        <div className="border-b-2 border-slate-900 pb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-slate-900 text-white rounded-xl">
-                <Building size={24} />
+              <div className="p-2.5 bg-slate-900 text-white rounded-xl">
+                <Building2 size={26} />
               </div>
               <div>
-                <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                  محضر جرد وتصفية عهدة نقدية رسمية
-                </h2>
-                <p className="text-xs font-black text-slate-500 uppercase tracking-widest mt-0.5">
-                  Petty Cash Reconciliation & Audit Sheet
+                <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest">{companyName}</h2>
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-0.5">
+                  محضر جرد وتصفية وتسوية عهدة نقدية
+                </h1>
+                <p className="text-[11px] font-black text-emerald-700 mt-0.5">
+                  Petty Cash Reconciliation, Transfers & Audit Schedule
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="text-right sm:text-left bg-slate-50 sm:bg-transparent p-3 sm:p-0 rounded-xl border sm:border-none border-slate-200 w-full sm:w-auto">
-            <p className="text-[11px] font-black text-slate-500">رقم المحضر: <span className="font-mono text-slate-900 font-black">SET-{Date.now().toString().slice(-6)}</span></p>
-            <p className="text-[11px] font-black text-slate-500 mt-0.5">تاريخ الإصدار: <span className="font-mono text-slate-900 font-bold">{new Date().toISOString().split('T')[0]}</span></p>
-            <p className="text-[11px] font-black text-emerald-700 mt-0.5">العملة: دينار كويتي (KWD)</p>
+          <div className="text-right sm:text-left bg-slate-50 sm:bg-transparent p-3.5 sm:p-0 rounded-2xl border sm:border-none border-slate-200 w-full sm:w-auto text-xs">
+            <p className="font-black text-slate-600">رقم المحضر: <span className="font-mono text-slate-900 font-black">SET-{Date.now().toString().slice(-6)}</span></p>
+            <p className="font-black text-slate-600 mt-0.5">تاريخ الإصدار: <span className="font-mono text-slate-900 font-bold">{new Date().toISOString().split('T')[0]}</span></p>
+            <p className="font-black text-emerald-700 mt-0.5">العملة المعتمدة: دينار كويتي (KWD)</p>
           </div>
         </div>
 
-        {/* Basic Settlement Info Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-200 mb-8 text-xs">
+        {/* Basic Settlement Details Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-200 text-xs">
           <div>
-            <span className="block text-slate-400 font-black">اسم أمين العهدة:</span>
+            <span className="block text-slate-400 font-black">أمين ومسؤول العهدة:</span>
             <span className="font-black text-slate-900 text-sm">{selectedEmployee || '—'}</span>
           </div>
           <div>
@@ -378,31 +636,37 @@ export default function SettlementsManager({
             <span className="font-bold text-slate-900 font-mono">{startDate} إلى {endDate}</span>
           </div>
           <div>
-            <span className="block text-slate-400 font-black">حالة الاعتماد:</span>
-            <span className="font-black text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md inline-block mt-0.5">
-              جاهز للاعتماد والمراجعة
+            <span className="block text-slate-400 font-black">حالة التدقيق:</span>
+            <span className="font-black text-emerald-700 bg-emerald-100/80 px-2.5 py-0.5 rounded-md inline-block mt-0.5">
+              جاهز للاعتماد والمصادقة
             </span>
           </div>
           <div>
-            <span className="block text-slate-400 font-black">الجهة / الإدارة:</span>
-            <span className="font-black text-slate-900">إدارة الحسابات العامة والمالية</span>
+            <span className="block text-slate-400 font-black">الإدارة المسؤولة:</span>
+            <span className="font-black text-slate-900">إدارة الحسابات والرقابة المالية</span>
           </div>
         </div>
 
-        {/* Breakdown by Category */}
-        <div className="mb-8">
-          <h3 className="text-sm font-black text-slate-900 mb-3 flex items-center gap-2">
-            <Layers size={16} className="text-emerald-600" />
-            <span>أولاً: ملخص المصروفات والفواتير حسب التصنيف المحاسبي</span>
-          </h3>
+        {/* SECTION 1: Category Breakdown Summary */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+              <Layers size={17} className="text-emerald-600" />
+              <span>أولاً: ملخص المصروفات حسب التصنيف المحاسبي</span>
+            </h3>
+            <span className="text-[11px] font-bold text-slate-500 font-mono no-print">
+              إجمالي: {settlementStats.totalExpenses.toFixed(3)} د.ك
+            </span>
+          </div>
+
           <div className="border border-slate-200 rounded-2xl overflow-hidden">
             <table className="w-full text-right text-xs">
               <thead className="bg-slate-100/80 text-slate-700 font-black border-b border-slate-200">
                 <tr>
-                  <th className="p-3">#</th>
+                  <th className="p-3 w-12">#</th>
                   <th className="p-3">بند / تصنيف المصروف</th>
-                  <th className="p-3 text-left">المبلغ المصروف (د.ك)</th>
-                  <th className="p-3 text-left">النسبة المئوية</th>
+                  <th className="p-3 text-left w-36">المبلغ المصروف (د.ك)</th>
+                  <th className="p-3 text-left w-28">النسبة المئوية</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-800 font-bold">
@@ -439,81 +703,261 @@ export default function SettlementsManager({
           </div>
         </div>
 
-        {/* Detailed Itemized Transactions Table */}
-        <div className="mb-8">
-          <h3 className="text-sm font-black text-slate-900 mb-3 flex items-center gap-2">
-            <ClipboardList size={16} className="text-emerald-600" />
-            <span>ثانياً: بيان الفواتير والمستندات المقدمة تفصيلياً ({reportRows.length} حركة)</span>
-          </h3>
-          <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-96 overflow-y-auto print:max-h-none">
-            <table className="w-full text-right text-xs">
-              <thead className="bg-slate-100/80 text-slate-700 font-black border-b border-slate-200 sticky top-0">
-                <tr>
-                  <th className="p-2.5">التاريخ</th>
-                  <th className="p-2.5">النوع</th>
-                  <th className="p-2.5">التصنيف</th>
-                  <th className="p-2.5">البيان والتفاصيل</th>
-                  <th className="p-2.5 text-left">المبلغ (د.ك)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-800 font-bold">
-                {reportRows.map((r, i) => {
-                  const date = String(r.date || r[1] || '').split('T')[0];
-                  const type = String(r.type || r[2] || '');
-                  const cat = String(r.category || r[3] || '');
-                  const desc = String(r.description || r[4] || '');
-                  const inc = parseFloat(String(r.income !== undefined ? r.income : (r[5] || 0))) || 0;
-                  const exp = parseFloat(String(r.expense !== undefined ? r.expense : (r[6] || 0))) || 0;
-                  const isExp = exp > 0 || type.includes('مصروف');
+        {/* SECTION 2: Branch-by-Branch Breakdown (أي فرع) */}
+        {(showBranchesSection || printMode === 'branches' || printMode === 'all') && (
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <Building size={17} className="text-blue-600" />
+                <span>ثانياً: توزيع المصروفات والمشتريات على الفروع ومراكز التكلفة (أي فرع)</span>
+              </h3>
+              <span className="text-[11px] font-bold text-slate-500 font-mono no-print">
+                {Object.keys(settlementStats.expenseByBranch).length} فروع مستفيدة
+              </span>
+            </div>
 
-                  return (
-                    <tr key={i} className="hover:bg-slate-50/60">
-                      <td className="p-2.5 font-mono text-[11px] text-slate-500">{date}</td>
-                      <td className="p-2.5">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
-                          isExp ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'
-                        }`}>
-                          {isExp ? 'مصروف' : 'تغذية/إيراد'}
-                        </span>
-                      </td>
-                      <td className="p-2.5 font-black text-slate-900">{cat}</td>
-                      <td className="p-2.5 text-slate-600 truncate max-w-xs">{desc || '—'}</td>
-                      <td className={`p-2.5 text-left font-mono font-black ${isExp ? 'text-rose-600' : 'text-emerald-600'}`}>
-                        {(isExp ? exp : inc).toFixed(3)}
+            <div className="border border-slate-200 rounded-2xl overflow-hidden">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-blue-50/80 text-blue-950 font-black border-b border-blue-100">
+                  <tr>
+                    <th className="p-3 w-12">#</th>
+                    <th className="p-3">الفرع المستفيد / مركز التكلفة</th>
+                    <th className="p-3 text-center w-28">عدد الفواتير</th>
+                    <th className="p-3 text-left w-36">إجمالي المنصرف (د.ك)</th>
+                    <th className="p-3 text-left w-28">نسبة الفرع</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-800 font-bold">
+                  {(Object.entries(settlementStats.expenseByBranch) as [string, { amount: number; count: number }][]).map(([brName, data], idx) => {
+                    const pct = settlementStats.totalExpenses > 0 ? (data.amount / settlementStats.totalExpenses) * 100 : 0;
+                    return (
+                      <tr key={brName} className="hover:bg-slate-50/60">
+                        <td className="p-3 text-slate-400 font-mono">{idx + 1}</td>
+                        <td className="p-3 font-black text-slate-900 flex items-center gap-2">
+                          <Building size={14} className="text-blue-500" />
+                          <span>{brName}</span>
+                        </td>
+                        <td className="p-3 text-center font-mono">{data.count} فاتورة</td>
+                        <td className="p-3 text-left font-mono font-black text-rose-600">{data.amount.toFixed(3)}</td>
+                        <td className="p-3 text-left font-mono text-slate-500">{pct.toFixed(1)}%</td>
+                      </tr>
+                    );
+                  })}
+                  {Object.keys(settlementStats.expenseByBranch).length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="p-4 text-center text-slate-400">
+                        لا توجد مصروفات مسجلة على أي فرع في هذه الفترة
                       </td>
                     </tr>
-                  );
-                })}
-                {reportRows.length === 0 && (
+                  )}
+                </tbody>
+                <tfoot className="bg-slate-50 font-black border-t border-slate-200 text-slate-900">
                   <tr>
-                    <td colSpan={5} className="p-6 text-center text-slate-400">
-                      لا توجد حركات مسجلة للموظف في هذه الفترة
+                    <td colSpan={3} className="p-3 font-black">إجمالي المصروفات الموزعة على الفروع:</td>
+                    <td className="p-3 text-left font-mono text-sm text-rose-600 font-black">
+                      {settlementStats.totalExpenses.toFixed(3)} د.ك
+                    </td>
+                    <td className="p-3 text-left font-mono">100%</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* SECTION 3: Transfers Analysis (التحويلات تمت لمين ومن أين) */}
+        {(showTransfersSection || printMode === 'transfers' || printMode === 'all') && (
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <ArrowRightLeft size={17} className="text-indigo-600" />
+                <span>ثالثاً: كشف حركة تحويلات العهد النقدية تفصيلياً (تمت لمين ومن أين)</span>
+              </h3>
+              <span className="text-[11px] font-bold text-slate-500 font-mono no-print">
+                {settlementStats.incomingTransfers.length + settlementStats.outgoingTransfers.length} تحويلات مسجلة
+              </span>
+            </div>
+
+            {/* Inflow vs Outflow Tables Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Incoming Feedings (من من استلم) */}
+              <div className="border border-emerald-200 rounded-2xl overflow-hidden">
+                <div className="bg-emerald-50 p-3 border-b border-emerald-100 flex items-center justify-between text-xs font-black text-emerald-900">
+                  <span className="flex items-center gap-1.5">
+                    <ArrowUpRight size={16} className="text-emerald-600" />
+                    <span>تغذية العهدة (استلام من مين)</span>
+                  </span>
+                  <span className="font-mono text-emerald-700">{settlementStats.totalIncomingTransfers.toFixed(3)} د.ك</span>
+                </div>
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-slate-50 text-slate-600 font-black border-b border-slate-100">
+                    <tr>
+                      <th className="p-2.5">التاريخ</th>
+                      <th className="p-2.5">المستلم منه (من مين)</th>
+                      <th className="p-2.5">البيان</th>
+                      <th className="p-2.5 text-left">المبلغ (د.ك)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-bold">
+                    {settlementStats.incomingTransfers.map((t, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50">
+                        <td className="p-2.5 font-mono text-[11px] text-slate-500">{t.date}</td>
+                        <td className="p-2.5 font-black text-emerald-950">{t.fromWhom}</td>
+                        <td className="p-2.5 text-slate-600 truncate max-w-[120px] text-[11px]">{t.description}</td>
+                        <td className="p-2.5 text-left font-mono font-black text-emerald-600">{t.amount.toFixed(3)}</td>
+                      </tr>
+                    ))}
+                    {settlementStats.incomingTransfers.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="p-4 text-center text-slate-400">لا توجد تغذيات مستلمة</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Outgoing Transfers (لمن تم التحويل) */}
+              <div className="border border-rose-200 rounded-2xl overflow-hidden">
+                <div className="bg-rose-50 p-3 border-b border-rose-100 flex items-center justify-between text-xs font-black text-rose-900">
+                  <span className="flex items-center gap-1.5">
+                    <ArrowDownLeft size={16} className="text-rose-600" />
+                    <span>تحويلات صادرة (تم التحويل لمين)</span>
+                  </span>
+                  <span className="font-mono text-rose-700">{settlementStats.totalOutgoingTransfers.toFixed(3)} د.ك</span>
+                </div>
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-slate-50 text-slate-600 font-black border-b border-slate-100">
+                    <tr>
+                      <th className="p-2.5">التاريخ</th>
+                      <th className="p-2.5">المحول إليه (لمين)</th>
+                      <th className="p-2.5">البيان</th>
+                      <th className="p-2.5 text-left">المبلغ (د.ك)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-bold">
+                    {settlementStats.outgoingTransfers.map((t, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50">
+                        <td className="p-2.5 font-mono text-[11px] text-slate-500">{t.date}</td>
+                        <td className="p-2.5 font-black text-rose-950">{t.toWhom}</td>
+                        <td className="p-2.5 text-slate-600 truncate max-w-[120px] text-[11px]">{t.description}</td>
+                        <td className="p-2.5 text-left font-mono font-black text-rose-600">{t.amount.toFixed(3)}</td>
+                      </tr>
+                    ))}
+                    {settlementStats.outgoingTransfers.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="p-4 text-center text-slate-400">لا توجد تحويلات صادرة لأشخاص آخرين</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SECTION 4: Itemized Purchases & Invoices Schedule (تفاصيل المشتريات) */}
+        {(showPurchasesSection || printMode === 'purchases' || printMode === 'all') && (
+          <div className="space-y-3 pt-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <ShoppingBag size={17} className="text-amber-600" />
+                <span>رابعاً: سجل فواتير المشتريات والمصروفات تفصيلياً ({settlementStats.purchasesList.length} فاتورة)</span>
+              </h3>
+
+              {/* In-table filters for view mode */}
+              <div className="no-print flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="بحث في المشتريات..."
+                  value={purchaseSearch}
+                  onChange={(e) => setPurchaseSearch(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-800 font-bold focus:outline-none focus:border-emerald-500"
+                />
+                <select
+                  value={selectedBranchFilter}
+                  onChange={(e) => setSelectedBranchFilter(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-800 font-bold focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="all">كافة الفروع</option>
+                  {branches.map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-[500px] overflow-y-auto print:max-h-none">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-100/80 text-slate-700 font-black border-b border-slate-200 sticky top-0">
+                  <tr>
+                    <th className="p-2.5 w-12">م</th>
+                    <th className="p-2.5 w-24">التاريخ</th>
+                    <th className="p-2.5 w-28">الفرع المستفيد</th>
+                    <th className="p-2.5 w-32">البند والتصنيف</th>
+                    <th className="p-2.5">البيان وتفاصيل الفاتورة / المورد / المواد</th>
+                    <th className="p-2.5 w-24">طريقة الصرف</th>
+                    <th className="p-2.5 text-left w-28">المبلغ (د.ك)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-800 font-bold">
+                  {filteredPurchases.map((p, i) => (
+                    <tr key={i} className="hover:bg-slate-50/60">
+                      <td className="p-2.5 text-slate-400 font-mono text-[11px]">{i + 1}</td>
+                      <td className="p-2.5 font-mono text-[11px] text-slate-500">{p.date}</td>
+                      <td className="p-2.5 font-black text-slate-900">{p.branch}</td>
+                      <td className="p-2.5 font-black text-blue-900">{p.category}</td>
+                      <td className="p-2.5 text-slate-700">{p.description || '—'}</td>
+                      <td className="p-2.5">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                          p.isAccrual ? 'bg-amber-100 text-amber-900' : 'bg-rose-50 text-rose-700'
+                        }`}>
+                          {p.isAccrual ? 'آجل / مورد' : 'نقداً من العهدة'}
+                        </span>
+                      </td>
+                      <td className="p-2.5 text-left font-mono font-black text-rose-600">
+                        {p.amount.toFixed(3)}
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredPurchases.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="p-6 text-center text-slate-400">
+                        لا توجد مشتريات مسجلة مطابقة لمعايير البحث
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+                <tfoot className="bg-slate-50 font-black border-t border-slate-200 text-slate-900">
+                  <tr>
+                    <td colSpan={6} className="p-3 font-black">إجمالي سجل فواتير المشتريات:</td>
+                    <td className="p-3 text-left font-mono text-sm text-rose-600 font-black">
+                      {settlementStats.totalItemizedPurchases.toFixed(3)} د.ك
                     </td>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </tfoot>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Reconciliation Calculation Table */}
-        <div className="mb-8 p-6 bg-slate-900 text-white rounded-3xl">
-          <h3 className="text-sm font-black text-emerald-400 mb-4 flex items-center gap-2">
+        {/* SECTION 5: Final Settlement Reconciliation & Cash Count Result */}
+        <div className="p-6 bg-slate-900 text-white rounded-3xl space-y-4">
+          <h3 className="text-sm font-black text-emerald-400 flex items-center gap-2">
             <ShieldCheck size={18} />
-            <span>ثالثاً: جدول مطابقة وتصفية الرصيد النهائي</span>
+            <span>خامساً: جدول مطابقة الرصيد الدفتري مع الجرد الفعلي وقرار التصفية</span>
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-xs border-b border-slate-800 pb-5 mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-xs border-b border-slate-800 pb-5">
             <div>
-              <span className="text-slate-400 font-bold block mb-1">1. الرصيد الدفتري المستحق:</span>
+              <span className="text-slate-400 font-bold block mb-1">1. الرصيد الدفتري المتبقي المستحق:</span>
               <span className="font-mono text-xl font-black text-white">
                 {settlementStats.calculatedBookBalance.toFixed(3)} <span className="text-xs font-normal">د.ك</span>
               </span>
             </div>
             <div>
-              <span className="text-slate-400 font-bold block mb-1">2. النقد الفعلي الموجود بالخزينة:</span>
+              <span className="text-slate-400 font-bold block mb-1">2. النقد الفعلي الموجود بالخزينة (الجرد):</span>
               <span className="font-mono text-xl font-black text-emerald-400">
-                {settlementStats.hasCount ? `${settlementStats.actualCash.toFixed(3)} د.ك` : 'غير محدد'}
+                {settlementStats.hasCount ? `${settlementStats.actualCash.toFixed(3)} د.ك` : 'لم يتم إدخال الجرد'}
               </span>
             </div>
             <div>
@@ -534,16 +978,16 @@ export default function SettlementsManager({
 
           {settlementNotes && (
             <div className="bg-slate-800/80 p-4 rounded-xl text-slate-300 text-xs">
-              <span className="font-black text-white block mb-1">ملاحظة وقرار الإدارة المالية:</span>
+              <span className="font-black text-white block mb-1">قرار وملاحظة الإدارة المالية ورئيس الحسابات:</span>
               <p>{settlementNotes}</p>
             </div>
           )}
         </div>
 
-        {/* Official Legal Signatures Box */}
-        <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 bg-slate-50/50 mt-10">
+        {/* Legal Signatures Box */}
+        <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 bg-slate-50/50 mt-8">
           <p className="text-center font-black text-xs text-slate-600 mb-8">
-            إقرار ومصادقة: نقر نحن الموقعون أدناه بصحة البيانات ومطابقة الفواتير المرفقة مع الجرد الفعلي للعهدة
+            إقرار ومصادقة: نقر نحن الموقعون أدناه بصحة بيانات الفواتير ومطابقة الفروع والتحويلات مع الجرد الفعلي للعهدة
           </p>
 
           <div className="grid grid-cols-3 gap-6 text-center text-xs">
@@ -573,7 +1017,7 @@ export default function SettlementsManager({
             <div className="space-y-8">
               <div>
                 <p className="font-black text-slate-900">المدير المالي / المفوض</p>
-                <p className="text-[11px] text-slate-500 font-bold mt-0.5">الاعتماد النهائي</p>
+                <p className="text-[11px] text-slate-500 font-bold mt-0.5">الاعتماد النهائي والختم</p>
               </div>
               <div className="border-b border-slate-400 w-3/4 mx-auto pb-1 text-[10px] text-slate-400">
                 الختم والاعتماد: ...................
@@ -581,6 +1025,7 @@ export default function SettlementsManager({
             </div>
           </div>
         </div>
+
       </div>
     </div>
   );
