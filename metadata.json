@@ -1,5 +1,8 @@
 {
   "name": "KWD Finance Pro",
   "description": "Enterprise Grade Accounting System for Petty Cash Management in KWD",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

@@ -18,7 +18,10 @@ import {
   Search,
   Receipt,
   BellRing,
-  ShieldCheck
+  ShieldCheck,
+  Menu,
+  X,
+  ChevronLeft
 } from 'lucide-react';
 import { 
   onAuthStateChanged, 
@@ -52,6 +55,7 @@ export default function App() {
   const [user, setUser] = useState<User | any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'reports' | 'employees' | 'google-tools' | 'profit-loss' | 'cost-control' | 'accruals' | 'global-search' | 'data-integrity'>('dashboard');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // App Data State
   const [balances, setBalances] = useState<EmployeeBalance[]>([]);
@@ -490,102 +494,183 @@ export default function App() {
     );
   }
 
+  const navigateTo = (tab: typeof activeTab) => {
+    setActiveTab(tab);
+    setMobileMenuOpen(false);
+  };
+
+  const getSectionTitle = () => {
+    switch (activeTab) {
+      case 'dashboard': return 'المركز المالي للعهد والسيولة';
+      case 'new-transaction': return 'تسجيل حركة مالية جديدة';
+      case 'reports': return 'تقارير وكشوف الحسابات';
+      case 'employees': return 'إدارة الموظفين وصلاحيات العهد';
+      case 'profit-loss': return 'حساب ومطابقة الأرباح والخسائر للفروع';
+      case 'cost-control': return 'رادار ضبط التكاليف وكشف الهدر المالي';
+      case 'accruals': return 'دفتر المشتريات الآجلة والالتزامات المستحقة';
+      case 'global-search': return 'محرك البحث والتدقيق المالي الشامل';
+      case 'data-integrity': return 'أمان وحفظ البيانات والنسخ الاحتياطي';
+      case 'google-tools': return 'أدوات ومستندات Google Workspace السحابية';
+      default: return 'النظام المالي والمحاسبي';
+    }
+  };
+
+  const getSectionCategory = () => {
+    if (['dashboard', 'new-transaction', 'reports'].includes(activeTab)) return 'العمليات والتقارير';
+    if (['profit-loss', 'cost-control', 'accruals', 'global-search'].includes(activeTab)) return 'الرقابة والتحليل';
+    return 'النظام والإدارة';
+  };
+
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden" dir="rtl">
-      {/* Sidebar - Premium Arabic Drawer */}
-      <aside className="w-80 bg-slate-950 text-slate-100 flex flex-col shrink-0 border-l border-slate-900 no-print">
-        <div className="p-8 flex items-center gap-4 border-b border-slate-900">
-          <div className="p-3 bg-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/10">
-            <Wallet size={24} className="text-white" />
+      {/* Mobile Drawer Overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - Structured Enterprise Arabic Navigation */}
+      <aside className={`
+        fixed md:static inset-y-0 right-0 z-50 w-72 lg:w-80 bg-slate-950 text-slate-100 flex flex-col shrink-0 border-l border-slate-900 no-print transition-transform duration-300 ease-in-out
+        ${mobileMenuOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
+      `}>
+        {/* Brand Header */}
+        <div className="p-6 lg:p-7 flex items-center justify-between border-b border-slate-900">
+          <div className="flex items-center gap-3.5">
+            <div className="p-2.5 bg-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/15">
+              <Wallet size={22} className="text-white" />
+            </div>
+            <div>
+              <span className="font-black text-lg lg:text-xl tracking-tight text-white">KWD Finance</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">النظام المالي الذكي</p>
+              </div>
+            </div>
           </div>
-          <div>
-            <span className="font-black text-xl tracking-tight text-white">KWD Finance</span>
-            <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mt-0.5">Enterprise Edition</p>
-          </div>
+          <button 
+            onClick={() => setMobileMenuOpen(false)}
+            className="md:hidden p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-900"
+          >
+            <X size={20} />
+          </button>
         </div>
 
-        {/* Sidebar Navigation */}
-        <nav className="flex-1 px-4 py-8 space-y-2.5 overflow-y-auto">
-          <SidebarItem 
-            icon={<LayoutDashboard size={20} />} 
-            label="المركز المالي" 
-            active={activeTab === 'dashboard'} 
-            onClick={() => setActiveTab('dashboard')} 
-          />
-          <SidebarItem 
-            icon={<PlusCircle size={20} />} 
-            label="تسجيل حركة مالية" 
-            active={activeTab === 'new-transaction'} 
-            onClick={() => setActiveTab('new-transaction')} 
-          />
-          <SidebarItem 
-            icon={<FileText size={20} />} 
-            label="كشف الحساب" 
-            active={activeTab === 'reports'} 
-            onClick={() => setActiveTab('reports')} 
-          />
-          <SidebarItem 
-            icon={<Users size={20} />} 
-            label="إدارة الموظفين" 
-            active={activeTab === 'employees'} 
-            onClick={() => setActiveTab('employees')} 
-          />
-          <SidebarItem 
-            icon={<TrendingUp size={20} />} 
-            label="الأرباح والخسائر" 
-            active={activeTab === 'profit-loss'} 
-            onClick={() => setActiveTab('profit-loss')} 
-          />
-          <SidebarItem 
-            icon={<ShieldAlert size={20} />} 
-            label="رادار ضبط التكاليف" 
-            active={activeTab === 'cost-control'} 
-            onClick={() => setActiveTab('cost-control')} 
-          />
-          <SidebarItem 
-            icon={<Receipt size={20} />} 
-            label="المشتريات الآجلة والالتزامات" 
-            active={activeTab === 'accruals'} 
-            onClick={() => setActiveTab('accruals')} 
-          />
-          <SidebarItem 
-            icon={<Search size={20} />} 
-            label="محرك البحث والتدقيق" 
-            active={activeTab === 'global-search'} 
-            onClick={() => setActiveTab('global-search')} 
-          />
-          <SidebarItem 
-            icon={<ShieldCheck size={20} />} 
-            label="أمان وحفظ البيانات" 
-            active={activeTab === 'data-integrity'} 
-            onClick={() => setActiveTab('data-integrity')} 
-          />
-          <SidebarItem 
-            icon={<Cloud size={20} />} 
-            label="أدوات Google" 
-            active={activeTab === 'google-tools'} 
-            onClick={() => setActiveTab('google-tools')} 
-          />
+        {/* Structured Sidebar Navigation */}
+        <nav className="flex-1 px-3.5 py-6 space-y-6 overflow-y-auto">
+          {/* Group 1: Daily Operations & Statements */}
+          <div className="space-y-1.5">
+            <div className="px-3.5 pb-1 flex items-center justify-between text-[10px] font-black text-slate-500 uppercase tracking-wider">
+              <span>العمليات والتقارير</span>
+              <span className="text-[9px] text-slate-600 font-mono">01</span>
+            </div>
+            <SidebarItem 
+              icon={<LayoutDashboard size={18} />} 
+              label="المركز المالي للعهد" 
+              active={activeTab === 'dashboard'} 
+              badge={activeCustodyAlertsCount > 0 ? `${activeCustodyAlertsCount} تنبيه` : undefined}
+              badgeType={activeCustodyAlertsCount > 0 ? 'warning' : 'default'}
+              onClick={() => navigateTo('dashboard')} 
+            />
+            <SidebarItem 
+              icon={<PlusCircle size={18} />} 
+              label="تسجيل حركة مالية" 
+              active={activeTab === 'new-transaction'} 
+              badge="جديد +"
+              badgeType="success"
+              onClick={() => navigateTo('new-transaction')} 
+            />
+            <SidebarItem 
+              icon={<FileText size={18} />} 
+              label="كشف الحساب والعمليات" 
+              active={activeTab === 'reports'} 
+              onClick={() => navigateTo('reports')} 
+            />
+          </div>
+
+          {/* Group 2: Financial Control & Auditing */}
+          <div className="space-y-1.5">
+            <div className="px-3.5 pb-1 flex items-center justify-between text-[10px] font-black text-slate-500 uppercase tracking-wider">
+              <span>الرقابة والتحليل المالي</span>
+              <span className="text-[9px] text-slate-600 font-mono">02</span>
+            </div>
+            <SidebarItem 
+              icon={<TrendingUp size={18} />} 
+              label="الأرباح والخسائر بالفروع" 
+              active={activeTab === 'profit-loss'} 
+              onClick={() => navigateTo('profit-loss')} 
+            />
+            <SidebarItem 
+              icon={<ShieldAlert size={18} />} 
+              label="رادار ضبط التكاليف والهدر" 
+              active={activeTab === 'cost-control'} 
+              onClick={() => navigateTo('cost-control')} 
+            />
+            <SidebarItem 
+              icon={<Receipt size={18} />} 
+              label="المشتريات الآجلة والالتزامات" 
+              active={activeTab === 'accruals'} 
+              onClick={() => navigateTo('accruals')} 
+            />
+            <SidebarItem 
+              icon={<Search size={18} />} 
+              label="محرك البحث والتدقيق الشامل" 
+              active={activeTab === 'global-search'} 
+              onClick={() => navigateTo('global-search')} 
+            />
+          </div>
+
+          {/* Group 3: Administration & Cloud Tools */}
+          <div className="space-y-1.5">
+            <div className="px-3.5 pb-1 flex items-center justify-between text-[10px] font-black text-slate-500 uppercase tracking-wider">
+              <span>النظام والإدارة السحابية</span>
+              <span className="text-[9px] text-slate-600 font-mono">03</span>
+            </div>
+            <SidebarItem 
+              icon={<Users size={18} />} 
+              label="إدارة الموظفين والعهد" 
+              active={activeTab === 'employees'} 
+              badge={`${balances.length}`}
+              badgeType="neutral"
+              onClick={() => navigateTo('employees')} 
+            />
+            <SidebarItem 
+              icon={<ShieldCheck size={18} />} 
+              label="أمان وحفظ البيانات والنسخ" 
+              active={activeTab === 'data-integrity'} 
+              onClick={() => navigateTo('data-integrity')} 
+            />
+            <SidebarItem 
+              icon={<Cloud size={18} />} 
+              label="أدوات Google Workspace" 
+              active={activeTab === 'google-tools'} 
+              badge={gasConnected ? "متصل" : "إعداد"}
+              badgeType={gasConnected ? "success" : "neutral"}
+              onClick={() => navigateTo('google-tools')} 
+            />
+          </div>
         </nav>
 
         {/* User profile & Logout */}
-        <div className="p-6 border-t border-slate-900 bg-slate-950/40">
-          <div className="flex items-center gap-4 mb-5 px-2">
+        <div className="p-5 border-t border-slate-900 bg-slate-950/60">
+          <div className="flex items-center gap-3 mb-4 px-1">
             <img 
               src={user.photoURL || 'https://api.dicebear.com/7.x/bottts/svg?seed=admin'} 
-              className="w-10 h-10 rounded-2xl bg-slate-800 border border-slate-700" 
+              className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 shrink-0" 
               alt="User" 
             />
-            <div className="overflow-hidden">
-              <p className="text-sm font-black text-white truncate">{user.displayName || 'مسؤول النظام'}</p>
+            <div className="overflow-hidden min-w-0 flex-1">
+              <p className="text-xs font-black text-white truncate">{user.displayName || 'مسؤول النظام'}</p>
               <p className="text-[10px] text-slate-500 font-bold truncate mt-0.5">{user.email}</p>
             </div>
           </div>
           <button 
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm text-slate-400 hover:text-white hover:bg-red-500/10 hover:text-red-400 rounded-2xl border border-transparent hover:border-red-500/20 transition-all font-black duration-300"
+            className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl border border-slate-900 hover:border-red-500/20 transition-all font-black duration-200"
           >
-            <LogOut size={16} />
+            <LogOut size={14} />
             تسجيل الخروج
           </button>
         </div>
@@ -594,56 +679,87 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-y-auto print:bg-white print:overflow-visible">
         {/* Header - Hidden on Print */}
-        <header className="h-20 bg-white border-b border-slate-100 flex items-center justify-between px-10 sticky top-0 z-40 no-print shrink-0">
+        <header className="h-20 bg-white border-b border-slate-200/80 flex items-center justify-between px-4 sm:px-8 lg:px-10 sticky top-0 z-40 no-print shrink-0 shadow-sm/50">
           <div className="flex items-center gap-3">
-            <div className="w-1 h-6 bg-emerald-500 rounded-full"></div>
-            <h2 className="text-xl font-black text-gray-900">
-              {activeTab === 'dashboard' && 'المركز المالي للعهد والسيولة'}
-              {activeTab === 'new-transaction' && 'تسجيل حركة مالية جديدة'}
-              {activeTab === 'reports' && 'تقارير وكشوف الحسابات'}
-              {activeTab === 'employees' && 'إدارة الموظفين وصلاحيات العهد'}
-              {activeTab === 'profit-loss' && 'حساب ومطابقة الأرباح والخسائر للفروع'}
-              {activeTab === 'cost-control' && 'رادار ضبط التكاليف وكشف الهدر المالي'}
-              {activeTab === 'accruals' && 'دفتر المشتريات الآجلة والالتزامات المستحقة'}
-              {activeTab === 'global-search' && 'محرك البحث والتدقيق المالي الشامل'}
-              {activeTab === 'google-tools' && 'أدوات ومستندات Google Workspace السحابية'}
-            </h2>
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="md:hidden p-2 text-slate-700 hover:bg-slate-100 rounded-xl"
+            >
+              <Menu size={22} />
+            </button>
+            <div className="w-1.5 h-7 bg-emerald-600 rounded-full"></div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                  {getSectionCategory()}
+                </span>
+                <span className="text-[10px] text-slate-400 font-bold">/</span>
+                <h2 className="text-base sm:text-lg lg:text-xl font-black text-slate-900 truncate">
+                  {getSectionTitle()}
+                </h2>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-4">
+
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Fast New Transaction Quick Button */}
+            {activeTab !== 'new-transaction' && (
+              <button
+                onClick={() => setActiveTab('new-transaction')}
+                className="hidden lg:flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-black rounded-xl transition-all shadow-sm shadow-emerald-600/20"
+              >
+                <PlusCircle size={15} />
+                <span>حركة جديدة</span>
+              </button>
+            )}
+
+            {/* Quick Search Button */}
+            {activeTab !== 'global-search' && (
+              <button
+                onClick={() => setActiveTab('global-search')}
+                className="p-2 sm:px-3 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5"
+                title="البحث والتدقيق الشامل"
+              >
+                <Search size={16} />
+                <span className="hidden sm:inline">بحث وتدقيق</span>
+              </button>
+            )}
+
             {gasConnected === true ? (
               <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 text-[11px] font-black">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
-                مربوط بالاكسيل وقاعدة البيانات متصلة ✅
+                مربوط بالسحابة ✅
               </div>
             ) : gasConnected === false ? (
               <button 
                 onClick={checkGasConnection}
                 className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-full border border-amber-200 text-[11px] font-black transition-all cursor-pointer"
               >
-                ⚠️ مشكلة بالاتصال بالاكسيل (إعادة المحاولة)
+                ⚠️ مشكلة بالاتصال (إعادة المحاولة)
               </button>
             ) : (
               <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-500 rounded-full border border-slate-200 text-[11px] font-bold animate-pulse">
-                جاري التحقق من الاتصال...
+                جاري التحقق...
               </div>
             )}
 
             {loadingData && (
-              <div className="flex items-center gap-2 text-xs text-gray-400 font-bold bg-gray-50 px-3 py-1.5 rounded-full border border-gray-100 animate-pulse">
+              <div className="flex items-center gap-2 text-xs text-gray-500 font-bold bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 animate-pulse">
                 <RefreshCw size={12} className="animate-spin text-emerald-500" />
-                جاري تحديث البيانات...
+                <span className="hidden md:inline">جاري التحديث...</span>
               </div>
             )}
+
             {/* Custody Alert Bell Notification */}
             <button
               onClick={() => setActiveTab('dashboard')}
               className="relative p-2.5 bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-800 rounded-2xl border border-slate-200 transition-all cursor-pointer group"
               title="رادار تنبيهات العهد والإشعار المسبق"
             >
-              <BellRing size={20} className={activeCustodyAlertsCount > 0 ? 'text-amber-600 animate-pulse' : 'text-slate-500'} />
+              <BellRing size={18} className={activeCustodyAlertsCount > 0 ? 'text-amber-600 animate-pulse' : 'text-slate-500'} />
               {activeCustodyAlertsCount > 0 && (
                 <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-rose-600 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce">
                   {activeCustodyAlertsCount}
@@ -651,9 +767,9 @@ export default function App() {
               )}
             </button>
 
-            <div className="text-left">
+            <div className="hidden xl:block text-left pr-2 border-r border-slate-200">
               <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider">اليوم والتاريخ</p>
-              <p className="text-sm font-black text-gray-900 mt-0.5">
+              <p className="text-xs font-black text-gray-900 mt-0.5">
                 {new Date().toLocaleDateString('ar-KW', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
               </p>
             </div>
@@ -661,14 +777,14 @@ export default function App() {
         </header>
 
         {/* Dynamic Views Panel */}
-        <div className="p-8 md:p-10 max-w-7xl w-full mx-auto flex-1 print:p-0 print:max-w-none">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto flex-1 print:p-0 print:max-w-none">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
-              initial={{ opacity: 0, y: 15 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              transition={{ duration: 0.25 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.2 }}
               className="print:p-0"
             >
               {activeTab === 'dashboard' && (
@@ -762,22 +878,55 @@ export default function App() {
   );
 }
 
-function SidebarItem({ icon, label, active, onClick }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void }) {
+function SidebarItem({ 
+  icon, 
+  label, 
+  active, 
+  badge,
+  badgeType = 'default',
+  onClick 
+}: { 
+  icon: React.ReactNode, 
+  label: string, 
+  active: boolean, 
+  badge?: string,
+  badgeType?: 'default' | 'success' | 'warning' | 'neutral',
+  onClick: () => void 
+}) {
   return (
     <button 
       onClick={onClick}
-      className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 font-black text-sm relative ${
+      className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl transition-all duration-200 font-black text-xs relative group ${
         active 
-          ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/15" 
-          : "text-slate-400 hover:text-white hover:bg-slate-900/60"
+          ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20" 
+          : "text-slate-400 hover:text-white hover:bg-slate-900/70"
       }`}
     >
-      {icon}
-      <span>{label}</span>
+      <div className="flex items-center gap-3 min-w-0">
+        <span className={active ? "text-white" : "text-slate-400 group-hover:text-emerald-400 transition-colors"}>
+          {icon}
+        </span>
+        <span className="truncate">{label}</span>
+      </div>
+
+      {badge && (
+        <span className={`text-[10px] px-2 py-0.5 rounded-md font-black shrink-0 ${
+          active 
+            ? "bg-emerald-700/80 text-emerald-100" 
+            : badgeType === 'success'
+              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+              : badgeType === 'warning'
+                ? "bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse"
+                : "bg-slate-800 text-slate-300"
+        }`}>
+          {badge}
+        </span>
+      )}
+
       {active && (
         <motion.div 
           layoutId="activeIndicator"
-          className="absolute right-0 top-1/4 h-1/2 w-1.5 bg-white rounded-l-full"
+          className="absolute right-0 top-1/4 h-1/2 w-1 bg-white rounded-l-full"
         />
       )}
     </button>
