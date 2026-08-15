@@ -24,7 +24,7 @@ import {
   ArrowRightLeft
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
-import { formatKWD, isTransferType, isExpenseType, isIncomeType } from '../utils/format';
+import { formatKWD, isTransferType, isExpenseType, isIncomeType, parseReportRow, isArabicSearchMatch, matchBranch } from '../utils/format';
 
 interface SearchResultRow {
   index: number;
@@ -78,29 +78,20 @@ export default function GlobalSearch({ branches, categories, employees }: Global
       });
 
       if (reportData && reportData.rows) {
-        const parsed: SearchResultRow[] = reportData.rows.map((row: any, idx: number) => {
-          const date = String(row[0] || '');
-          const time = row.length > 1 ? String(row[1] || '') : '';
-          const branch = String(row[2] || 'عام');
-          const type = String(row[3] || '');
-          const category = String(row[4] || '');
-          const income = parseFloat(String(row[5])) || 0;
-          const expense = parseFloat(String(row[6])) || 0;
-          const employee = String(row[7] || '');
-          const description = row.length > 8 ? String(row[8] || '') : '';
-
+        const parsed: SearchResultRow[] = reportData.rows.map((rawItem: any, idx: number) => {
+          const norm = parseReportRow(rawItem);
           return {
             index: idx + 1,
-            date,
-            time,
-            branch,
-            type,
-            category,
-            income,
-            expense,
-            employee,
-            description,
-            rawRow: row
+            date: norm.date,
+            time: rawItem.time || '',
+            branch: norm.branch,
+            type: norm.type,
+            category: norm.category,
+            income: norm.income,
+            expense: norm.expense,
+            employee: norm.employee,
+            description: norm.description,
+            rawRow: rawItem
           };
         });
 
@@ -121,36 +112,38 @@ export default function GlobalSearch({ branches, categories, employees }: Global
   const filteredRows = useMemo(() => {
     return allRows.filter(row => {
       // 1. Branch
-      if (selectedBranch !== 'All' && row.branch !== selectedBranch) return false;
+      if (selectedBranch !== 'All' && !matchBranch(row.branch, selectedBranch)) return false;
 
       // 2. Category
-      if (selectedCategory !== 'All' && !row.category.toLowerCase().includes(selectedCategory.toLowerCase())) return false;
+      if (selectedCategory !== 'All' && !isArabicSearchMatch(selectedCategory, row.category)) return false;
 
       // 3. Employee
-      if (selectedEmployee !== 'All' && row.employee !== selectedEmployee) return false;
+      if (selectedEmployee !== 'All' && !isArabicSearchMatch(selectedEmployee, row.employee)) return false;
 
       // 4. Type
-      if (selectedType === 'Expense' && (!isExpenseType(row.type, row.category) || row.expense <= 0)) return false;
-      if (selectedType === 'Income' && (!isIncomeType(row.type, row.category) || row.income <= 0)) return false;
-      if (selectedType === 'Transfer' && !isTransferType(row.type, row.category)) return false;
+      if (selectedType === 'Expense' && (!isExpenseType(row.type, row.category, row.description) || row.expense <= 0)) return false;
+      if (selectedType === 'Income' && (!isIncomeType(row.type, row.category, row.description) || row.income <= 0)) return false;
+      if (selectedType === 'Transfer' && !isTransferType(row.type, row.category, row.description)) return false;
 
       // 5. Amount Range
       const val = row.expense > 0 ? row.expense : row.income;
       if (minAmount && parseFloat(minAmount) > 0 && val < parseFloat(minAmount)) return false;
       if (maxAmount && parseFloat(maxAmount) > 0 && val > parseFloat(maxAmount)) return false;
 
-      // 6. Free text query
+      // 6. Smooth Arabic multi-token search
       if (searchTerm.trim() !== '') {
-        const q = searchTerm.toLowerCase().trim();
-        const matchDesc = row.description.toLowerCase().includes(q);
-        const matchCat = row.category.toLowerCase().includes(q);
-        const matchEmp = row.employee.toLowerCase().includes(q);
-        const matchBranch = row.branch.toLowerCase().includes(q);
-        const matchDate = row.date.toLowerCase().includes(q);
-        const matchAmount = val.toString().includes(q);
-        const matchIndex = row.index.toString().includes(q);
-
-        return matchDesc || matchCat || matchEmp || matchBranch || matchDate || matchAmount || matchIndex;
+        const matches = isArabicSearchMatch(
+          searchTerm,
+          row.description,
+          row.category,
+          row.employee,
+          row.branch,
+          row.date,
+          row.type,
+          val,
+          row.index
+        );
+        if (!matches) return false;
       }
 
       return true;

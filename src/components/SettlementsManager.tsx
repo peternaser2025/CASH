@@ -24,11 +24,23 @@ import {
   Eye,
   FileText,
   Building2,
-  Receipt
+  Receipt,
+  X
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
 import VoucherModal, { VoucherData } from './VoucherModal';
+import { 
+  formatKWD, 
+  parseReportRow, 
+  isArabicSearchMatch, 
+  isTransferType, 
+  isIncomeType, 
+  isExpenseType, 
+  isAccrualType, 
+  extractTransferParties, 
+  matchBranch 
+} from '../utils/format';
 
 interface SettlementsManagerProps {
   balances: EmployeeBalance[];
@@ -68,8 +80,10 @@ export default function SettlementsManager({
   const [showPurchasesSection, setShowPurchasesSection] = useState(true);
   const [showSummaryTable, setShowSummaryTable] = useState(true);
 
-  // Search in itemized purchases
+  // Search & Filter States
   const [purchaseSearch, setPurchaseSearch] = useState('');
+  const [purchaseTypeFilter, setPurchaseTypeFilter] = useState<'all' | 'cash' | 'accrual'>('all');
+  const [transferSearch, setTransferSearch] = useState('');
   const [selectedBranchFilter, setSelectedBranchFilter] = useState('all');
   const [activeVoucher, setActiveVoucher] = useState<VoucherData | null>(null);
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
@@ -124,6 +138,7 @@ export default function SettlementsManager({
       description: string;
       amount: number;
       refNo: string;
+      type: string;
     }> = [];
 
     const outgoingTransfers: Array<{
@@ -132,6 +147,7 @@ export default function SettlementsManager({
       description: string;
       amount: number;
       refNo: string;
+      type: string;
     }> = [];
 
     // Detailed Itemized Purchases / Expenses
@@ -146,72 +162,65 @@ export default function SettlementsManager({
       type: string;
     }> = [];
 
-    reportRows.forEach((row, idx) => {
-      const date = String(row.date || row[1] || '').split('T')[0];
-      const type = String(row.type || row[2] || '');
-      const cat = String(row.category || row[3] || 'عام');
-      const desc = String(row.description || row[4] || '');
-      const inc = parseFloat(String(row.income !== undefined ? row.income : (row[5] || 0))) || 0;
-      const exp = parseFloat(String(row.expense !== undefined ? row.expense : (row[6] || 0))) || 0;
-      const branch = String(row.branch || row[8] || 'المركز الرئيسي');
-      const emp = String(row.employee || row[9] || selectedEmployee);
+    reportRows.forEach((rawRow, idx) => {
+      const row = parseReportRow(rawRow);
+      const date = row.date;
+      const type = row.type;
+      const cat = row.category;
+      const desc = row.description;
+      const inc = row.income;
+      const exp = row.expense;
+      const branch = row.branch || 'المركز الرئيسي';
+      const emp = row.employee || selectedEmployee;
       
       const isSettlement = /سداد|تسوية/i.test(cat + " " + desc);
-      const isAccrual = isSettlement ? false : /آجل|اجل|مستحق|مستحقة|مستحقه|رواتب مستحقة|دين|دائن|مورد|مؤجل|غير مسدد|لم يسدد/i.test(cat + " " + desc);
-      const isTransfer = type.includes('تحويل') || desc.includes('تحويل') || cat.includes('تحويل');
+      const isAccrual = isSettlement ? false : isAccrualType(type, cat, desc);
+      const isTransfer = isTransferType(type, cat, desc);
 
+      // INCOMING CASH FLOWS (تغذية عهدة، استلام مبالغ، إيراد)
       if (inc > 0) {
         totalFeeding += inc;
 
-        if (isTransfer) {
-          // Inflow transfer
-          // Extract who sent it if mentioned in description
-          let fromParty = 'الخزينة العامة / البنك';
-          const matchFrom = desc.match(/من\s+([^\s,،]+(?:\s+[^\s,،]+)?)/i);
-          if (matchFrom && matchFrom[1]) {
-            fromParty = matchFrom[1].replace(/عهدة|حساب/g, '').trim() || fromParty;
-          }
+        const { fromWhom } = extractTransferParties(desc, cat, selectedEmployee, true);
 
-          incomingTransfers.push({
-            date,
-            fromWhom: fromParty,
-            description: desc || `تغذية عهدة نقدية للموظف ${emp}`,
-            amount: inc,
-            refNo: `TR-IN-${String(idx + 1).padStart(4, '0')}`
-          });
-        }
+        incomingTransfers.push({
+          date,
+          fromWhom,
+          description: desc && desc !== '-' ? desc : `تغذية عهدة نقدية للموظف ${emp}`,
+          amount: inc,
+          refNo: `TR-IN-${String(idx + 1).padStart(4, '0')}`,
+          type: isTransfer ? 'تحويل وارد' : (cat.includes('مبيعات') ? 'إيراد نقدي' : 'تغذية عهدة')
+        });
       }
 
+      // OUTGOING EXPENSES & TRANSFERS (مصروفات، مشتريات، تحويلات صادرة)
       if (exp > 0) {
         totalExpenses += exp;
 
-        // Group by category
-        expenseByCategory[cat] = (expenseByCategory[cat] || 0) + exp;
-
-        // Group by branch
-        if (!expenseByBranch[branch]) {
-          expenseByBranch[branch] = { amount: 0, count: 0 };
-        }
-        expenseByBranch[branch].amount += exp;
-        expenseByBranch[branch].count += 1;
-
         if (isTransfer) {
-          // Outflow transfer
-          let toParty = 'موظف / فرع آخر';
-          const matchTo = desc.match(/إلى\s+([^\s,،]+(?:\s+[^\s,،]+)?)|الي\s+([^\s,،]+(?:\s+[^\s,،]+)?)/i);
-          if (matchTo && (matchTo[1] || matchTo[2])) {
-            toParty = (matchTo[1] || matchTo[2]).replace(/عهدة|حساب/g, '').trim() || toParty;
-          }
+          // Outflow transfer to another employee/branch or back to treasury
+          const { toWhom } = extractTransferParties(desc, cat, selectedEmployee, false);
 
           outgoingTransfers.push({
             date,
-            toWhom: toParty,
-            description: desc || `تحويل صادر من عهدة ${emp}`,
+            toWhom,
+            description: desc && desc !== '-' ? desc : `تحويل عهدة صادر إلى ${toWhom}`,
             amount: exp,
-            refNo: `TR-OUT-${String(idx + 1).padStart(4, '0')}`
+            refNo: `TR-OUT-${String(idx + 1).padStart(4, '0')}`,
+            type: 'تحويل صادر'
           });
         } else {
-          // Regular purchase / expense item
+          // Group by category
+          expenseByCategory[cat] = (expenseByCategory[cat] || 0) + exp;
+
+          // Group by branch
+          if (!expenseByBranch[branch]) {
+            expenseByBranch[branch] = { amount: 0, count: 0 };
+          }
+          expenseByBranch[branch].amount += exp;
+          expenseByBranch[branch].count += 1;
+
+          // Regular purchase / operating expense item
           purchasesList.push({
             index: idx + 1,
             date,
@@ -253,22 +262,47 @@ export default function SettlementsManager({
     };
   }, [reportRows, currentEmployeeBalance, actualCashCount, selectedEmployee]);
 
-  // Filtered purchases list
+  // Smooth Filtered purchases list
   const filteredPurchases = useMemo(() => {
     return settlementStats.purchasesList.filter(p => {
-      if (selectedBranchFilter !== 'all' && p.branch !== selectedBranchFilter) return false;
-      if (purchaseSearch) {
-        const q = purchaseSearch.toLowerCase();
-        const matches = 
-          p.description.toLowerCase().includes(q) ||
-          p.category.toLowerCase().includes(q) ||
-          p.branch.toLowerCase().includes(q) ||
-          p.date.includes(q);
+      if (selectedBranchFilter !== 'all' && !matchBranch(p.branch, selectedBranchFilter)) return false;
+      if (purchaseTypeFilter === 'cash' && p.isAccrual) return false;
+      if (purchaseTypeFilter === 'accrual' && !p.isAccrual) return false;
+      if (purchaseSearch.trim()) {
+        const matches = isArabicSearchMatch(
+          purchaseSearch,
+          p.description,
+          p.category,
+          p.branch,
+          p.date,
+          p.amount,
+          p.index
+        );
         if (!matches) return false;
       }
       return true;
     });
-  }, [settlementStats.purchasesList, selectedBranchFilter, purchaseSearch]);
+  }, [settlementStats.purchasesList, selectedBranchFilter, purchaseTypeFilter, purchaseSearch]);
+
+  // Smooth Filtered incoming transfers
+  const filteredIncomingTransfers = useMemo(() => {
+    return settlementStats.incomingTransfers.filter(t => {
+      if (transferSearch.trim()) {
+        return isArabicSearchMatch(transferSearch, t.fromWhom, t.description, t.date, t.amount, t.refNo, t.type);
+      }
+      return true;
+    });
+  }, [settlementStats.incomingTransfers, transferSearch]);
+
+  // Smooth Filtered outgoing transfers
+  const filteredOutgoingTransfers = useMemo(() => {
+    return settlementStats.outgoingTransfers.filter(t => {
+      if (transferSearch.trim()) {
+        return isArabicSearchMatch(transferSearch, t.toWhom, t.description, t.date, t.amount, t.refNo, t.type);
+      }
+      return true;
+    });
+  }, [settlementStats.outgoingTransfers, transferSearch]);
 
   const handlePrint = (mode: PrintMode = 'all') => {
     setPrintMode(mode);
@@ -771,43 +805,80 @@ export default function SettlementsManager({
         {/* SECTION 3: Transfers Analysis (التحويلات تمت لمين ومن أين) */}
         {(showTransfersSection || printMode === 'transfers' || printMode === 'all') && (
           <div className="space-y-4 pt-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                <ArrowRightLeft size={17} className="text-indigo-600" />
-                <span>ثالثاً: كشف حركة تحويلات العهد النقدية تفصيلياً (تمت لمين ومن أين)</span>
-              </h3>
-              <span className="text-[11px] font-bold text-slate-500 font-mono no-print">
-                {settlementStats.incomingTransfers.length + settlementStats.outgoingTransfers.length} تحويلات مسجلة
-              </span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100">
+              <div>
+                <h3 className="text-sm font-black text-indigo-950 flex items-center gap-2">
+                  <ArrowRightLeft size={18} className="text-indigo-600" />
+                  <span>ثالثاً: كشف حركة تحويلات وتغذيات العهد النقدية تفصيلياً (تمت لمين ومن أين)</span>
+                </h3>
+                <p className="text-[11px] text-indigo-700 font-bold mt-0.5">
+                  حصر دقيق لكافة مبالغ التغذية المستلمة والتحويلات الصادرة لزملاء أو فروع أخرى
+                </p>
+              </div>
+
+              {/* Transfer Search Input */}
+              <div className="no-print flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-400" size={14} />
+                  <input
+                    type="text"
+                    placeholder="بحث في التحويلات (اسم، جهة، بيان)..."
+                    value={transferSearch}
+                    onChange={(e) => setTransferSearch(e.target.value)}
+                    className="w-56 sm:w-64 bg-white border border-indigo-200 rounded-xl pr-8 pl-8 py-1.5 text-xs text-slate-800 font-bold focus:outline-none focus:border-indigo-500 shadow-sm"
+                  />
+                  {transferSearch && (
+                    <button
+                      onClick={() => setTransferSearch('')}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+                <span className="text-[11px] font-bold text-indigo-900 font-mono bg-indigo-100/70 px-2.5 py-1 rounded-lg">
+                  {filteredIncomingTransfers.length + filteredOutgoingTransfers.length} حركة
+                </span>
+              </div>
             </div>
 
             {/* Inflow vs Outflow Tables Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Incoming Feedings (من من استلم) */}
-              <div className="border border-emerald-200 rounded-2xl overflow-hidden">
+              <div className="border border-emerald-200 rounded-2xl overflow-hidden shadow-sm">
                 <div className="bg-emerald-50 p-3 border-b border-emerald-100 flex items-center justify-between text-xs font-black text-emerald-900">
                   <span className="flex items-center gap-1.5">
                     <ArrowUpRight size={16} className="text-emerald-600" />
-                    <span>تغذية العهدة (استلام من مين)</span>
+                    <span>تغذية العهدة والتحويلات الواردة (استلام من مين)</span>
                   </span>
-                  <span className="font-mono text-emerald-700">{settlementStats.totalIncomingTransfers.toFixed(3)} د.ك</span>
+                  <span className="font-mono text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded text-xs">
+                    {filteredIncomingTransfers.reduce((acc, t) => acc + t.amount, 0).toFixed(3)} د.ك
+                  </span>
                 </div>
                 <table className="w-full text-right text-xs">
                   <thead className="bg-slate-50 text-slate-600 font-black border-b border-slate-100">
                     <tr>
-                      <th className="p-2.5">التاريخ</th>
-                      <th className="p-2.5">المستلم منه (من مين)</th>
-                      <th className="p-2.5">البيان</th>
-                      <th className="p-2.5 text-left">المبلغ (د.ك)</th>
+                      <th className="p-2.5 w-24">التاريخ</th>
+                      <th className="p-2.5 w-36">المستلم منه (من مين)</th>
+                      <th className="p-2.5">البيان والتفاصيل</th>
+                      <th className="p-2.5 text-left w-24">المبلغ (د.ك)</th>
                       <th className="p-2.5 text-center w-12 no-print">سند</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-bold">
-                    {settlementStats.incomingTransfers.map((t, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50">
+                    {filteredIncomingTransfers.map((t, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
                         <td className="p-2.5 font-mono text-[11px] text-slate-500">{t.date}</td>
-                        <td className="p-2.5 font-black text-emerald-950">{t.fromWhom}</td>
-                        <td className="p-2.5 text-slate-600 truncate max-w-[120px] text-[11px]">{t.description}</td>
+                        <td className="p-2.5 font-black text-emerald-950 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                          <span>{t.fromWhom}</span>
+                        </td>
+                        <td className="p-2.5 text-slate-600 text-[11px]">
+                          <div>{t.description}</div>
+                          <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-mono mt-0.5 inline-block">
+                            {t.type}
+                          </span>
+                        </td>
                         <td className="p-2.5 text-left font-mono font-black text-emerald-600">{t.amount.toFixed(3)}</td>
                         <td className="p-2.5 text-center no-print">
                           <button
@@ -827,47 +898,68 @@ export default function SettlementsManager({
                               setIsVoucherModalOpen(true);
                             }}
                             className="p-1 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors cursor-pointer"
-                            title="طباعة سند تحويل واستلام عهدة"
+                            title="طباعة سند استلام عهدة"
                           >
                             <Printer size={13} />
                           </button>
                         </td>
                       </tr>
                     ))}
-                    {settlementStats.incomingTransfers.length === 0 && (
+                    {filteredIncomingTransfers.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="p-4 text-center text-slate-400">لا توجد تغذيات مستلمة</td>
+                        <td colSpan={5} className="p-6 text-center text-slate-400">
+                          {transferSearch ? 'لا توجد تغذيات مطابقة لنص البحث' : 'لا توجد تغذيات مستلمة في هذه الفترة'}
+                        </td>
                       </tr>
                     )}
                   </tbody>
+                  <tfoot className="bg-slate-50 font-black border-t border-slate-100 text-slate-900">
+                    <tr>
+                      <td colSpan={3} className="p-2.5">إجمالي الوارد:</td>
+                      <td className="p-2.5 text-left font-mono text-emerald-600">
+                        {filteredIncomingTransfers.reduce((acc, t) => acc + t.amount, 0).toFixed(3)} د.ك
+                      </td>
+                      <td className="no-print"></td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
 
               {/* Outgoing Transfers (لمن تم التحويل) */}
-              <div className="border border-rose-200 rounded-2xl overflow-hidden">
+              <div className="border border-rose-200 rounded-2xl overflow-hidden shadow-sm">
                 <div className="bg-rose-50 p-3 border-b border-rose-100 flex items-center justify-between text-xs font-black text-rose-900">
                   <span className="flex items-center gap-1.5">
                     <ArrowDownLeft size={16} className="text-rose-600" />
-                    <span>تحويلات صادرة (تم التحويل لمين)</span>
+                    <span>تحويلات صادرة من العهدة (تم التحويل لمين)</span>
                   </span>
-                  <span className="font-mono text-rose-700">{settlementStats.totalOutgoingTransfers.toFixed(3)} د.ك</span>
+                  <span className="font-mono text-rose-700 bg-rose-100/80 px-2 py-0.5 rounded text-xs">
+                    {filteredOutgoingTransfers.reduce((acc, t) => acc + t.amount, 0).toFixed(3)} د.ك
+                  </span>
                 </div>
                 <table className="w-full text-right text-xs">
                   <thead className="bg-slate-50 text-slate-600 font-black border-b border-slate-100">
                     <tr>
-                      <th className="p-2.5">التاريخ</th>
-                      <th className="p-2.5">المحول إليه (لمين)</th>
-                      <th className="p-2.5">البيان</th>
-                      <th className="p-2.5 text-left">المبلغ (د.ك)</th>
+                      <th className="p-2.5 w-24">التاريخ</th>
+                      <th className="p-2.5 w-36">المحول إليه (لمين)</th>
+                      <th className="p-2.5">البيان والتفاصيل</th>
+                      <th className="p-2.5 text-left w-24">المبلغ (د.ك)</th>
                       <th className="p-2.5 text-center w-12 no-print">سند</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-bold">
-                    {settlementStats.outgoingTransfers.map((t, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50">
+                    {filteredOutgoingTransfers.map((t, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
                         <td className="p-2.5 font-mono text-[11px] text-slate-500">{t.date}</td>
-                        <td className="p-2.5 font-black text-rose-950">{t.toWhom}</td>
-                        <td className="p-2.5 text-slate-600 truncate max-w-[120px] text-[11px]">{t.description}</td>
+                        <td className="p-2.5 font-black text-rose-950 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
+                          <span>{t.toWhom}</span>
+                        </td>
+                        <td className="p-2.5 text-slate-600 text-[11px]">
+                          <div>{t.description}</div>
+                          <span className="text-[10px] text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded font-mono mt-0.5 inline-block">
+                            {t.type}
+                          </span>
+                        </td>
                         <td className="p-2.5 text-left font-mono font-black text-rose-600">{t.amount.toFixed(3)}</td>
                         <td className="p-2.5 text-center no-print">
                           <button
@@ -894,12 +986,23 @@ export default function SettlementsManager({
                         </td>
                       </tr>
                     ))}
-                    {settlementStats.outgoingTransfers.length === 0 && (
+                    {filteredOutgoingTransfers.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="p-4 text-center text-slate-400">لا توجد تحويلات صادرة لأشخاص آخرين</td>
+                        <td colSpan={5} className="p-6 text-center text-slate-400">
+                          {transferSearch ? 'لا توجد تحويلات مطابقة لنص البحث' : 'لا توجد تحويلات صادرة لأشخاص آخرين'}
+                        </td>
                       </tr>
                     )}
                   </tbody>
+                  <tfoot className="bg-slate-50 font-black border-t border-slate-100 text-slate-900">
+                    <tr>
+                      <td colSpan={3} className="p-2.5">إجمالي المنصرف كتحويلات:</td>
+                      <td className="p-2.5 text-left font-mono text-rose-600">
+                        {filteredOutgoingTransfers.reduce((acc, t) => acc + t.amount, 0).toFixed(3)} د.ك
+                      </td>
+                      <td className="no-print"></td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </div>
@@ -908,28 +1011,75 @@ export default function SettlementsManager({
 
         {/* SECTION 4: Itemized Purchases & Invoices Schedule (تفاصيل المشتريات) */}
         {(showPurchasesSection || printMode === 'purchases' || printMode === 'all') && (
-          <div className="space-y-3 pt-2">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                <ShoppingBag size={17} className="text-amber-600" />
-                <span>رابعاً: سجل فواتير المشتريات والمصروفات تفصيلياً ({settlementStats.purchasesList.length} فاتورة)</span>
-              </h3>
+          <div className="space-y-4 pt-2">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-amber-50/50 p-4 rounded-2xl border border-amber-200">
+              <div>
+                <h3 className="text-sm font-black text-amber-950 flex items-center gap-2">
+                  <ShoppingBag size={18} className="text-amber-600" />
+                  <span>رابعاً: سجل فواتير المشتريات والمصروفات التشغيلية تفصيلياً</span>
+                </h3>
+                <p className="text-[11px] text-amber-800 font-bold mt-0.5">
+                  عرض {filteredPurchases.length} فاتورة من إجمالي {settlementStats.purchasesList.length} فاتورة مسجلة
+                </p>
+              </div>
 
               {/* In-table filters for view mode */}
-              <div className="no-print flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="بحث في المشتريات..."
-                  value={purchaseSearch}
-                  onChange={(e) => setPurchaseSearch(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-800 font-bold focus:outline-none focus:border-emerald-500"
-                />
+              <div className="no-print flex flex-wrap items-center gap-2">
+                {/* Search Bar with Reset */}
+                <div className="relative">
+                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                  <input
+                    type="text"
+                    placeholder="بحث فوري في المشتريات..."
+                    value={purchaseSearch}
+                    onChange={(e) => setPurchaseSearch(e.target.value)}
+                    className="w-48 sm:w-56 bg-white border border-slate-200 rounded-xl pr-8 pl-8 py-1.5 text-xs text-slate-800 font-bold focus:outline-none focus:border-amber-500 shadow-sm"
+                  />
+                  {purchaseSearch && (
+                    <button
+                      onClick={() => setPurchaseSearch('')}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Type Filter Buttons */}
+                <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1 shadow-sm text-xs font-bold">
+                  <button
+                    onClick={() => setPurchaseTypeFilter('all')}
+                    className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                      purchaseTypeFilter === 'all' ? 'bg-amber-500 text-white font-black' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    الكل ({settlementStats.purchasesList.length})
+                  </button>
+                  <button
+                    onClick={() => setPurchaseTypeFilter('cash')}
+                    className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                      purchaseTypeFilter === 'cash' ? 'bg-amber-500 text-white font-black' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    نقدي مسدد
+                  </button>
+                  <button
+                    onClick={() => setPurchaseTypeFilter('accrual')}
+                    className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                      purchaseTypeFilter === 'accrual' ? 'bg-amber-500 text-white font-black' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    آجل / موردين
+                  </button>
+                </div>
+
+                {/* Branch Selector */}
                 <select
                   value={selectedBranchFilter}
                   onChange={(e) => setSelectedBranchFilter(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-800 font-bold focus:outline-none focus:border-emerald-500"
+                  className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-bold focus:outline-none focus:border-amber-500 shadow-sm cursor-pointer"
                 >
-                  <option value="all">كافة الفروع</option>
+                  <option value="all">كافة الفروع المستفيدة</option>
                   {branches.map(b => (
                     <option key={b} value={b}>{b}</option>
                   ))}
@@ -937,36 +1087,39 @@ export default function SettlementsManager({
               </div>
             </div>
 
-            <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-[500px] overflow-y-auto print:max-h-none">
+            <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-[500px] overflow-y-auto print:max-h-none shadow-sm">
               <table className="w-full text-right text-xs">
-                <thead className="bg-slate-100/80 text-slate-700 font-black border-b border-slate-200 sticky top-0">
+                <thead className="bg-slate-100/90 text-slate-800 font-black border-b border-slate-200 sticky top-0 backdrop-blur-sm">
                   <tr>
-                    <th className="p-2.5 w-12">م</th>
+                    <th className="p-2.5 w-12 text-center">م</th>
                     <th className="p-2.5 w-24">التاريخ</th>
                     <th className="p-2.5 w-28">الفرع المستفيد</th>
-                    <th className="p-2.5 w-32">البند والتصنيف</th>
+                    <th className="p-2.5 w-36">البند والتصنيف</th>
                     <th className="p-2.5">البيان وتفاصيل الفاتورة / المورد / المواد</th>
-                    <th className="p-2.5 w-24">طريقة الصرف</th>
-                    <th className="p-2.5 text-left w-28">المبلغ (د.ك)</th>
+                    <th className="p-2.5 w-28">طريقة الصرف</th>
+                    <th className="p-2.5 text-left w-32">المبلغ (د.ك)</th>
                     <th className="p-2.5 text-center w-12 no-print">سند</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-800 font-bold">
                   {filteredPurchases.map((p, i) => (
-                    <tr key={i} className="hover:bg-slate-50/60">
-                      <td className="p-2.5 text-slate-400 font-mono text-[11px]">{i + 1}</td>
+                    <tr key={i} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="p-2.5 text-slate-400 font-mono text-[11px] text-center">{i + 1}</td>
                       <td className="p-2.5 font-mono text-[11px] text-slate-500">{p.date}</td>
-                      <td className="p-2.5 font-black text-slate-900">{p.branch}</td>
+                      <td className="p-2.5 font-black text-slate-900 flex items-center gap-1.5">
+                        <Building size={13} className="text-blue-500 shrink-0" />
+                        <span>{p.branch}</span>
+                      </td>
                       <td className="p-2.5 font-black text-blue-900">{p.category}</td>
                       <td className="p-2.5 text-slate-700">{p.description || '—'}</td>
                       <td className="p-2.5">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
-                          p.isAccrual ? 'bg-amber-100 text-amber-900' : 'bg-rose-50 text-rose-700'
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                          p.isAccrual ? 'bg-amber-100 text-amber-900 border border-amber-200' : 'bg-rose-50 text-rose-700 border border-rose-100'
                         }`}>
                           {p.isAccrual ? 'آجل / مورد' : 'نقداً من العهدة'}
                         </span>
                       </td>
-                      <td className="p-2.5 text-left font-mono font-black text-rose-600">
+                      <td className="p-2.5 text-left font-mono font-black text-rose-600 text-sm">
                         {p.amount.toFixed(3)}
                       </td>
                       <td className="p-2.5 text-center no-print">
@@ -987,27 +1140,29 @@ export default function SettlementsManager({
                             });
                             setIsVoucherModalOpen(true);
                           }}
-                          className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+                          className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                           title="طباعة سند صرف / فاتورة مشتريات"
                         >
-                          <Printer size={13} />
+                          <Printer size={14} />
                         </button>
                       </td>
                     </tr>
                   ))}
                   {filteredPurchases.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="p-6 text-center text-slate-400">
-                        لا توجد مشتريات مسجلة مطابقة لمعايير البحث
+                      <td colSpan={8} className="p-8 text-center text-slate-400 font-bold">
+                        {purchaseSearch || selectedBranchFilter !== 'all' || purchaseTypeFilter !== 'all' 
+                          ? 'لا توجد فواتير مطابقة لمعايير البحث والتصفية المحددة' 
+                          : 'لا توجد فواتير مشتريات مسجلة في هذه الفترة'}
                       </td>
                     </tr>
                   )}
                 </tbody>
                 <tfoot className="bg-slate-50 font-black border-t border-slate-200 text-slate-900">
                   <tr>
-                    <td colSpan={6} className="p-3 font-black">إجمالي سجل فواتير المشتريات:</td>
+                    <td colSpan={6} className="p-3 font-black">إجمالي الفواتير المعروضة:</td>
                     <td className="p-3 text-left font-mono text-sm text-rose-600 font-black">
-                      {settlementStats.totalItemizedPurchases.toFixed(3)} د.ك
+                      {filteredPurchases.reduce((acc, p) => acc + p.amount, 0).toFixed(3)} د.ك
                     </td>
                     <td className="no-print"></td>
                   </tr>
