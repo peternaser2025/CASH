@@ -95,7 +95,10 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
 
   const handleExportPLPDF = async () => {
     const el = document.getElementById('printable-pl-report');
-    if (!el) return;
+    if (!el) {
+      alert('لم يتم العثور على تقرير الأرباح والخسائر للتحميل');
+      return;
+    }
 
     setPdfLoading(true);
     try {
@@ -109,7 +112,9 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
       });
     } catch (err) {
       console.error('Error generating P&L PDF:', err);
-      alert('حدث خطأ أثناء تحميل تقرير الأرباح والخسائر بصيغة PDF');
+      if (window.confirm('تعذر التحميل المباشر لملف PDF. هل تود فتح نافذة الطباعة للحفظ بصيغة PDF فوراً؟')) {
+        window.print();
+      }
     } finally {
       setPdfLoading(false);
     }
