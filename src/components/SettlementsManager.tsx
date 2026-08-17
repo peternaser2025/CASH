@@ -25,11 +25,17 @@ import {
   FileText,
   Building2,
   Receipt,
-  X
+  X,
+  Loader2,
+  TrendingUp,
+  Gauge,
+  FileDown,
+  Check
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
 import VoucherModal, { VoucherData } from './VoucherModal';
+import { exportElementToPDF } from '../utils/pdfExport';
 import { 
   formatKWD, 
   parseReportRow, 
@@ -304,6 +310,151 @@ export default function SettlementsManager({
     });
   }, [settlementStats.outgoingTransfers, transferSearch]);
 
+  // Overall Inventory & Audit Reconciliation Progress for Selected Custody
+  const auditProgress = useMemo(() => {
+    let score = 0;
+    
+    // Step 1: Physical cash count input (30%)
+    const hasCount = settlementStats.hasCount;
+    // Step 2: Variance & Balance Reconciliation (30%)
+    const isExactMatch = hasCount && Math.abs(settlementStats.variance) < 0.001;
+    const hasVariance = hasCount && Math.abs(settlementStats.variance) >= 0.001;
+    // Step 3: Audit of Invoices & Transfers (25%)
+    const hasTransactions = reportRows.length > 0 || settlementStats.totalExpenses > 0 || settlementStats.calculatedBookBalance === 0;
+    // Step 4: Management decision & notes (15%)
+    const hasNotes = settlementNotes.trim().length > 0;
+
+    if (hasCount) score += 30;
+    if (isExactMatch) score += 30;
+    else if (hasVariance) score += 15; // Partial score for recording count with noted variance
+    if (hasTransactions) score += 25;
+    if (hasNotes) score += 15;
+
+    const percentage = Math.min(100, score);
+
+    // Custody Utilization / Liquidation Rate (المصروفات المنفذة مقابل إجمالي العهدة المتاحة)
+    const totalInflow = settlementStats.totalFeeding > 0 
+      ? settlementStats.totalFeeding 
+      : (settlementStats.totalExpenses + Math.max(0, settlementStats.calculatedBookBalance));
+    
+    const liquidationRate = totalInflow > 0 
+      ? Math.min(100, Math.round((settlementStats.totalExpenses / totalInflow) * 100)) 
+      : 0;
+
+    const steps = [
+      {
+        id: 'count',
+        title: 'إدخال الجرد الفعلي للنقد',
+        weight: 30,
+        completed: hasCount,
+        detail: hasCount ? `${settlementStats.actualCash.toFixed(3)} د.ك` : 'بانتظار الإدخال',
+        statusLabel: hasCount ? 'تم الإدخال' : 'مطلوب'
+      },
+      {
+        id: 'variance',
+        title: 'مطابقة الرصيد وتصفير الفروق',
+        weight: 30,
+        completed: isExactMatch,
+        partial: hasVariance,
+        detail: !hasCount
+          ? 'بانتظار الجرد الفعلي'
+          : isExactMatch
+          ? 'مطابقة تامة 100% (0.000 د.ك)'
+          : settlementStats.variance < 0
+          ? `عجز: ${Math.abs(settlementStats.variance).toFixed(3)} د.ك`
+          : `زيادة: ${settlementStats.variance.toFixed(3)} د.ك`,
+        statusLabel: !hasCount ? 'معلق' : isExactMatch ? 'مطابق ✅' : 'يوجد فرق ⚠️'
+      },
+      {
+        id: 'invoices',
+        title: 'تدقيق المشتريات والتحويلات',
+        weight: 25,
+        completed: hasTransactions,
+        detail: `${settlementStats.purchasesList.length} مشتريات • ${settlementStats.incomingTransfers.length + settlementStats.outgoingTransfers.length} تحويلات`,
+        statusLabel: 'تم الفحص'
+      },
+      {
+        id: 'notes',
+        title: 'اعتماد وقرار الإدارة المالية',
+        weight: 15,
+        completed: hasNotes,
+        detail: hasNotes ? 'تم تسجيل القرار' : 'اختياري للاعتماد',
+        statusLabel: hasNotes ? 'معتمد' : 'اختياري'
+      }
+    ];
+
+    let statusTheme = {
+      badge: 'bg-rose-50 text-rose-700 border-rose-200',
+      bar: 'from-rose-500 via-amber-500 to-emerald-500',
+      progressBg: 'bg-rose-500',
+      label: 'بانتظار إدخال الجرد الفعلي للنقد',
+      ring: 'text-rose-500'
+    };
+
+    if (percentage === 100) {
+      statusTheme = {
+        badge: 'bg-emerald-50 text-emerald-700 border-emerald-300',
+        bar: 'from-emerald-500 to-teal-500',
+        progressBg: 'bg-emerald-600',
+        label: 'مكتمل ومطابق 100% - جاهز للاعتماد والمصادقة',
+        ring: 'text-emerald-600'
+      };
+    } else if (percentage >= 70) {
+      statusTheme = {
+        badge: 'bg-blue-50 text-blue-700 border-blue-200',
+        bar: 'from-blue-500 to-emerald-500',
+        progressBg: 'bg-blue-600',
+        label: 'شبه مكتمل - بانتظار الاعتماد النهائي',
+        ring: 'text-blue-600'
+      };
+    } else if (percentage >= 40) {
+      statusTheme = {
+        badge: 'bg-amber-50 text-amber-700 border-amber-200',
+        bar: 'from-amber-500 to-yellow-500',
+        progressBg: 'bg-amber-500',
+        label: 'قيد التدقيق ومراجعة الفروق النقدية',
+        ring: 'text-amber-500'
+      };
+    }
+
+    return {
+      percentage,
+      steps,
+      statusTheme,
+      liquidationRate,
+      totalInflow
+    };
+  }, [settlementStats, reportRows, settlementNotes]);
+
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const handleExportPDF = async () => {
+    const el = document.getElementById('printable-settlement-report');
+    if (!el) {
+      alert('لم يتم العثور على محضر الجرد والتصفية للتحميل');
+      return;
+    }
+
+    setPdfLoading(true);
+    try {
+      const cleanEmp = (selectedEmployee || 'عام').replace(/[/\\?%*:|"<>]/g, '_');
+      const filename = `محضر_جرد_وتصفية_عهدة_${cleanEmp}_${startDate}_${endDate}.pdf`;
+      await exportElementToPDF(el, {
+        filename,
+        orientation: 'portrait',
+        margins: 'narrow',
+        scale: 100
+      });
+    } catch (err) {
+      console.error('Error generating Settlement PDF:', err);
+      if (window.confirm('تعذر التحميل المباشر لملف PDF. هل تود فتح نافذة الطباعة للحفظ بصيغة PDF فوراً؟')) {
+        window.print();
+      }
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   const handlePrint = (mode: PrintMode = 'all') => {
     setPrintMode(mode);
     setTimeout(() => {
@@ -381,6 +532,21 @@ export default function SettlementsManager({
           >
             <Download size={14} />
             <span>تصدير Excel</span>
+          </button>
+
+          {/* Dedicated PDF Export Button */}
+          <button
+            onClick={handleExportPDF}
+            disabled={pdfLoading}
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-black rounded-xl shadow-lg shadow-rose-600/20 transition-all cursor-pointer disabled:opacity-60"
+            title="تصدير محضر الجرد والتصفية بصيغة PDF معتمدة ومطورة للطباعة"
+          >
+            {pdfLoading ? (
+              <Loader2 size={14} className="animate-spin text-white" />
+            ) : (
+              <FileDown size={14} />
+            )}
+            <span>{pdfLoading ? 'جاري تجهيز PDF...' : 'تصدير PDF'}</span>
           </button>
 
           {/* Quick Print Menu */}
@@ -536,6 +702,134 @@ export default function SettlementsManager({
         </div>
       </div>
 
+      {/* ========================================================================= */}
+      {/* INVENTORY & RECONCILIATION PROGRESS BAR SECTION (شريط تقدم ونسبة استكمال الجرد) */}
+      {/* ========================================================================= */}
+      <div className="no-print bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-sm space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
+              <Gauge size={24} />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-black text-slate-900">مؤشر ونسبة استكمال جرد وتصفية العهدة</h2>
+                <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-black border ${auditProgress.statusTheme.badge}`}>
+                  {auditProgress.statusTheme.label}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-bold mt-0.5">
+                عهدة الموظف: <span className="text-slate-900 font-black">{selectedEmployee || '—'}</span> • الرصيد الدفتري المستحق: <span className="font-mono text-emerald-700 font-black">{settlementStats.calculatedBookBalance.toFixed(3)} د.ك</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-baseline gap-2 bg-slate-50 px-4 py-2.5 rounded-2xl border border-slate-200 self-start sm:self-auto shadow-2xs">
+            <span className="text-xs text-slate-500 font-black">نسبة إنجاز الجرد والمطابقة:</span>
+            <span className="text-2xl font-black font-mono text-slate-900 tracking-tight">
+              {auditProgress.percentage}%
+            </span>
+          </div>
+        </div>
+
+        {/* Dynamic Multi-Step Visual Progress Bar */}
+        <div className="space-y-2">
+          <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/80">
+            <div
+              className={`h-full rounded-full transition-all duration-500 bg-gradient-to-r ${auditProgress.statusTheme.bar}`}
+              style={{ width: `${Math.max(4, auditProgress.percentage)}%` }}
+            />
+          </div>
+
+          <div className="flex justify-between items-center text-[10px] font-black text-slate-400">
+            <span>0% بدء الجرد</span>
+            <span>25% فحص الحركات</span>
+            <span>50% إدخال النقد الفعلي</span>
+            <span>75% تصفير الفروق</span>
+            <span className="text-emerald-700 font-black">100% اعتماد ومصادقة نهائية</span>
+          </div>
+        </div>
+
+        {/* Step-by-Step Progress Milestone Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-slate-100">
+          {auditProgress.steps.map((step, sIdx) => {
+            const isDone = step.completed;
+            const isPart = (step as any).partial;
+            return (
+              <div
+                key={step.id}
+                className={`p-3.5 rounded-2xl border transition-all ${
+                  isDone
+                    ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950'
+                    : isPart
+                    ? 'bg-amber-50/60 border-amber-200 text-amber-950'
+                    : 'bg-slate-50 border-slate-200 text-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-white border border-slate-200 shadow-2xs font-mono">
+                    المرحلة {sIdx + 1} ({step.weight}%)
+                  </span>
+                  {isDone ? (
+                    <span className="flex items-center gap-1 text-[10px] font-black text-emerald-700">
+                      <CheckCircle2 size={13} />
+                      <span>{step.statusLabel}</span>
+                    </span>
+                  ) : isPart ? (
+                    <span className="flex items-center gap-1 text-[10px] font-black text-amber-700">
+                      <AlertTriangle size={13} />
+                      <span>{step.statusLabel}</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-400">
+                      {step.statusLabel}
+                    </span>
+                  )}
+                </div>
+                <h4 className="text-xs font-black text-slate-900">{step.title}</h4>
+                <p className="text-[11px] font-bold text-slate-600 mt-1 truncate font-mono">
+                  {step.detail}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Secondary Metric: Liquidation Rate vs Custody & Quick Employee Switcher */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-3 border-t border-slate-100 text-xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+              <TrendingUp size={16} />
+            </div>
+            <div>
+              <span className="font-black text-slate-700">نسبة تصفية العهدة بالفواتير والمصروفات: </span>
+              <span className="font-mono font-black text-blue-700 text-sm">{auditProgress.liquidationRate}%</span>
+              <span className="text-slate-400 text-[11px] mr-1">
+                (تم صرف {settlementStats.totalExpenses.toFixed(3)} د.ك من أصل {auditProgress.totalInflow.toFixed(3)} د.ك)
+              </span>
+            </div>
+          </div>
+
+          {/* Quick Custody Switcher Pills */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-black text-slate-500 ml-1">التبديل السريع بين العهد:</span>
+            {balances.slice(0, 6).map(b => (
+              <button
+                key={b.name}
+                onClick={() => setSelectedEmployee(b.name)}
+                className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
+                  selectedEmployee === b.name
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                }`}
+              >
+                {b.name} ({b.balance.toFixed(0)} د.ك)
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Summary KPI Cards - High Level Financial Metrics (Hidden on print) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 no-print">
         {/* Total Expenses */}
@@ -634,7 +928,7 @@ export default function SettlementsManager({
       {/* ========================================================================= */}
       {/* OFFICIAL SETTLEMENT FORM - HIGH PRECISION PRINTABLE & PREVIEW CONTAINER */}
       {/* ========================================================================= */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-md p-8 sm:p-12 print:border-none print:shadow-none print:p-2 space-y-8">
+      <div id="printable-settlement-report" className="bg-white rounded-3xl border border-slate-200 shadow-md p-8 sm:p-12 print:border-none print:shadow-none print:p-2 space-y-8">
         
         {/* Official Letterhead Header */}
         <div className="border-b-2 border-slate-900 pb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -655,10 +949,33 @@ export default function SettlementsManager({
             </div>
           </div>
 
-          <div className="text-right sm:text-left bg-slate-50 sm:bg-transparent p-3.5 sm:p-0 rounded-2xl border sm:border-none border-slate-200 w-full sm:w-auto text-xs">
-            <p className="font-black text-slate-600">رقم المحضر: <span className="font-mono text-slate-900 font-black">SET-{Date.now().toString().slice(-6)}</span></p>
-            <p className="font-black text-slate-600 mt-0.5">تاريخ الإصدار: <span className="font-mono text-slate-900 font-bold">{new Date().toISOString().split('T')[0]}</span></p>
-            <p className="font-black text-emerald-700 mt-0.5">العملة المعتمدة: دينار كويتي (KWD)</p>
+          <div className="flex flex-col sm:items-end gap-2">
+            <div className="text-right sm:text-left bg-slate-50 sm:bg-transparent p-3.5 sm:p-0 rounded-2xl border sm:border-none border-slate-200 w-full sm:w-auto text-xs">
+              <p className="font-black text-slate-600">رقم المحضر: <span className="font-mono text-slate-900 font-black">SET-{Date.now().toString().slice(-6)}</span></p>
+              <p className="font-black text-slate-600 mt-0.5">تاريخ الإصدار: <span className="font-mono text-slate-900 font-bold">{new Date().toISOString().split('T')[0]}</span></p>
+              <p className="font-black text-emerald-700 mt-0.5">العملة المعتمدة: دينار كويتي (KWD)</p>
+            </div>
+
+            <div className="no-print flex items-center gap-2 mt-1">
+              <button
+                onClick={handleExportPDF}
+                disabled={pdfLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-black rounded-xl transition-all cursor-pointer shadow-2xs"
+                title="تصدير نسخة PDF مطابقة للتنسيق الرسمي"
+              >
+                {pdfLoading ? <Loader2 size={13} className="animate-spin text-rose-600" /> : <FileDown size={13} />}
+                <span>تحميل PDF</span>
+              </button>
+
+              <button
+                onClick={() => handlePrint('all')}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-black rounded-xl transition-all cursor-pointer"
+                title="طباعة عبر الطابعة"
+              >
+                <Printer size={13} />
+                <span>طباعة</span>
+              </button>
+            </div>
           </div>
         </div>
 
