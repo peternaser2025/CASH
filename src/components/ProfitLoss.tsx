@@ -92,6 +92,7 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
   const [notes, setNotes] = useState<string>('');
 
   const [pdfLoading, setPdfLoading] = useState<boolean>(false);
+  const [modalPdfLoading, setModalPdfLoading] = useState<boolean>(false);
 
   const handleExportPLPDF = async () => {
     const el = document.getElementById('printable-pl-report');
@@ -118,6 +119,224 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
     } finally {
       setPdfLoading(false);
     }
+  };
+
+  // Dedicated direct PDF download for single item breakdown
+  const handleExportModalPDF = async () => {
+    const el = document.getElementById('printable-item-modal-report');
+    if (!el) {
+      alert('لم يتم العثور على كشف البند للتحميل');
+      return;
+    }
+
+    setModalPdfLoading(true);
+    try {
+      const cleanTitle = (detailModal.title || 'كشف_البند').replace(/[/\\?%*:|"<>]/g, '_').replace(/\s+/g, '_');
+      const cleanBranch = selectedBranch.replace(/[/\\?%*:|"<>]/g, '_');
+      const filename = `كشف_${cleanTitle}_${cleanBranch}_${selectedMonth}.pdf`;
+      await exportElementToPDF(el, {
+        filename,
+        orientation: 'portrait',
+        margins: 'narrow',
+        scale: 100
+      });
+    } catch (err) {
+      console.error('Error generating Item PDF:', err);
+      handlePrintModal();
+    } finally {
+      setModalPdfLoading(false);
+    }
+  };
+
+  // Dedicated window print handler for item modal
+  const handlePrintModal = () => {
+    const el = document.getElementById('printable-item-modal-report');
+    if (!el) {
+      window.print();
+      return;
+    }
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+        <head>
+          <meta charset="utf-8" />
+          <title>كشف ${detailModal.title} - ${selectedBranch}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=JetBrains+Mono:wght@500;700&display=swap');
+            body {
+              font-family: 'Inter', system-ui, -apple-system, sans-serif;
+              direction: rtl;
+              margin: 0;
+              padding: 15px;
+              color: #0f172a;
+              background: #fff;
+            }
+            .font-mono { font-family: 'JetBrains Mono', monospace; }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 10px;
+              margin-bottom: 10px;
+              font-size: 9pt;
+            }
+            th, td {
+              border: 1px solid #64748b;
+              padding: 6px 8px;
+              text-align: right;
+            }
+            th {
+              background-color: #0f172a;
+              color: #ffffff;
+              font-weight: 800;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            tfoot tr {
+              background-color: #0f172a;
+              color: #ffffff;
+              font-weight: 900;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .print-signatures-block {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 12px;
+              margin-top: 24px;
+              padding-top: 12px;
+              border-top: 2px dashed #94a3b8;
+            }
+            .print-signature-box {
+              text-align: center;
+              font-size: 8pt;
+              font-weight: bold;
+              border: 1px solid #cbd5e1;
+              padding: 8px;
+              border-radius: 4px;
+              background: #f8fafc;
+            }
+            .print-signature-line {
+              margin-top: 25px;
+              border-top: 1px solid #475569;
+              padding-top: 4px;
+              font-size: 7.5pt;
+              color: #64748b;
+            }
+            .header-box {
+              border-bottom: 2px solid #0f172a;
+              padding-bottom: 12px;
+              margin-bottom: 15px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            }
+            .summary-box {
+              display: flex;
+              gap: 15px;
+              background: #f1f5f9;
+              padding: 8px 12px;
+              border-radius: 6px;
+              font-size: 8.5pt;
+              font-weight: bold;
+              margin-bottom: 10px;
+            }
+            .badge {
+              padding: 2px 6px;
+              border-radius: 4px;
+              font-size: 8pt;
+              border: 1px solid #cbd5e1;
+              background: #f8fafc;
+            }
+            @media print {
+              @page { size: A4 portrait; margin: 10mm; }
+              body { padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header-box">
+            <div>
+              <h2 style="margin: 0; font-size: 16pt; font-weight: 900;">كشف تفصيلي لحركات البند</h2>
+              <p style="margin: 4px 0 0 0; font-size: 10pt; color: #475569; font-weight: bold;">
+                البند: <strong style="color: #047857;">${detailModal.title}</strong> — فرع: <strong>${selectedBranch}</strong> (شهر ${selectedMonth})
+              </p>
+            </div>
+            <div style="text-align: left; font-size: 8pt; color: #64748b;">
+              تاريخ الطباعة: ${new Date().toLocaleDateString('ar-KW')} ${new Date().toLocaleTimeString('ar-KW', { hour: '2-digit', minute: '2-digit' })}
+            </div>
+          </div>
+
+          <div class="summary-box">
+            <span>عدد العمليات المسجلة: <strong class="font-mono">${modalItems.length}</strong></span>
+            <span>|</span>
+            <span>إجمالي قيمة البند: <strong class="font-mono" style="color: #047857; font-size: 10pt;">${formatKWD(modalTotalSum)} KWD</strong></span>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 12%;">التاريخ</th>
+                <th style="width: 16%;">الموظف</th>
+                <th style="width: 16%; text-align: center;">نوع العملية</th>
+                <th style="width: 18%;">التصنيف / البند</th>
+                <th>البيان والتفاصيل</th>
+                <th style="width: 14%; text-align: center;">المبلغ (KWD)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${modalItems.map(item => `
+                <tr>
+                  <td class="font-mono" style="font-size: 8pt; white-space: nowrap;">${item.date}</td>
+                  <td style="font-weight: 700;">${item.employee}</td>
+                  <td style="text-align: center;"><span class="badge">${item.operationType}</span></td>
+                  <td style="font-weight: 800; color: #047857;">${item.category}</td>
+                  <td style="font-size: 8pt; color: #334155;">${item.description || '-'}</td>
+                  <td class="font-mono" style="text-align: center; font-weight: 900; font-size: 9pt;">${formatKWD(item.amount)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="5" style="text-align: left; font-weight: 900; font-size: 9.5pt;">الإجمالي الكلي للبند:</td>
+                <td class="font-mono" style="text-align: center; font-weight: 900; font-size: 10pt; color: #4ade80;">${formatKWD(modalTotalSum)}</td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <div class="print-signatures-block">
+            <div class="print-signature-box">
+              <span style="display: block; font-weight: 900;">إعداد كشف البند</span>
+              <p style="margin: 2px 0 0 0; font-size: 7.5pt; color: #64748b;">التوقيع والتاريخ</p>
+              <div class="print-signature-line">اسم الموظف: ....................</div>
+            </div>
+            <div class="print-signature-box">
+              <span style="display: block; font-weight: 900;">تدقيق الحركات والتصنيف</span>
+              <p style="margin: 2px 0 0 0; font-size: 7.5pt; color: #64748b;">التوقيع والتاريخ</p>
+              <div class="print-signature-line">المراجع المالي: ....................</div>
+            </div>
+            <div class="print-signature-box">
+              <span style="display: block; font-weight: 900;">اعتماد الكشف التفصيلي</span>
+              <p style="margin: 2px 0 0 0; font-size: 7.5pt; color: #64748b;">مدير الإدارة المالية</p>
+              <div class="print-signature-line">التوقيع والختم: ....................</div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
   };
 
   // Autopulled calculations and detailed transaction list
@@ -1289,10 +1508,11 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
         {detailModal.isOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-xs">
             <motion.div
+              id="printable-item-modal-report"
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="bg-white border-2 border-gray-900 rounded-[2.5rem] shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden dir-rtl"
+              className="printable-modal bg-white border-2 border-gray-900 rounded-[2.5rem] shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden dir-rtl"
             >
               {/* Modal Header */}
               <div className="p-6 bg-gray-900 text-white flex justify-between items-center shrink-0">
@@ -1308,20 +1528,35 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => window.print()}
-                    className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm no-print"
+                    onClick={handlePrintModal}
+                    className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm no-print"
+                    title="طباعة كشف هذا البند فقط"
                   >
                     <Printer size={14} />
                     طباعة كشف البند
                   </button>
                   <button
+                    onClick={handleExportModalPDF}
+                    disabled={modalPdfLoading}
+                    className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm no-print disabled:opacity-50"
+                    title="تحميل كشف البند بصيغة PDF"
+                  >
+                    {modalPdfLoading ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <FileText size={14} />
+                    )}
+                    تحميل PDF
+                  </button>
+                  <button
                     onClick={handleExportModalExcel}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm no-print"
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm no-print"
+                    title="تصدير كشف البند إلى Excel"
                   >
                     <FileSpreadsheet size={14} />
-                    تصدير البند (Excel)
+                    تصدير Excel
                   </button>
                   <button
                     onClick={() => setDetailModal(prev => ({ ...prev, isOpen: false }))}
@@ -1333,7 +1568,7 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
               </div>
 
               {/* Modal Toolbar & Search */}
-              <div className="p-4 bg-slate-50 border-b border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
+              <div className="p-4 bg-slate-50 border-b border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0 no-print">
                 <div className="relative w-full sm:w-80">
                   <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
@@ -1349,6 +1584,22 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                   <span className="text-gray-500">عدد العمليات: <strong className="text-gray-900 font-mono">{modalItems.length}</strong></span>
                   <span className="w-[1px] h-4 bg-gray-300"></span>
                   <span className="text-gray-500">إجمالي المبلغ: <strong className="text-emerald-700 font-mono text-sm">{formatKWD(modalTotalSum)} KWD</strong></span>
+                </div>
+              </div>
+
+              {/* Print-only Info Banner in Modal */}
+              <div className="hidden print:block p-4 border-b border-gray-900 bg-gray-50 text-right">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h2 className="text-lg font-black text-gray-900">كشف تفصيلي لحركات البند</h2>
+                    <p className="text-xs text-gray-600 font-bold mt-1">
+                      البند: <span className="text-emerald-800">{detailModal.title}</span> — الفرع: <span>{selectedBranch}</span> (شهر {selectedMonth})
+                    </p>
+                  </div>
+                  <div className="text-left font-mono text-xs font-bold text-gray-700">
+                    <p>عدد الحركات: {modalItems.length}</p>
+                    <p className="text-emerald-700">الإجمالي: {formatKWD(modalTotalSum)} KWD</p>
+                  </div>
                 </div>
               </div>
 
@@ -1425,7 +1676,7 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
               </div>
 
               {/* Modal Footer */}
-              <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-end shrink-0">
+              <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-end shrink-0 no-print">
                 <button
                   onClick={() => setDetailModal(prev => ({ ...prev, isOpen: false }))}
                   className="px-6 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-xl text-xs font-black transition-all cursor-pointer"

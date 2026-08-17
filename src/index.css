@@ -172,7 +172,7 @@ body {
   }
 
   /* Printable Voucher / Modal Exception */
-  .printable-modal, #printable-voucher {
+  .printable-modal, #printable-voucher, #printable-item-modal-report {
     position: static !important;
     background: white !important;
     padding: 0 !important;
