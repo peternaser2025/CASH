@@ -26,7 +26,7 @@ import {
   PieChart
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
-import { formatKWD, isTransferType, isIncomeType, isExpenseType, matchBranch } from '../utils/format';
+import { formatKWD, isTransferType, isIncomeType, isExpenseType, matchBranch, parseReportRow } from '../utils/format';
 import { exportReportToExcel } from '../utils/excelExport';
 
 interface CostControlProps {
@@ -156,7 +156,6 @@ export default function CostControl({ branches, categories, onRefresh }: CostCon
 
       // Fetch report data
       const reportData = await gasService.getReport({
-        branch: selectedBranch,
         startDate,
         endDate
       });
@@ -165,25 +164,27 @@ export default function CostControl({ branches, categories, onRefresh }: CostCon
       let totalBranchSales = 0;
 
       if (reportData && reportData.rows) {
-        reportData.rows.forEach((row: any) => {
-          const rowBranch = String(getRowValue(row, 2, 'branch') || 'عام').trim();
-          if (selectedBranch && selectedBranch !== 'All' && !matchBranch(rowBranch, selectedBranch)) {
+        reportData.rows.forEach((rawRow: any) => {
+          const pRow = parseReportRow(rawRow);
+          const rowBranch = pRow.branch || 'عام';
+          if (selectedBranch && selectedBranch !== 'All' && selectedBranch !== 'الكل' && !matchBranch(rowBranch, selectedBranch)) {
             return;
           }
 
-          const type = String(getRowValue(row, 3, 'type') || '').trim();
-          const category = String(getRowValue(row, 4, 'category') || 'عام').trim();
-          const income = parseFloat(String(getRowValue(row, 5, 'income') || 0)) || 0;
-          const expense = parseFloat(String(getRowValue(row, 6, 'expense') || 0)) || 0;
+          const type = pRow.type;
+          const category = pRow.category || 'عام';
+          const income = pRow.income;
+          const expense = pRow.expense;
+          const description = pRow.description;
 
           // Exclude transfers / employee custody movements (تحويل عهدة / Transfer)
-          if (isTransferType(type, category)) {
+          if (isTransferType(type, category, description)) {
             return;
           }
 
-          if (isIncomeType(type, category) || ((type.includes('إيراد') || type.toLowerCase().includes('income')) && income > 0)) {
+          if (isIncomeType(type, category, description) || ((type.includes('إيراد') || type.toLowerCase().includes('income')) && income > 0)) {
             totalBranchSales += income;
-          } else if (income > 0 && !isExpenseType(type, category)) {
+          } else if (income > 0 && !isExpenseType(type, category, description)) {
             totalBranchSales += income;
           }
 

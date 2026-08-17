@@ -17,6 +17,7 @@ import {
   Printer
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
+import { parseReportRow, isTransferType, matchBranch } from '../utils/format';
 
 interface BudgetManagerProps {
   branches: string[];
@@ -112,19 +113,26 @@ export default function BudgetManager({
   const budgetAnalytics = useMemo(() => {
     const actualSpending: { [key: string]: number } = {};
 
-    reportRows.forEach(r => {
-      const dateStr = String(r.date || r[1] || '').split('T')[0];
-      if (!dateStr.startsWith(selectedMonth)) return;
+    reportRows.forEach(rawRow => {
+      const pRow = parseReportRow(rawRow);
+      const dateStr = pRow.date;
+      if (!dateStr || !dateStr.startsWith(selectedMonth)) return;
 
-      const cat = String(r.category || r[3] || 'عام');
-      const branch = String(r.branch || r[8] || 'المركز الرئيسي');
-      const exp = parseFloat(String(r.expense !== undefined ? r.expense : (r[6] || 0))) || 0;
+      // Exclude internal transfers
+      if (isTransferType(pRow.type, pRow.category, pRow.description)) return;
+
+      const cat = pRow.category || 'عام';
+      const branch = pRow.branch || 'المركز الرئيسي';
+      const exp = pRow.expense;
 
       if (exp > 0) {
         if (budgetType === 'categories') {
+          // Exact match or partial match on category
           actualSpending[cat] = (actualSpending[cat] || 0) + exp;
         } else {
-          actualSpending[branch] = (actualSpending[branch] || 0) + exp;
+          // Match branch
+          const matchedBranchName = branches.find(b => matchBranch(branch, b)) || branch;
+          actualSpending[matchedBranchName] = (actualSpending[matchedBranchName] || 0) + exp;
         }
       }
     });

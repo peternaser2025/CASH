@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
-import { formatKWD, isTransferType, matchBranch } from '../utils/format';
+import { formatKWD, isTransferType, matchBranch, parseReportRow } from '../utils/format';
 import { exportReportToExcel } from '../utils/excelExport';
 import { exportElementToPDF } from '../utils/pdfExport';
 import { Loader2 } from 'lucide-react';
@@ -180,9 +180,8 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
       const lastDay = new Date(yearNum, monthNum + 1, 0).getDate();
       const endDate = `${year}-${monthStr}-${String(lastDay).padStart(2, '0')}`;
 
-      // Fetch full report for branch to accurately process targetMonth vs creation date
+      // Fetch full report to accurately process targetMonth vs creation date
       const reportData = await gasService.getReport({
-        branch: selectedBranch,
         startDate: '2020-01-01',
         endDate: '2030-12-31'
       });
@@ -204,22 +203,23 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
       let unpaidPurchases = 0;
       let totalSettlements = 0;
 
-      reportData.rows.forEach((row: any, idx: number) => {
-        const date = String(getRowValue(row, 0, 'date') || startDate).split('T')[0];
-        const employee = String(getRowValue(row, 1, 'employee') || 'عام');
-        const branch = String(getRowValue(row, 2, 'branch') || selectedBranch);
+      reportData.rows.forEach((rawRow: any, idx: number) => {
+        const pRow = parseReportRow(rawRow);
+        const date = pRow.date || startDate;
+        const employee = pRow.employee || 'عام';
+        const branch = pRow.branch || selectedBranch;
 
-        if (selectedBranch && selectedBranch !== 'All' && !matchBranch(branch, selectedBranch)) {
+        if (selectedBranch && selectedBranch !== 'All' && selectedBranch !== 'الكل' && !matchBranch(branch, selectedBranch)) {
           return;
         }
-        const type = String(getRowValue(row, 3, 'type') || '').trim();
-        const category = String(getRowValue(row, 4, 'category') || '').trim();
-        const incomeAmount = parseFloat(String(getRowValue(row, 5, 'income') || 0)) || 0;
-        const expenseAmount = parseFloat(String(getRowValue(row, 6, 'expense') || 0)) || 0;
-        const description = String(getRowValue(row, 8, 'description') || getRowValue(row, 7, 'description') || '-').trim();
+        const type = pRow.type.trim();
+        const category = pRow.category.trim();
+        const incomeAmount = pRow.income;
+        const expenseAmount = pRow.expense;
+        const description = (pRow.description || '-').trim();
 
         // Skip internal transfers / custody movements
-        if (isTransferType(type, category)) {
+        if (isTransferType(type, category, description)) {
           return;
         }
 
@@ -229,7 +229,7 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
                             description.match(/عن\s+شهر\s*(\d{4}[-/]\d{2})/i) ||
                             description.match(/\[(\d{4}[-/]\d{2})\]/);
 
-        const targetMonth = getRowValue(row, 9, 'targetMonth') || (targetMatch ? targetMatch[1].replace('/', '-') : null);
+        const targetMonth = pRow.targetMonth || (targetMatch ? targetMatch[1].replace('/', '-') : null);
         const rowMonth = date ? date.slice(0, 7) : '';
         const effectiveMonth = targetMonth || rowMonth;
 

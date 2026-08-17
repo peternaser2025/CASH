@@ -63,6 +63,8 @@ export const normalizeArabicSearch = (text: string | number | undefined | null):
   return str;
 };
 
+export const normalizeArabic = normalizeArabicSearch;
+
 /**
  * Smooth multi-keyword search matcher across multiple fields
  * Returns true if ALL keywords in query exist in ANY of the target fields.
@@ -329,11 +331,13 @@ export const parseReportRow = (row: any): NormalizedReportRow => {
   // 1. If it's a JavaScript Object (returned by modern GAS script or Firebase)
   if (typeof row === 'object' && row !== null && !Array.isArray(row)) {
     const rawAmt = parseFloat(row.amount) || 0;
-    let inc = parseFloat(row.income) || 0;
-    let exp = parseFloat(row.expense) || 0;
+    let inc = parseFloat(row.income !== undefined ? row.income : (row.in || 0)) || 0;
+    let exp = parseFloat(row.expense !== undefined ? row.expense : (row.out || 0)) || 0;
     const typeStr = String(row.type || '');
     const catStr = String(row.category || row.cat || 'عام');
     const descStr = String(row.description || row.desc || row.notes || row.details || '-');
+    const empStr = String(row.employee || row.emp || row.user || 'عام').trim();
+    const branchStr = String(row.branch || row.location || 'المركز الرئيسي').trim();
 
     // If inc and exp were not explicitly provided, calculate them from amount and type/category
     if (inc === 0 && exp === 0 && rawAmt > 0) {
@@ -349,15 +353,15 @@ export const parseReportRow = (row: any): NormalizedReportRow => {
     return {
       id: row.id ?? row.rowId ?? row.rowIndex ?? null,
       date: String(row.date || '').split('T')[0],
-      employee: String(row.employee || row.emp || 'عام').trim(),
-      branch: String(row.branch || 'المركز الرئيسي').trim(),
+      employee: empStr || 'عام',
+      branch: branchStr || 'المركز الرئيسي',
       type: typeStr || (inc > 0 ? 'إيراد' : 'مصروف'),
       category: catStr,
       income: inc,
       expense: exp,
       amount: finalAmount,
       description: descStr,
-      targetMonth: String(row.targetMonth || ''),
+      targetMonth: String(row.targetMonth || row.month || ''),
       rawBalance: typeof row.balance === 'number' ? row.balance : (parseFloat(row.balance) || 0),
       raw: row
     };
@@ -367,10 +371,10 @@ export const parseReportRow = (row: any): NormalizedReportRow => {
   if (Array.isArray(row)) {
     // Check if row[0] is an ID (number like 1712345678 or timestamp) and row[1] is a date YYYY-MM-DD
     // Array format from Google Sheets mainSheet: [0:id, 1:date, 2:type, 3:category, 4:employee, 5:amount, 6:description, 7:branch]
-    const isMainSheetFormat = (typeof row[0] === 'number' || (typeof row[0] === 'string' && /^\d{10,}$/.test(row[0]))) &&
-                              (typeof row[1] === 'string' && /^\d{4}-\d{2}-\d{2}/.test(row[1]));
+    const isMainSheetWithId = (typeof row[0] === 'number' || (typeof row[0] === 'string' && /^\d{6,}$/.test(row[0]))) &&
+                              (typeof row[1] === 'string' && /^\d{4}[-/]\d{2}[-/]\d{2}/.test(row[1]));
 
-    if (isMainSheetFormat) {
+    if (isMainSheetWithId) {
       const idVal = row[0];
       const dateVal = String(row[1] || '').split('T')[0];
       const typeVal = String(row[2] || '');
@@ -390,6 +394,44 @@ export const parseReportRow = (row: any): NormalizedReportRow => {
 
       return {
         id: idVal,
+        date: dateVal,
+        employee: empVal,
+        branch: branchVal,
+        type: typeVal,
+        category: catVal,
+        income: inc,
+        expense: exp,
+        amount: amtVal,
+        description: descVal,
+        targetMonth: '',
+        rawBalance: 0,
+        raw: row
+      };
+    }
+
+    // Check if format is without ID [0:date, 1:type, 2:category, 3:employee, 4:amount, 5:description, 6:branch]
+    const isMainSheetWithoutId = (typeof row[0] === 'string' && /^\d{4}[-/]\d{2}[-/]\d{2}/.test(row[0])) &&
+                                 (typeof row[4] === 'number' || (typeof row[4] === 'string' && !isNaN(parseFloat(row[4])) && typeof row[1] === 'string' && !/^\d+$/.test(row[1])));
+
+    if (isMainSheetWithoutId && row.length <= 8 && typeof row[1] === 'string' && (row[1].includes('مصروف') || row[1].includes('إيراد') || row[1].includes('Expense') || row[1].includes('Income'))) {
+      const dateVal = String(row[0] || '').split('T')[0];
+      const typeVal = String(row[1] || '');
+      const catVal = String(row[2] || 'عام');
+      const empVal = String(row[3] || 'عام').trim();
+      const amtVal = parseFloat(row[4]) || 0;
+      const descVal = String(row[5] || '-');
+      const branchVal = String(row[6] || 'المركز الرئيسي').trim();
+
+      let inc = 0;
+      let exp = 0;
+      if (isIncomeType(typeVal, catVal, descVal) || typeVal === 'Income' || typeVal === 'إيراد') {
+        inc = amtVal;
+      } else {
+        exp = amtVal;
+      }
+
+      return {
+        id: null,
         date: dateVal,
         employee: empVal,
         branch: branchVal,

@@ -45,7 +45,7 @@ import {
   Area
 } from 'recharts';
 import { gasService } from '../services/gasService';
-import { formatKWD, isTransferType, matchBranch } from '../utils/format';
+import { formatKWD, isTransferType, matchBranch, parseReportRow, isAccrualType } from '../utils/format';
 import { exportReportToExcel } from '../utils/excelExport';
 import VoucherModal, { VoucherData } from './VoucherModal';
 
@@ -177,7 +177,6 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
     setLoading(true);
     try {
       const reportData = await gasService.getReport({
-        branch: selectedBranch,
         startDate: enableDateFilter ? startDate : '2020-01-01',
         endDate: enableDateFilter ? endDate : '2030-12-31'
       });
@@ -188,10 +187,11 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
         const keywordSettlements: { keyword: string; amount: number }[] = [];
 
         // Pass 1: Identify all settlement transactions in Google Sheets and map their payments
-        reportData.rows.forEach((row: any) => {
-          const category = String(getRowVal(row, 4, ['category'])).trim();
-          const description = String(getRowVal(row, 8, ['description', 'notes', 'details']) || getRowVal(row, 6, ['description'])).trim();
-          const expense = getRowAmount(row, 'expense');
+        reportData.rows.forEach((rawRow: any) => {
+          const pRow = parseReportRow(rawRow);
+          const category = pRow.category.trim();
+          const description = (pRow.description || '').trim();
+          const expense = pRow.expense;
 
           const combined = `${category} ${description}`;
           const isSettlement = /سداد|تسوية|سداد مشتريات|تسوية التزامات|تسديد|دفع|دفعت|تم دفع|تم السداد|تم تسديد|دفعة من|صافي مدفوع/i.test(combined);
@@ -212,21 +212,22 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
         });
 
         // Pass 2: Identify original Accrual / Deferred / Credit items (excluding settlements)
-        reportData.rows.forEach((row: any, index: number) => {
-          const date = String(getRowVal(row, 0, ['date']) || '').split('T')[0];
-          const branch = String(getRowVal(row, 2, ['branch']) || 'عام');
+        reportData.rows.forEach((rawRow: any, index: number) => {
+          const pRow = parseReportRow(rawRow);
+          const date = pRow.date;
+          const branch = pRow.branch || 'عام';
           
-          if (selectedBranch && selectedBranch !== 'All' && !matchBranch(branch, selectedBranch)) return;
+          if (selectedBranch && selectedBranch !== 'All' && selectedBranch !== 'الكل' && !matchBranch(branch, selectedBranch)) return;
 
-          const type = String(getRowVal(row, 3, ['type']) || '');
-          const category = String(getRowVal(row, 4, ['category']) || '');
-          const expense = getRowAmount(row, 'expense');
-          const income = getRowAmount(row, 'income');
-          const employee = String(getRowVal(row, 7, ['employee']) || getRowVal(row, 4, ['employee']) || '');
-          const description = String(getRowVal(row, 8, ['description', 'notes']) || getRowVal(row, 6, ['description']) || '');
+          const type = pRow.type;
+          const category = pRow.category;
+          const expense = pRow.expense;
+          const income = pRow.income;
+          const employee = pRow.employee;
+          const description = pRow.description;
 
           // Skip transfers
-          if (isTransferType(type, category)) return;
+          if (isTransferType(type, category, description)) return;
 
           const combinedText = `${category} ${description}`;
 
@@ -239,37 +240,11 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
           
           if (isSettlementRow) return;
 
-          // Strip preposition phrases like "من اجل" or "من أجل" or "على اجل" to prevent false positive word matches
-          const cleanCategory = category
-            .replace(/من\s+أ?جل/gi, '')
-            .replace(/على\s+أ?جل/gi, '')
-            .trim();
-
-          const cleanDescription = description
-            .replace(/من\s+أ?جل/gi, '')
-            .replace(/على\s+أ?جل/gi, '')
-            .trim();
-
-          // Check for explicit credit/payable category indicators
-          const isAccruedCategory = 
-            /مشتريات\s+آجلة|التزامات\s+مستحقة|فاتورة\s+آجل|دين\s+آجل|مستحقات\s+موردين|آجل\s+غير\s+مسدد|دفعة\s+مؤجلة|مشتريات\s+على\s+الحساب/i.test(cleanCategory) ||
-            (cleanCategory.includes('مستحق') && !cleanCategory.includes('سداد')) ||
-            (cleanCategory.includes('مستحقة') && !cleanCategory.includes('سداد')) ||
-            (cleanCategory.includes('مستحقات') && !cleanCategory.includes('سداد')) ||
-            (cleanCategory.includes('آجل') && !cleanCategory.includes('سداد'));
-
-          // Check for explicit credit/payable description tags
-          const isAccruedDesc = 
-            /\[آجل\]|\[مستحق\]|غير\s+مسدد|لم\s+يسدد|غير\s+مدفوع|على\s+الحساب|دين\s+قائم|فاتورة\s+آجلة|فاتوره\s+اجل|مشتريات\s+آجلة/i.test(cleanDescription) ||
-            (/\bآجل\b/.test(cleanDescription) && !cleanDescription.includes('سداد')) ||
-            (/\bاجل\b/.test(cleanDescription) && !cleanDescription.includes('سداد')) ||
-            (cleanDescription.includes('مستحق') && !/سداد|تسوية|تم\s+الدفع|مسدد/i.test(cleanDescription));
-
-          const isAccrued = (isAccruedCategory || isAccruedDesc);
+          const isAccrued = isAccrualType(type, category, description);
 
           if (isAccrued && (expense > 0 || income > 0)) {
             const originalAmount = expense > 0 ? expense : income;
-            const itemId = `row_${index}_${date}_${originalAmount}`;
+            const itemId = pRow.id ? `id_${pRow.id}` : `row_${index}_${date}_${originalAmount}`;
             
             // Check if description explicitly states that this row is ALREADY paid/settled
             const isExplicitlyPaid = /تم السداد|مسدد|تم الدفع|مدفوع بالكامل|نقداً بالكامل|كاش مدفوع|مسددة/i.test(combinedText);
@@ -301,7 +276,7 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
               });
             }
 
-            const paidFromLocal = settledHistory[itemId] || 0;
+            const paidFromLocal = settledHistory[itemId] || (pRow.id ? settledHistory[`row_${index}_${date}_${originalAmount}`] : 0) || 0;
             let paidAmount = Math.max(paidFromSheets, paidFromLocal);
 
             if (isExplicitlyPaid) {
@@ -339,7 +314,7 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
               vendorName,
               dueDate: date, // Default due date
               type,
-              rawRow: row
+              rawRow
             });
           }
         });

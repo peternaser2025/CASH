@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
+import { parseReportRow, matchBranch, normalizeArabic, formatKWD } from '../utils/format';
 import VoucherModal, { VoucherData } from './VoucherModal';
 
 interface JournalEntriesProps {
@@ -83,16 +84,17 @@ export default function JournalEntries({
     const entries: JournalLine[] = [];
 
     reportRows.forEach((r, idx) => {
-      const date = String(r.date || r[1] || '').split('T')[0];
-      const type = String(r.type || r[2] || '');
-      const cat = String(r.category || r[3] || 'مصروفات متنوعة');
-      const desc = String(r.description || r[4] || '');
-      const inc = parseFloat(String(r.income !== undefined ? r.income : (r[5] || 0))) || 0;
-      const exp = parseFloat(String(r.expense !== undefined ? r.expense : (r[6] || 0))) || 0;
-      const branch = String(r.branch || r[8] || 'المركز الرئيسي');
-      const employee = String(r.employee || r[9] || 'الخزينة');
+      const pRow = parseReportRow(r);
+      const date = pRow.date || '';
+      const type = pRow.type || '';
+      const cat = pRow.category || 'مصروفات متنوعة';
+      const desc = pRow.description || '';
+      const inc = pRow.income;
+      const exp = pRow.expense;
+      const branch = pRow.branch || 'المركز الرئيسي';
+      const employee = pRow.employee || 'الخزينة';
       
-      const voucherNo = `JV-${date.replace(/-/g, '').slice(2)}-${String(idx + 1).padStart(4, '0')}`;
+      const voucherNo = `JV-${date ? date.replace(/-/g, '').slice(2) : '000000'}-${String(idx + 1).padStart(4, '0')}`;
 
       // Check if Accrual (Purchase on credit)
       const isSettlement = /سداد|تسوية/i.test(cat + " " + desc);
@@ -171,17 +173,17 @@ export default function JournalEntries({
   // Filtered Journal Entries
   const filteredEntries = useMemo(() => {
     return journalEntries.filter(entry => {
-      if (selectedBranch !== 'all' && entry.branch !== selectedBranch) return false;
+      if (selectedBranch !== 'all' && !matchBranch(entry.branch, selectedBranch)) return false;
       if (selectedEmployee !== 'all' && entry.employee !== selectedEmployee) return false;
       if (selectedCategory !== 'all' && entry.category !== selectedCategory) return false;
       if (searchTerm) {
-        const q = searchTerm.toLowerCase();
+        const q = normalizeArabic(searchTerm.toLowerCase().trim());
         const matches = 
-          entry.voucherNo.toLowerCase().includes(q) ||
-          entry.statement.toLowerCase().includes(q) ||
-          entry.accountDebit.toLowerCase().includes(q) ||
-          entry.accountCredit.toLowerCase().includes(q) ||
-          entry.employee.toLowerCase().includes(q);
+          normalizeArabic(entry.voucherNo).includes(q) ||
+          normalizeArabic(entry.statement).includes(q) ||
+          normalizeArabic(entry.accountDebit).includes(q) ||
+          normalizeArabic(entry.accountCredit).includes(q) ||
+          normalizeArabic(entry.employee).includes(q);
         if (!matches) return false;
       }
       return true;
