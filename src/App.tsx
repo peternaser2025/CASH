@@ -24,7 +24,8 @@ import {
   ChevronLeft,
   FileCheck2,
   BookOpen,
-  Target
+  Target,
+  Truck
 } from 'lucide-react';
 import { 
   onAuthStateChanged, 
@@ -56,11 +57,12 @@ import DataIntegrityPanel from './components/DataIntegrityPanel';
 import SettlementsManager from './components/SettlementsManager';
 import JournalEntries from './components/JournalEntries';
 import BudgetManager from './components/BudgetManager';
+import OrdersManager from './components/OrdersManager';
 
 export default function App() {
   const [user, setUser] = useState<User | any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'reports' | 'settlements' | 'journal-entries' | 'budgets' | 'employees' | 'google-tools' | 'profit-loss' | 'cost-control' | 'accruals' | 'global-search' | 'data-integrity'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'reports' | 'settlements' | 'orders' | 'journal-entries' | 'budgets' | 'employees' | 'google-tools' | 'profit-loss' | 'cost-control' | 'accruals' | 'global-search' | 'data-integrity'>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // App Data State
@@ -511,6 +513,7 @@ export default function App() {
       case 'new-transaction': return 'تسجيل حركة مالية جديدة';
       case 'reports': return 'تقارير وكشوف الحسابات';
       case 'settlements': return 'محاضر جرد وتصفية وتسوية العهدة النقدية';
+      case 'orders': return 'متابعة الطلبيات ومواعيد الاستحقاق والتسليم';
       case 'journal-entries': return 'دفتر ومولد القيود المحاسبية اليومية المزدوجة';
       case 'budgets': return 'سقف الموازنات التقديرية وضبط الانحرافات';
       case 'employees': return 'إدارة الموظفين وصلاحيات العهد';
@@ -525,7 +528,7 @@ export default function App() {
   };
 
   const getSectionCategory = () => {
-    if (['dashboard', 'new-transaction', 'reports', 'settlements'].includes(activeTab)) return 'العمليات والتقارير';
+    if (['dashboard', 'new-transaction', 'reports', 'settlements', 'orders'].includes(activeTab)) return 'العمليات والتقارير';
     if (['journal-entries', 'budgets', 'profit-loss', 'cost-control', 'accruals', 'global-search'].includes(activeTab)) return 'الرقابة والتحليل';
     return 'النظام والإدارة';
   };
@@ -604,6 +607,14 @@ export default function App() {
               badge="رسمي"
               badgeType="neutral"
               onClick={() => navigateTo('settlements')} 
+            />
+            <SidebarItem 
+              icon={<Truck size={18} />} 
+              label="متابعة الطلبيات والمواعيد" 
+              active={activeTab === 'orders'} 
+              badge="جديد"
+              badgeType="success"
+              onClick={() => navigateTo('orders')} 
             />
           </div>
 
@@ -861,6 +872,13 @@ export default function App() {
                   balances={balances}
                   branches={branches}
                   categories={categories}
+                  employees={employeeNames}
+                  onRefresh={() => fetchData(true)}
+                />
+              )}
+              {activeTab === 'orders' && (
+                <OrdersManager 
+                  branches={branches}
                   employees={employeeNames}
                   onRefresh={() => fetchData(true)}
                 />
