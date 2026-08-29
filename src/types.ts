@@ -17,6 +17,7 @@ export interface Transaction {
 export interface ReportFilter {
   employee?: string;
   branch?: string;
+  category?: string;
   type?: string;
   startDate?: string;
   endDate?: string;
@@ -28,9 +29,10 @@ export interface EmployeeBalance {
 }
 
 export interface ReportData {
-  openingBalance: string;
+  openingBalance?: string;
   rows: any[][];
-  finalBalance: string;
+  finalBalance?: string;
+  total?: number;
 }
 
 export interface OrderItem {

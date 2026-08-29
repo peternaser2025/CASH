@@ -1,4 +1,5 @@
 import { Transaction, ReportFilter, EmployeeBalance, ReportData } from '../types';
+import { apiService } from './apiService';
 
 // Standard Vite env variable access
 const VITE_GAS_URL = (import.meta as any).env.VITE_GAS_URL;
@@ -158,15 +159,36 @@ export const gasService = {
       }));
 
       balancesCache = { data: parsedBalances, timestamp: now };
+
+      // Background sync with server backend
+      try {
+        apiService.syncAll({
+          employees: parsedBalances
+        }).catch(() => {});
+      } catch (e) {}
+
       return parsedBalances;
     } catch (error) {
-      console.error('Error fetching balances:', error);
+      console.error('Error fetching balances from GAS:', error);
+      const serverBalances = await apiService.getBalances();
+      if (serverBalances && serverBalances.length > 0) {
+        return serverBalances;
+      }
       return balancesCache ? balancesCache.data : [];
     }
   },
 
-  async addTransaction(transaction: any): Promise<{ success: boolean; id?: number; error?: string }> {
-    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+  async addTransaction(transaction: any): Promise<{ success: boolean; id?: number | string; error?: string }> {
+    // 1. Also save in Express Server Store
+    try {
+      apiService.addTransaction(transaction).catch(err => console.warn('Server sync transaction warning:', err));
+    } catch (e) {}
+
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      const serverRes = await apiService.addTransaction(transaction);
+      return serverRes;
+    }
+
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
@@ -179,16 +201,25 @@ export const gasService = {
       });
       const text = await response.text();
       this.clearCache(); // Invalidate cache on write
-      return safeParseGasResponse(text, response.ok);
+      const parsed = safeParseGasResponse(text, response.ok);
+      if (parsed.success) return parsed;
+
+      // Fallback to server if GAS failed with logical error
+      const serverRes = await apiService.addTransaction(transaction);
+      if (serverRes.success) return serverRes;
+      return parsed;
     } catch (error) {
-      console.error('Error adding transaction:', error);
-      return { success: false, error: 'خطأ في الاتصال. يرجى التأكد من نشر السكريبت بصلاحية "Anyone" وإعادة المحاولة.' };
+      console.error('Error adding transaction to GAS:', error);
+      // Fallback to backend API
+      const serverRes = await apiService.addTransaction(transaction);
+      if (serverRes.success) {
+        return serverRes;
+      }
+      return { success: false, error: 'خطأ في الاتصال. يرجى التأكد من نشر السكريبت بصلاحية "Anyone" أو التحقق من اتصال الإنترنت.' };
     }
   },
 
   async getReport(filters: ReportFilter, forceRefresh: boolean = false): Promise<ReportData | null> {
-    if (!GAS_URL || GAS_URL.includes('...')) return null;
-
     const cacheKey = JSON.stringify(filters);
     const now = Date.now();
 
@@ -197,6 +228,15 @@ export const gasService = {
       if (now - cached.timestamp < CACHE_TTL_MS) {
         return cached.data;
       }
+    }
+
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      const serverTxs = await apiService.getTransactions(filters);
+      if (serverTxs) {
+        reportCache.set(cacheKey, { data: serverTxs, timestamp: now });
+        return serverTxs;
+      }
+      return null;
     }
 
     try {
@@ -218,6 +258,8 @@ export const gasService = {
       
       if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
         console.error('Received HTML instead of JSON from GAS:', text.substring(0, 200));
+        const serverTxs = await apiService.getTransactions(filters);
+        if (serverTxs) return serverTxs;
         return reportCache.has(cacheKey) ? reportCache.get(cacheKey)!.data : null;
       }
 
@@ -225,26 +267,46 @@ export const gasService = {
         const data = JSON.parse(text);
         if (data && data.error) {
           console.error('GAS Error:', data.error);
+          const serverTxs = await apiService.getTransactions(filters);
+          if (serverTxs) return serverTxs;
           return null;
         }
         if (data && !data.rows) {
           data.rows = [];
         }
 
+        // Sync report rows to Express backend in background
+        if (Array.isArray(data.rows) && data.rows.length > 0) {
+          try {
+            apiService.syncAll({ transactions: data.rows }).catch(() => {});
+          } catch (e) {}
+        }
+
         reportCache.set(cacheKey, { data, timestamp: now });
         return data;
       } catch (e) {
         console.error('Failed to parse report JSON:', text);
+        const serverTxs = await apiService.getTransactions(filters);
+        if (serverTxs) return serverTxs;
         return reportCache.has(cacheKey) ? reportCache.get(cacheKey)!.data : null;
       }
     } catch (error) {
-      console.error('Error fetching report:', error);
+      console.error('Error fetching report from GAS:', error);
+      const serverTxs = await apiService.getTransactions(filters);
+      if (serverTxs) return serverTxs;
       return reportCache.has(cacheKey) ? reportCache.get(cacheKey)!.data : null;
     }
   },
 
   async addEmployee(name: string): Promise<{ success: boolean; error?: string }> {
-    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    // Sync with Server backend
+    try {
+      apiService.addEmployee(name).catch(() => {});
+    } catch (e) {}
+
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      return await apiService.addEmployee(name);
+    }
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
@@ -260,12 +322,18 @@ export const gasService = {
       return safeParseGasResponse(text, response.ok);
     } catch (error) {
       console.error('Error adding employee:', error);
-      return { success: false, error: 'خطأ في الاتصال. يرجى التأكد من نشر السكريبت بصلاحية "Anyone".' };
+      return await apiService.addEmployee(name);
     }
   },
 
   async deleteEmployee(name: string): Promise<{ success: boolean; error?: string }> {
-    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    try {
+      apiService.deleteEmployee(name).catch(() => {});
+    } catch (e) {}
+
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      return await apiService.deleteEmployee(name);
+    }
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
@@ -281,14 +349,20 @@ export const gasService = {
       return safeParseGasResponse(text, response.ok);
     } catch (error) {
       console.error('Error deleting employee:', error);
-      return { success: false, error: 'خطأ في الاتصال' };
+      return await apiService.deleteEmployee(name);
     }
   },
 
   async updateTransaction(id: number | string, transaction: any): Promise<{ success: boolean; error?: string }> {
-    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    const targetId = String(transaction.id || transaction.rowId || transaction.rowIndex || id);
     try {
-      const targetId = transaction.id || transaction.rowId || transaction.rowIndex || id;
+      apiService.updateTransaction(targetId, transaction).catch(() => {});
+    } catch (e) {}
+
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      return await apiService.updateTransaction(targetId, transaction);
+    }
+    try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
@@ -313,15 +387,21 @@ export const gasService = {
       this.clearCache();
       return safeParseGasResponse(text, response.ok);
     } catch (error) {
-      console.error('Error updating transaction:', error);
-      return { success: false, error: 'خطأ في الاتصال بالسيرفر' };
+      console.error('Error updating transaction in GAS:', error);
+      return await apiService.updateTransaction(targetId, transaction);
     }
   },
 
   async deleteTransaction(id: number | string, extraMeta?: any): Promise<{ success: boolean; error?: string }> {
-    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    const targetId = String(extraMeta?.id || extraMeta?.rowId || extraMeta?.rowIndex || id);
     try {
-      const targetId = extraMeta?.id || extraMeta?.rowId || extraMeta?.rowIndex || id;
+      apiService.deleteTransaction(targetId).catch(() => {});
+    } catch (e) {}
+
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      return await apiService.deleteTransaction(targetId);
+    }
+    try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
         mode: 'cors',
@@ -341,13 +421,17 @@ export const gasService = {
       this.clearCache();
       return safeParseGasResponse(text, response.ok);
     } catch (error) {
-      console.error('Error deleting transaction:', error);
-      return { success: false, error: 'خطأ في الاتصال' };
+      console.error('Error deleting transaction in GAS:', error);
+      return await apiService.deleteTransaction(targetId);
     }
   },
 
   async getSettings(): Promise<{ branches: string[], categories: string[] }> {
-    if (!GAS_URL || GAS_URL.includes('...')) return { branches: [], categories: [] };
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      const serverSettings = await apiService.getSettings();
+      if (serverSettings && serverSettings.branches.length > 0) return serverSettings;
+      return { branches: [], categories: [] };
+    }
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
@@ -360,18 +444,30 @@ export const gasService = {
       });
       const text = await response.text();
       const parsed = safeParseGasResponse(text, response.ok);
-      return {
-        branches: Array.isArray(parsed.branches) ? parsed.branches : [],
-        categories: Array.isArray(parsed.categories) ? parsed.categories : []
-      };
+      const branches = Array.isArray(parsed.branches) ? parsed.branches : [];
+      const categories = Array.isArray(parsed.categories) ? parsed.categories : [];
+      
+      if (branches.length > 0 || categories.length > 0) {
+        apiService.updateSettings(branches, categories).catch(() => {});
+      }
+      return { branches, categories };
     } catch (error) {
-      console.error('Error fetching settings:', error);
+      console.error('Error fetching settings from GAS:', error);
+      const serverSettings = await apiService.getSettings();
+      if (serverSettings && serverSettings.branches.length > 0) return serverSettings;
       return { branches: [], categories: [] };
     }
   },
 
   async updateSettings(branches: string[], categories: string[]): Promise<{ success: boolean; error?: string }> {
-    if (!GAS_URL || GAS_URL.includes('...')) return { success: false, error: 'رابط Google Apps Script غير مهيأ بشكل صحيح' };
+    try {
+      apiService.updateSettings(branches, categories).catch(() => {});
+    } catch (e) {}
+
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      const ok = await apiService.updateSettings(branches, categories);
+      return { success: ok };
+    }
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
@@ -386,8 +482,9 @@ export const gasService = {
       this.clearCache();
       return safeParseGasResponse(text, response.ok);
     } catch (error) {
-      console.error('Error updating settings:', error);
-      return { success: false, error: 'خطأ في الاتصال' };
+      console.error('Error updating settings in GAS:', error);
+      const ok = await apiService.updateSettings(branches, categories);
+      return { success: ok };
     }
   },
 

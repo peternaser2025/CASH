@@ -205,10 +205,12 @@ export default function App() {
       }
     } catch (error: any) {
       console.error("Google login failed", error);
-      if (error.code === 'auth/popup-blocked') {
+      if (error.code === 'auth/unauthorized-domain') {
+        setAuthError("نطاق التطبيق (Domain) غير مضاف في قائمة النطاقات المصرح بها لـ Google OAuth في Firebase Console. يمكنك تسجيل الدخول بـ (admin / admin) أو عبر زر 'الدخول التجريبي الفوري' بالأسفل.");
+      } else if (error.code === 'auth/popup-blocked') {
         setAuthError("تم حظر نافذة تسجيل الدخول المنبثقة من قبل المتصفح. يرجى استخدام تسجيل الدخول بالبريد الإلكتروني أو فتح التطبيق في نافذة جديدة.");
       } else {
-        setAuthError("فشل تسجيل الدخول باستخدام Google. يرجى استخدام طريقة البريد الإلكتروني.");
+        setAuthError("فشل تسجيل الدخول باستخدام Google (" + (error.code || error.message) + "). يرجى استخدام اسم المستخدم وكلمة المرور (admin / admin) أو الدخول التجريبي الفوري.");
       }
     } finally {
       setAuthLoading(false);
