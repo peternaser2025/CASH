@@ -46,15 +46,7 @@ interface ServerStore {
 }
 
 function loadStore(): ServerStore {
-  try {
-    if (fs.existsSync(STORE_FILE)) {
-      const data = fs.readFileSync(STORE_FILE, 'utf-8');
-      return JSON.parse(data);
-    }
-  } catch (err) {
-    console.warn('Could not read store file, using initial defaults:', err);
-  }
-  return {
+  const defaultStore: ServerStore = {
     transactions: [],
     orders: [],
     budgets: [],
@@ -69,6 +61,26 @@ function loadStore(): ServerStore {
     categories: ['مشتريات', 'رواتب', 'إيجار', 'ضيافة وبوفيه', 'نثريات', 'صيانة', 'تحويل عهدة نقدية', 'خدمات حكومية'],
     lastSync: new Date().toISOString()
   };
+
+  try {
+    if (fs.existsSync(STORE_FILE)) {
+      const data = fs.readFileSync(STORE_FILE, 'utf-8');
+      const parsed = JSON.parse(data);
+      return {
+        transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
+        orders: Array.isArray(parsed.orders) ? parsed.orders : [],
+        budgets: Array.isArray(parsed.budgets) ? parsed.budgets : [],
+        settlements: Array.isArray(parsed.settlements) ? parsed.settlements : [],
+        employees: Array.isArray(parsed.employees) && parsed.employees.length > 0 ? parsed.employees : defaultStore.employees,
+        branches: Array.isArray(parsed.branches) && parsed.branches.length > 0 ? parsed.branches : defaultStore.branches,
+        categories: Array.isArray(parsed.categories) && parsed.categories.length > 0 ? parsed.categories : defaultStore.categories,
+        lastSync: parsed.lastSync || defaultStore.lastSync
+      };
+    }
+  } catch (err) {
+    console.warn('Could not read store file, using initial defaults:', err);
+  }
+  return defaultStore;
 }
 
 function saveStore(store: ServerStore) {
@@ -130,13 +142,15 @@ app.get('/api/transactions', (req, res) => {
   const { branch, employee, category, startDate, endDate } = req.query;
   let list = [...serverStore.transactions];
 
-  if (branch && branch !== 'all') {
+  const isAll = (v: any) => !v || v === 'all' || v === 'All' || v === 'الكل' || v === 'كافة الفروع' || v === 'كل الفروع';
+
+  if (!isAll(branch)) {
     list = list.filter(t => t.branch === branch);
   }
-  if (employee && employee !== 'all') {
+  if (!isAll(employee)) {
     list = list.filter(t => t.employee === employee);
   }
-  if (category && category !== 'all') {
+  if (!isAll(category)) {
     list = list.filter(t => t.category === category);
   }
   if (startDate) {

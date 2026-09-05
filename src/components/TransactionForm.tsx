@@ -113,16 +113,31 @@ export default function TransactionForm({ onComplete, employees, branches, categ
         {/* Type Selector - Professional Hero Style */}
         <div className="flex p-2 bg-gray-50/50 border-b border-gray-100">
           {[
-            { id: 'Expense', label: 'مصروف', icon: TrendingDown, color: 'red' },
-            { id: 'Income', label: 'توريد / مبيعات 💰', icon: TrendingUp, color: 'emerald' },
-            { id: 'Transfer', label: 'تحويل عهدة', icon: ArrowRightLeft, color: 'blue' }
+            { 
+              id: 'Expense', 
+              label: 'مصروف', 
+              icon: TrendingDown, 
+              activeClasses: 'bg-white text-rose-600 shadow-lg shadow-rose-500/10 border border-rose-100' 
+            },
+            { 
+              id: 'Income', 
+              label: 'توريد / مبيعات 💰', 
+              icon: TrendingUp, 
+              activeClasses: 'bg-white text-emerald-600 shadow-lg shadow-emerald-500/10 border border-emerald-100' 
+            },
+            { 
+              id: 'Transfer', 
+              label: 'تحويل عهدة', 
+              icon: ArrowRightLeft, 
+              activeClasses: 'bg-white text-blue-600 shadow-lg shadow-blue-500/10 border border-blue-100' 
+            }
           ].map((item) => (
             <button
               key={item.id}
               onClick={() => setType(item.id as TransactionType)}
               className={`flex-1 py-4 flex items-center justify-center gap-3 rounded-2xl transition-all duration-300 font-black text-sm uppercase tracking-wider cursor-pointer ${
                 type === item.id 
-                  ? `bg-white text-${item.color}-600 shadow-lg shadow-${item.color}-500/10 border border-${item.color}-100` 
+                  ? item.activeClasses 
                   : 'text-gray-400 hover:text-gray-600'
               }`}
             >

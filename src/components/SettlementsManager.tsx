@@ -110,7 +110,7 @@ export default function SettlementsManager({
         endDate
       }, true);
       
-      setReportRows(data.rows || []);
+      setReportRows(data?.rows || []);
     } catch (e) {
       console.error('Failed to load settlement data:', e);
     } finally {

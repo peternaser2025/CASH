@@ -67,7 +67,7 @@ export default function JournalEntries({
     setLoading(true);
     try {
       const data = await gasService.getReport({}, true);
-      setReportRows(data.rows || []);
+      setReportRows(data?.rows || []);
     } catch (e) {
       console.error('Failed to load transactions for journal:', e);
     } finally {

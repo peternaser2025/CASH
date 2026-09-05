@@ -98,7 +98,11 @@ export const gasService = {
   },
 
   async getBalances(forceRefresh: boolean = false): Promise<EmployeeBalance[]> {
-    if (!GAS_URL || GAS_URL.includes('...')) return [];
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      const serverBalances = await apiService.getBalances();
+      if (serverBalances && serverBalances.length > 0) return serverBalances;
+      return [];
+    }
 
     const now = Date.now();
     if (!forceRefresh && balancesCache && (now - balancesCache.timestamp < CACHE_TTL_MS)) {

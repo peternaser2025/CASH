@@ -90,7 +90,7 @@ export default function BudgetManager({
     setLoading(true);
     try {
       const data = await gasService.getReport({}, true);
-      setReportRows(data.rows || []);
+      setReportRows(data?.rows || []);
     } catch (e) {
       console.error('Failed to load budget transactions:', e);
     } finally {
