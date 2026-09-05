@@ -41,6 +41,9 @@ import * as XLSX from 'xlsx';
 import { Order, OrderItem, OrderPriority, OrderStatus, OrderType, PaymentStatus } from '../types';
 import { formatKWD, normalizeArabicSearch } from '../utils/format';
 import { exportElementToPDF } from '../utils/pdfExport';
+import PrintHeader from './print/PrintHeader';
+import PrintSignatures from './print/PrintSignatures';
+import OrderInvoicePrintModal from './OrderInvoicePrintModal';
 
 interface OrdersManagerProps {
   branches: string[];
@@ -209,6 +212,7 @@ export default function OrdersManager({
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<Order | null>(null);
+  const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
 
   // Form State for Create/Edit
@@ -996,13 +1000,20 @@ export default function OrdersManager({
       {/* VIEW 1: DETAILED TABLE VIEW (الجدول المفصل والطباعة الرسمية) */}
       {/* ========================================================================= */}
       {viewMode === 'table' && (
-        <div id="printable-orders-schedule" className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden print:border-none print:shadow-none">
+        <div id="printable-orders-schedule" className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden print:border-none print:shadow-none p-0 print:p-4">
           {/* Printable Header (Visible on print) */}
-          <div className="hidden print:block p-6 border-b-2 border-slate-900 mb-4 text-center">
-            <h2 className="text-xl font-black text-slate-900">تقرير ومحضر جدول متابعة الطلبيات ومواعيد الاستحقاق</h2>
-            <p className="text-xs text-slate-600 mt-1">
-              تاريخ الطباعة: {new Date().toLocaleDateString('ar-KW')} • إجمالي الطلبيات المعروضة: {filteredOrders.length}
-            </p>
+          <div className="hidden print:block mb-4">
+            <PrintHeader
+              documentTitleAr="جدول أوامر الشراء ومواعيد استحقاق التوريد"
+              documentTitleEn="PURCHASE & SUPPLY ORDERS SCHEDULE"
+              date={new Date().toISOString().split('T')[0]}
+              extraMeta={[
+                { label: 'إجمالي الطلبيات', value: `${filteredOrders.length} طلبية` },
+                { label: 'إجمالي القيمة', value: `${formatKWD(stats.totalAmount)} د.ك` },
+                { label: 'المتبقي الآجل', value: `${formatKWD(stats.unpaidAmount)} د.ك` },
+                { label: 'الطلبيات المتأخرة', value: `${stats.delayedCount} طلبية` }
+              ]}
+            />
           </div>
 
           <div className="overflow-x-auto">
@@ -1118,6 +1129,15 @@ export default function OrdersManager({
                         {/* Action Buttons */}
                         <td className="py-3.5 px-4 text-center no-print">
                           <div className="flex items-center justify-center gap-1.5">
+                            {/* Print Order Voucher */}
+                            <button
+                              onClick={() => setPrintingOrder(order)}
+                              className="p-1.5 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                              title="طباعة أمر الشراء / فاتورة الاستلام المعتمدة"
+                            >
+                              <Printer size={15} />
+                            </button>
+
                             {/* View Details */}
                             <button
                               onClick={() => setSelectedOrderDetails(order)}
@@ -1151,7 +1171,30 @@ export default function OrdersManager({
                   })
                 )}
               </tbody>
+              <tfoot className="bg-slate-900 text-white font-black text-xs">
+                <tr>
+                  <td colSpan={6} className="py-3 px-4 text-left font-sans">
+                    إجمالي جدول التوريدات المعتمد ({filteredOrders.length} طلبية):
+                  </td>
+                  <td className="py-3 px-4 text-left font-mono text-emerald-400 font-black text-sm">
+                    {formatKWD(filteredOrders.reduce((sum, o) => sum + (o.amount || 0), 0))} د.ك
+                  </td>
+                  <td colSpan={2} className="py-3 px-4 text-center font-mono">
+                    المسدد: {formatKWD(filteredOrders.reduce((sum, o) => sum + (o.paidAmount || 0), 0))} د.ك
+                  </td>
+                </tr>
+              </tfoot>
             </table>
+          </div>
+
+          {/* Printable Signatures */}
+          <div className="hidden print:block p-4">
+            <PrintSignatures
+              preparedBy="إدارة التوريدات والمشتريات"
+              auditedBy="إدارة الرقابة المخزنية والتدقيق"
+              approvedBy="اعتماد المدير المالي العام"
+              receivedBy="مدير العمليات ومسؤولي الفروع"
+            />
           </div>
         </div>
       )}
@@ -1690,12 +1733,22 @@ export default function OrdersManager({
                 </span>
                 <h3 className="text-base font-black mt-1">{selectedOrderDetails.title}</h3>
               </div>
-              <button
-                onClick={() => setSelectedOrderDetails(null)}
-                className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800"
-              >
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPrintingOrder(selectedOrderDetails)}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  title="طباعة أمر الشراء / الاستلام"
+                >
+                  <Printer size={14} />
+                  <span>طباعة أمر الشراء</span>
+                </button>
+                <button
+                  onClick={() => setSelectedOrderDetails(null)}
+                  className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             <div className="p-6 space-y-5 text-xs">
@@ -1808,6 +1861,13 @@ export default function OrdersManager({
           </div>
         </div>
       )}
+
+      {/* Individual Order Purchase/Delivery Voucher Print Modal */}
+      <OrderInvoicePrintModal
+        isOpen={!!printingOrder}
+        onClose={() => setPrintingOrder(null)}
+        order={printingOrder}
+      />
 
     </div>
   );

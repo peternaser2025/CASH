@@ -37,6 +37,17 @@ import { EmployeeBalance } from '../types';
 import VoucherModal, { VoucherData } from './VoucherModal';
 import { exportElementToPDF } from '../utils/pdfExport';
 import { 
+  getCompanyProfile, 
+  getPrintDisplayOptions, 
+  PrintDisplayOptions,
+  CompanyPrintProfile
+} from '../utils/printConfig';
+import PrintHeader from './print/PrintHeader';
+import PrintSignatures from './print/PrintSignatures';
+import PrintWatermark from './print/PrintWatermark';
+import PrintToolbar from './print/PrintToolbar';
+import PrintSettingsModal from './PrintSettingsModal';
+import { 
   formatKWD, 
   parseReportRow, 
   isArabicSearchMatch, 
@@ -78,6 +89,9 @@ export default function SettlementsManager({
   const [actualCashCount, setActualCashCount] = useState<string>('');
   const [settlementNotes, setSettlementNotes] = useState<string>('');
   const [companyName, setCompanyName] = useState<string>('شركة دار السلام للتجارة العامة والمقاولات');
+  const [companyProfile, setCompanyProfile] = useState<CompanyPrintProfile>(getCompanyProfile());
+  const [printOptions, setPrintOptions] = useState<PrintDisplayOptions>(getPrintDisplayOptions());
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Print mode and visible sections toggle
   const [printMode, setPrintMode] = useState<PrintMode>('all');
@@ -928,56 +942,46 @@ export default function SettlementsManager({
       {/* ========================================================================= */}
       {/* OFFICIAL SETTLEMENT FORM - HIGH PRECISION PRINTABLE & PREVIEW CONTAINER */}
       {/* ========================================================================= */}
-      <div id="printable-settlement-report" className="bg-white rounded-3xl border border-slate-200 shadow-md p-8 sm:p-12 print:border-none print:shadow-none print:p-2 space-y-8">
+      <div className="no-print mb-4">
+        <PrintToolbar
+          options={printOptions}
+          onChangeOptions={setPrintOptions}
+          onPrint={() => handlePrint('all')}
+          onExportPDF={handleExportPDF}
+          pdfLoading={pdfLoading}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          allowThermal={false}
+        />
+      </div>
+
+      <div id="printable-settlement-report" className="bg-white rounded-3xl border border-slate-200 shadow-md p-8 sm:p-12 print:border-none print:shadow-none print:p-2 space-y-8 relative">
+        <PrintWatermark type={printOptions.watermark} />
         
         {/* Official Letterhead Header */}
-        <div className="border-b-2 border-slate-900 pb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-slate-900 text-white rounded-xl">
-                <Building2 size={26} />
-              </div>
-              <div>
-                <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest">{companyName}</h2>
-                <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-0.5">
-                  محضر جرد وتصفية وتسوية عهدة نقدية
-                </h1>
-                <p className="text-[11px] font-black text-emerald-700 mt-0.5">
-                  Petty Cash Reconciliation, Transfers & Audit Schedule
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:items-end gap-2">
-            <div className="text-right sm:text-left bg-slate-50 sm:bg-transparent p-3.5 sm:p-0 rounded-2xl border sm:border-none border-slate-200 w-full sm:w-auto text-xs">
-              <p className="font-black text-slate-600">رقم المحضر: <span className="font-mono text-slate-900 font-black">SET-{Date.now().toString().slice(-6)}</span></p>
-              <p className="font-black text-slate-600 mt-0.5">تاريخ الإصدار: <span className="font-mono text-slate-900 font-bold">{new Date().toISOString().split('T')[0]}</span></p>
-              <p className="font-black text-emerald-700 mt-0.5">العملة المعتمدة: دينار كويتي (KWD)</p>
-            </div>
-
-            <div className="no-print flex items-center gap-2 mt-1">
-              <button
-                onClick={handleExportPDF}
-                disabled={pdfLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-black rounded-xl transition-all cursor-pointer shadow-2xs"
-                title="تصدير نسخة PDF مطابقة للتنسيق الرسمي"
-              >
-                {pdfLoading ? <Loader2 size={13} className="animate-spin text-rose-600" /> : <FileDown size={13} />}
-                <span>تحميل PDF</span>
-              </button>
-
-              <button
-                onClick={() => handlePrint('all')}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-black rounded-xl transition-all cursor-pointer"
-                title="طباعة عبر الطابعة"
-              >
-                <Printer size={13} />
-                <span>طباعة</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <PrintHeader
+          documentTitleAr="محضر جرد وتصفية وتسوية عهدة نقدية"
+          documentTitleEn="PETTY CASH RECONCILIATION & AUDIT STATEMENT"
+          documentNumber={`SET-${Date.now().toString().slice(-6)}`}
+          date={new Date().toISOString().split('T')[0]}
+          profile={companyProfile}
+          showQRCode={printOptions.showQRCode}
+          showLetterhead={printOptions.showLetterhead}
+          qrPayload={JSON.stringify({
+            org: companyProfile.companyNameAr,
+            doc: 'SETTLEMENT',
+            emp: selectedEmployee,
+            dt1: startDate,
+            dt2: endDate,
+            book: settlementStats.calculatedBookBalance,
+            act: settlementStats.actualCash
+          })}
+          extraMeta={[
+            { label: 'أمين ومسؤول العهدة', value: selectedEmployee || 'كافة العهد' },
+            { label: 'فترة الجرد والتدقيق', value: `من ${startDate} إلى ${endDate}` },
+            { label: 'الرصيد الدفتري المتبقي', value: `${settlementStats.calculatedBookBalance.toFixed(3)} د.ك` },
+            { label: 'حالة المطابقة', value: settlementStats.hasCount ? (Math.abs(settlementStats.variance) < 0.001 ? 'مطابق تماماً' : settlementStats.variance < 0 ? 'يوجد عجز' : 'يوجد فائض') : 'جرد معلق' }
+          ]}
+        />
 
         {/* Basic Settlement Details Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-200 text-xs">
@@ -1533,47 +1537,19 @@ export default function SettlementsManager({
           )}
         </div>
 
-        {/* Legal Signatures Box */}
-        <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 bg-slate-50/50 mt-8">
-          <p className="text-center font-black text-xs text-slate-600 mb-8">
-            إقرار ومصادقة: نقر نحن الموقعون أدناه بصحة بيانات الفواتير ومطابقة الفروع والتحويلات مع الجرد الفعلي للعهدة
-          </p>
-
-          <div className="grid grid-cols-3 gap-6 text-center text-xs">
-            {/* Custodian Signature */}
-            <div className="space-y-8">
-              <div>
-                <p className="font-black text-slate-900">أمين / مستلم العهدة</p>
-                <p className="text-[11px] text-slate-500 font-bold mt-0.5">{selectedEmployee}</p>
-              </div>
-              <div className="border-b border-slate-400 w-3/4 mx-auto pb-1 text-[10px] text-slate-400">
-                التوقيع: ............................
-              </div>
-            </div>
-
-            {/* Chief Accountant Signature */}
-            <div className="space-y-8">
-              <div>
-                <p className="font-black text-slate-900">رئيس الحسابات / المراجع</p>
-                <p className="text-[11px] text-slate-500 font-bold mt-0.5">التدقيق والمطابقة</p>
-              </div>
-              <div className="border-b border-slate-400 w-3/4 mx-auto pb-1 text-[10px] text-slate-400">
-                التوقيع: ............................
-              </div>
-            </div>
-
-            {/* Financial Director / General Manager Signature */}
-            <div className="space-y-8">
-              <div>
-                <p className="font-black text-slate-900">المدير المالي / المفوض</p>
-                <p className="text-[11px] text-slate-500 font-bold mt-0.5">الاعتماد النهائي والختم</p>
-              </div>
-              <div className="border-b border-slate-400 w-3/4 mx-auto pb-1 text-[10px] text-slate-400">
-                الختم والاعتماد: ...................
-              </div>
-            </div>
+        {/* Official 4-Box Signatures & Stamp */}
+        {printOptions.showSignatures && (
+          <div className="pt-4 border-t-2 border-dashed border-slate-300">
+            <PrintSignatures
+              profile={companyProfile}
+              showStamp={printOptions.showStamp}
+              preparedBy={`أمين ومسؤول العهدة (${selectedEmployee || 'المسؤول'})`}
+              auditedBy="رئيس الحسابات والتدقيق المالي"
+              approvedBy="اعتماد المدير المالي العام"
+              receivedBy="مصادقة الإدارة العامة والختم"
+            />
           </div>
-        </div>
+        )}
 
       </div>
 
@@ -1582,6 +1558,13 @@ export default function SettlementsManager({
         isOpen={isVoucherModalOpen}
         onClose={() => setIsVoucherModalOpen(false)}
         voucher={activeVoucher}
+      />
+
+      {/* Print Settings & Company Profile Modal */}
+      <PrintSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onSaved={(p) => setCompanyProfile(p)}
       />
     </div>
   );

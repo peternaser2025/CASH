@@ -34,6 +34,17 @@ import {
 import { exportReportToExcel } from '../utils/excelExport';
 import { exportElementToPDF } from '../utils/pdfExport';
 import { 
+  getCompanyProfile, 
+  getPrintDisplayOptions, 
+  PrintDisplayOptions,
+  CompanyPrintProfile
+} from '../utils/printConfig';
+import PrintHeader from './print/PrintHeader';
+import PrintSignatures from './print/PrintSignatures';
+import PrintWatermark from './print/PrintWatermark';
+import PrintToolbar from './print/PrintToolbar';
+import PrintSettingsModal from './PrintSettingsModal';
+import { 
   PieChart, 
   Pie, 
   Cell, 
@@ -212,6 +223,12 @@ export default function ReportViewer({ employees, balances, branches, categories
     showSummary: true
   });
   const [showPrintConfig, setShowPrintConfig] = useState(false);
+  const [companyProfile, setCompanyProfile] = useState<CompanyPrintProfile>(getCompanyProfile());
+  const [printOptions, setPrintOptions] = useState<PrintDisplayOptions>(() => ({
+    ...getPrintDisplayOptions(),
+    paperSize: 'A4-landscape'
+  }));
+  const [isPrintSettingsModalOpen, setIsPrintSettingsModalOpen] = useState(false);
 
   const getPageMargins = () => {
     switch (printSettings.margins) {
@@ -271,7 +288,17 @@ export default function ReportViewer({ employees, balances, branches, categories
   const [pdfLoading, setPdfLoading] = useState(false);
 
   const handlePrint = () => {
-    window.print();
+    if (printOptions.paperSize === 'thermal-80mm') {
+      document.body.classList.add('thermal-mode');
+    } else {
+      document.body.classList.remove('thermal-mode');
+    }
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        document.body.classList.remove('thermal-mode');
+      }, 1000);
+    }, 150);
   };
 
   const handleExportPDF = async () => {
@@ -284,9 +311,10 @@ export default function ReportViewer({ employees, balances, branches, categories
       const cleanEntity = entity.replace(/[/\\?%*:|"<>]/g, '_');
       const filename = `كشف_حساب_${cleanEntity}_${filters.startDate}_إلى_${filters.endDate}.pdf`;
 
+      const orientation = printOptions.paperSize === 'A4-landscape' ? 'landscape' : (printSettings.orientation || 'portrait');
       await exportElementToPDF(el, {
         filename,
-        orientation: printSettings.orientation,
+        orientation: orientation,
         margins: printSettings.margins,
         scale: printSettings.scale
       });
@@ -852,106 +880,116 @@ export default function ReportViewer({ employees, balances, branches, categories
       {/* Report Content */}
       <AnimatePresence mode="wait">
         {report && (
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden print:shadow-none print:border-none print:overflow-visible"
-            id="printable-report"
-          >
-            <style dangerouslySetInnerHTML={{ __html: `
-              @media print {
-                html, body, #root, .flex.h-screen, main, [dir="rtl"] {
-                  height: auto !important;
-                  min-height: 0 !important;
-                  max-height: none !important;
-                  overflow: visible !important;
-                  display: block !important;
-                  position: static !important;
-                }
-                aside, header, .no-print {
-                  display: none !important;
-                }
-                @page {
-                  margin: ${getPageMargins()};
-                  size: A4 ${printSettings.orientation};
-                }
-                body {
-                  background: white !important;
-                  color: black !important;
-                  -webkit-print-color-adjust: exact;
-                  print-color-adjust: exact;
-                  font-family: system-ui, -apple-system, sans-serif !important;
-                }
-                #printable-report {
-                  font-size: ${getFontSize()};
-                  width: 100% !important;
-                  max-width: 100% !important;
-                  margin: 0 auto !important;
-                  padding: 0 !important;
-                  background: white !important;
-                  box-shadow: none !important;
-                  border: none !important;
-                }
-                table {
-                  border-collapse: collapse !important;
-                  width: 100% !important;
-                  margin: 0 auto !important;
-                  border: 1px solid #64748b !important;
-                }
-                tr {
-                  page-break-inside: avoid !important;
-                  break-inside: avoid !important;
-                }
-                th, td {
-                  border: 1px solid #94a3b8 !important;
-                  padding: 6px 8px !important;
-                  text-align: right !important;
-                  font-size: 10px !important;
-                }
-                th {
-                  font-weight: 800 !important;
-                  background-color: #f1f5f9 !important;
-                  color: #0f172a !important;
-                }
-                .no-print { display: none !important; }
-                .print-only { display: block !important; }
-                .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important; }
-              }
-            ` }} />
-
-            {/* Professional Header - Enterprise Bank Statement Style */}
-            <div className="hidden print:block print-only mb-8 p-6 border-b-2 border-slate-900">
-              <div className="flex justify-between items-start">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 bg-slate-900 text-white rounded-lg flex items-center justify-center font-black text-lg">K</div>
-                    <span className="text-xl font-black text-slate-900 tracking-tight">KWD FINANCE PRO</span>
-                  </div>
-                  <h2 className="text-2xl font-black text-slate-900">كشف حساب مالي تفصيلي</h2>
-                  <p className="text-xs text-slate-500 font-bold">تاريخ الاستخراج: {new Date().toLocaleDateString('ar-KW')}</p>
-                </div>
-                
-                <div className="text-left space-y-1 p-3 border border-slate-300 rounded-xl bg-slate-50">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase">الرصيد الختامي</p>
-                  <p className="text-2xl font-black text-slate-900 font-mono">{formatKWD(report.finalBalance)} <span className="text-xs">د.ك</span></p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-3 gap-6 mt-6 p-3 bg-slate-100/60 rounded-xl text-xs font-bold border border-slate-200">
-                <div>
-                  <span className="text-slate-500 text-[10px] block">الموظف / العهدة:</span>
-                  <span className="text-slate-900 font-black">{filters.employee || 'كافة الموظفين'}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 text-[10px] block">الفرع:</span>
-                  <span className="text-slate-900 font-black">{filters.branch || 'كافة الفروع'}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 text-[10px] block">فترة الكشف:</span>
-                  <span className="text-slate-900 font-black">{filters.startDate} إلى {filters.endDate}</span>
-                </div>
-              </div>
+          <div className="space-y-4">
+            {/* Top Print Toolbar */}
+            <div className="no-print">
+              <PrintToolbar
+                options={printOptions}
+                onChangeOptions={setPrintOptions}
+                onPrint={handlePrint}
+                onExportPDF={handleExportPDF}
+                pdfLoading={pdfLoading}
+                onOpenSettings={() => setIsPrintSettingsModalOpen(true)}
+                allowThermal={true}
+              />
             </div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden print:shadow-none print:border-none print:overflow-visible relative"
+              id="printable-report"
+            >
+              <PrintWatermark type={printOptions.watermark} />
+              
+              <style dangerouslySetInnerHTML={{ __html: `
+                @media print {
+                  html, body, #root, .flex.h-screen, main, [dir="rtl"] {
+                    height: auto !important;
+                    min-height: 0 !important;
+                    max-height: none !important;
+                    overflow: visible !important;
+                    display: block !important;
+                    position: static !important;
+                  }
+                  aside, header, .no-print {
+                    display: none !important;
+                  }
+                  @page {
+                    margin: ${getPageMargins()};
+                    size: ${printOptions.paperSize === 'A4-landscape' ? 'A4 landscape' : printOptions.paperSize === 'A5' ? 'A5' : 'A4 portrait'};
+                  }
+                  body {
+                    background: white !important;
+                    color: black !important;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                    font-family: system-ui, -apple-system, sans-serif !important;
+                  }
+                  #printable-report {
+                    font-size: ${getFontSize()};
+                    width: 100% !important;
+                    max-width: 100% !important;
+                    margin: 0 auto !important;
+                    padding: 0 !important;
+                    background: white !important;
+                    box-shadow: none !important;
+                    border: none !important;
+                  }
+                  table {
+                    border-collapse: collapse !important;
+                    width: 100% !important;
+                    margin: 0 auto !important;
+                    border: 1px solid #64748b !important;
+                  }
+                  tr {
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                  }
+                  th, td {
+                    border: 1px solid #94a3b8 !important;
+                    padding: 6px 8px !important;
+                    text-align: right !important;
+                    font-size: 10px !important;
+                  }
+                  th {
+                    font-weight: 800 !important;
+                    background-color: #f1f5f9 !important;
+                    color: #0f172a !important;
+                  }
+                  .no-print { display: none !important; }
+                  .print-only { display: block !important; }
+                  .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important; }
+                }
+              ` }} />
+
+              {/* Professional Corporate Print Header */}
+              <div className="hidden print:block print-only mb-6 p-4">
+                <PrintHeader
+                  documentTitleAr="كشف حساب مالي تفصيلي ومطابقة عهدة"
+                  documentTitleEn="FINANCIAL STATEMENT & RECONCILIATION SCHEDULE"
+                  documentNumber={`STMT-${Date.now().toString().slice(-6)}`}
+                  date={new Date().toLocaleDateString('ar-KW')}
+                  profile={companyProfile}
+                  showQRCode={printOptions.showQRCode}
+                  showLetterhead={printOptions.showLetterhead}
+                  qrPayload={JSON.stringify({
+                    org: companyProfile.companyNameAr,
+                    type: 'STATEMENT',
+                    emp: filters.employee,
+                    br: filters.branch,
+                    start: filters.startDate,
+                    end: filters.endDate,
+                    bal: report.finalBalance
+                  })}
+                  extraMeta={[
+                    { label: 'الموظف / العهدة', value: filters.employee || 'كافة الموظفين' },
+                    { label: 'الفرع المستفيد', value: filters.branch || 'كافة الفروع' },
+                    { label: 'فترة الكشف', value: `${filters.startDate} إلى ${filters.endDate}` },
+                    { label: 'الرصيد الختامي', value: `${formatKWD(report.finalBalance)} د.ك` }
+                  ]}
+                />
+              </div>
 
             <div className="p-6 border-b border-slate-200 flex justify-between items-center print:hidden bg-slate-900 text-white">
               <div className="flex gap-4 items-center">
@@ -1668,28 +1706,25 @@ export default function ReportViewer({ employees, balances, branches, categories
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-12 mt-8">
-                  <div className="space-y-12">
-                    <div className="border-b-2 border-black pb-2">
-                      <p className="text-[10px] font-black text-black">توقيع المحاسب المسؤول</p>
-                    </div>
-                    <div className="border-b-2 border-black pb-2">
-                      <p className="text-[10px] font-black text-black">توقيع الموظف / صاحب العهدة</p>
-                    </div>
+                {/* Official Multi-Box Signatures & Corporate Seal */}
+                {printOptions.showSignatures && (
+                  <div className="mt-8 pt-4 border-t-2 border-dashed border-gray-300">
+                    <PrintSignatures
+                      profile={companyProfile}
+                      showStamp={printOptions.showStamp}
+                      preparedBy="المحاسب المسؤول / مدخل البيانات"
+                      auditedBy="رئيس الحسابات والتدقيق الداخلي"
+                      approvedBy="اعتماد المدير المالي العام"
+                      receivedBy={`أمين ومستلم العهدة (${filters.employee || 'المسؤول'})`}
+                    />
                   </div>
-                  <div className="col-span-2 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-2xl p-4">
-                    <div className="w-20 h-20 border-4 border-gray-100 rounded-full flex items-center justify-center opacity-20">
-                      <span className="text-[8px] font-black text-center">OFFICIAL STAMP HERE</span>
-                    </div>
-                    <p className="text-[8px] font-black text-gray-300 mt-2 uppercase">ختم الشركة المعتمد</p>
-                  </div>
-                </div>
+                )}
               </div>
               
               <div className="flex justify-between items-end pt-8 border-t border-gray-100">
                 <div className="space-y-1">
-                  <p className="text-[8px] font-black text-gray-400 uppercase tracking-[0.4em]">KWD FINANCE PRO | SECURE REPORTING ENGINE</p>
-                  <p className="text-[6px] font-bold text-gray-300 italic">هذا المستند تم إنشاؤه آلياً ولا يتطلب توقيعاً حياً ليكون صالحاً للاستخدام الداخلي.</p>
+                  <p className="text-[8px] font-black text-gray-400 uppercase tracking-[0.4em]">{companyProfile.companyNameEn} | SECURE REPORTING ENGINE</p>
+                  <p className="text-[6px] font-bold text-gray-400 italic">هذا المستند تم استخراجه وتدقيقه إلكترونياً ويخضع لمعايير الرقابة والمطابقة المحاسبية الرسمية.</p>
                 </div>
                 <div className="text-left">
                   <p className="text-[8px] font-black text-gray-900">صفحة 1 من 1</p>
@@ -1697,8 +1732,9 @@ export default function ReportViewer({ employees, balances, branches, categories
               </div>
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
+    </AnimatePresence>
 
       {/* Edit Modal */}
       <AnimatePresence>
@@ -1995,6 +2031,13 @@ export default function ReportViewer({ employees, balances, branches, categories
         isOpen={isVoucherModalOpen}
         onClose={() => setIsVoucherModalOpen(false)}
         voucher={activeVoucher}
+      />
+
+      {/* Print Settings Modal */}
+      <PrintSettingsModal
+        isOpen={isPrintSettingsModalOpen}
+        onClose={() => setIsPrintSettingsModalOpen(false)}
+        onSaved={(p) => setCompanyProfile(p)}
       />
     </div>
   );
