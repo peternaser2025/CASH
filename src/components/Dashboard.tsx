@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Wallet, TrendingUp, TrendingDown, RefreshCw, Users, Activity, ArrowUpRight, ArrowDownRight, FileSpreadsheet, Search, Filter, ShieldCheck, Scale, Printer, Building, Calendar, FileText } from 'lucide-react';
 import { EmployeeBalance } from '../types';
 import { formatKWD } from '../utils/format';
+import { sumMoney } from '../utils/money';
 import { exportReportToExcel } from '../utils/excelExport';
 import CustodyAlertRadar from './CustodyAlertRadar';
 
@@ -18,7 +19,7 @@ export default function Dashboard({ balances, loading, onRefresh, onFeedCustody,
   const [searchFilter, setSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'positive' | 'negative'>('all');
 
-  const totalBalance = balances.reduce((acc, curr) => acc + curr.balance, 0);
+  const totalBalance = sumMoney(balances.map(b => b.balance));
   const positiveBalances = balances.filter(b => b.balance > 0).length;
   const negativeBalances = balances.filter(b => b.balance < 0).length;
 

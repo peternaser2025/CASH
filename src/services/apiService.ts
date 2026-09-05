@@ -283,5 +283,59 @@ export const apiService = {
     } catch (e: any) {
       return { success: false, error: e.message || 'خطأ في الاتصال بخدمة الذكاء الاصطناعي' };
     }
+  },
+
+  // 11. Reconciliation Engine
+  async getReconciliation(): Promise<any> {
+    try {
+      const res = await fetch('/api/reconciliation');
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.report || data.data || null;
+    } catch (e) {
+      console.warn('getReconciliation failed:', e);
+      return null;
+    }
+  },
+
+  async reconcileAll(): Promise<any> {
+    try {
+      const res = await fetch('/api/reconciliation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor: 'المراقب المالي' })
+      });
+      return await res.json();
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  },
+
+  // 12. Audit Trail Logs
+  async getAuditLogs(options?: { entityType?: string; limit?: number }): Promise<any[]> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.entityType) params.append('entityType', options.entityType);
+      if (options?.limit) params.append('limit', String(options.limit));
+
+      const res = await fetch(`/api/audit-logs?${params.toString()}`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.logs || data.data || [];
+    } catch (e) {
+      console.warn('getAuditLogs failed:', e);
+      return [];
+    }
+  },
+
+  // 13. System Health & Diagnostic Test Suite
+  async getTestSuiteDiagnostic(): Promise<any> {
+    try {
+      const res = await fetch('/api/health/test-suite');
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      return null;
+    }
   }
 };

@@ -72,3 +72,64 @@ export interface Order {
   createdAt: string;
   updatedAt: string;
 }
+
+// ----------------------------------------------------
+// Unified API Response Wrapper
+// ----------------------------------------------------
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+  meta?: {
+    timestamp?: string;
+    count?: number;
+    [key: string]: any;
+  };
+}
+
+// ----------------------------------------------------
+// Audit Trail & Change Logging
+// ----------------------------------------------------
+export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'RECONCILE' | 'SETTLE';
+export type AuditEntityType = 'TRANSACTION' | 'BALANCE' | 'ORDER' | 'SETTLEMENT' | 'SETTINGS';
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  action: AuditAction;
+  entityType: AuditEntityType;
+  entityId: string;
+  actor: string;
+  description: string;
+  previousValue?: any;
+  newValue?: any;
+}
+
+// ----------------------------------------------------
+// Financial Reconciliation Check
+// ----------------------------------------------------
+export interface ReconciliationItem {
+  entityType: 'employee' | 'branch';
+  name: string;
+  id: string;
+  storedBalanceFils: number;
+  storedBalanceKWD: number;
+  calculatedBalanceFils: number;
+  calculatedBalanceKWD: number;
+  discrepancyFils: number;
+  discrepancyKWD: number;
+  totalIncomeFils: number;
+  totalExpenseFils: number;
+  transactionsCount: number;
+  status: 'balanced' | 'discrepancy_detected';
+}
+
+export interface ReconciliationReport {
+  timestamp: string;
+  isSystemBalanced: boolean;
+  totalDiscrepancyFils: number;
+  totalDiscrepancyKWD: number;
+  totalTransactionsEvaluated: number;
+  items: ReconciliationItem[];
+}

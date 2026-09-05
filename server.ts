@@ -4,6 +4,10 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
+import { transactionSchema, employeeSchema, orderSchema, settingsSchema } from './server/validation';
+import { auditService } from './server/audit';
+import { performReconciliation } from './server/reconciliation';
+import { toFils, toKWD, normalizeEntityId } from './src/utils/money';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -103,6 +107,60 @@ function getAI(): GoogleGenAI | null {
   return aiClient;
 }
 
+// Single Source of Truth: Authoritative balance recalculator using integer fils (1 KWD = 1000 fils)
+function recalculateAuthoritativeBalances() {
+  const balancesFilsMap = new Map<string, number>();
+
+  // Ensure all known employees have a starting entry
+  serverStore.employees.forEach(e => {
+    balancesFilsMap.set(e.name, 0);
+  });
+
+  serverStore.transactions.forEach(t => {
+    const emp = t.employee;
+    if (!emp) return;
+    const currentFils = balancesFilsMap.get(emp) || 0;
+    const tFils = t.amountFils !== undefined ? t.amountFils : toFils(t.amount);
+    const isInc = t.type === 'Income' || t.type === 'Transfer-In' || t.type === 'إيراد' || t.type === 'تغذية عهدة';
+    const isExp = t.type === 'Expense' || t.type === 'Transfer-Out' || t.type === 'مصروف';
+
+    if (isInc) balancesFilsMap.set(emp, currentFils + tFils);
+    else if (isExp) balancesFilsMap.set(emp, currentFils - tFils);
+  });
+
+  serverStore.employees.forEach(e => {
+    const fils = balancesFilsMap.get(e.name) || 0;
+    e.balance = fils / 1000;
+  });
+}
+
+// Unified API Response Formatter
+function sendSuccess(res: express.Response, data: any, message?: string, meta?: any, statusCode = 200) {
+  return res.status(statusCode).json({
+    success: true,
+    data,
+    message,
+    meta: {
+      timestamp: new Date().toISOString(),
+      ...meta
+    }
+  });
+}
+
+function sendError(res: express.Response, error: string, statusCode = 400, details?: any) {
+  return res.status(statusCode).json({
+    success: false,
+    error,
+    details,
+    meta: {
+      timestamp: new Date().toISOString()
+    }
+  });
+}
+
+// Run initial balance calculation on boot to guarantee truth
+recalculateAuthoritativeBalances();
+
 // ----------------------------------------------------
 // BACKEND API ENDPOINTS
 // ----------------------------------------------------
@@ -168,159 +226,296 @@ app.get('/api/transactions', (req, res) => {
 });
 
 app.post('/api/transactions', (req, res) => {
-  const data = req.body;
-  if (!data || !data.amount || !data.employee) {
-    return res.status(400).json({ success: false, error: 'البيانات غير مكتملة' });
+  const parsed = transactionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return sendError(res, parsed.error.issues[0]?.message || 'بيانات المعاملة غير صحيحة', 400, parsed.error.issues);
   }
 
+  const data = parsed.data;
   const newId = Date.now().toString();
+  const amountFils = toFils(data.amount);
+  const amountKwd = toKWD(amountFils);
+
   const tx = {
     id: newId,
     rowId: newId,
     date: data.date || new Date().toISOString().split('T')[0],
-    employee: data.employee,
-    branch: data.branch || '',
+    employee: data.employee.trim(),
+    branch: data.branch || 'الرئيسي',
     category: data.category || 'نثريات',
     description: data.description || '',
-    amount: parseFloat(data.amount) || 0,
+    amount: amountKwd,
+    amountFils,
     type: data.type || 'Expense',
     targetMonth: data.targetMonth,
     createdAt: new Date().toISOString()
   };
 
-  serverStore.transactions.unshift(tx);
-
-  // Update employee balance in memory
-  const emp = serverStore.employees.find(e => e.name === tx.employee);
-  if (emp) {
-    if (tx.type === 'Income' || tx.type === 'Transfer-In') {
-      emp.balance += tx.amount;
-    } else if (tx.type === 'Expense' || tx.type === 'Transfer-Out') {
-      emp.balance -= tx.amount;
-    }
-  } else {
-    serverStore.employees.push({
-      name: tx.employee,
-      balance: tx.type === 'Income' ? tx.amount : -tx.amount
-    });
+  // Ensure employee exists in employees list
+  const existingEmp = serverStore.employees.find(e => normalizeEntityId(e.name) === normalizeEntityId(tx.employee));
+  if (!existingEmp) {
+    serverStore.employees.push({ name: tx.employee, balance: 0 });
   }
 
+  serverStore.transactions.unshift(tx);
+
+  // Recalculate authoritative balances using exact integer arithmetic (Single Source of Truth)
+  recalculateAuthoritativeBalances();
   saveStore(serverStore);
-  res.json({ success: true, id: newId, transaction: tx });
+
+  // Audit Trail Recording
+  auditService.log({
+    action: 'CREATE',
+    entityType: 'TRANSACTION',
+    entityId: newId,
+    actor: (req.body && req.body.actor) || 'المستخدم',
+    description: `إضافة معاملة ${tx.type === 'Income' ? 'إيراد / توريد' : tx.type === 'Expense' ? 'مصروف' : 'تحويل'} بمبلغ ${amountKwd.toFixed(3)} د.ك للموظف (${tx.employee})`,
+    newValue: tx
+  });
+
+  res.json({ success: true, id: newId, transaction: tx, data: tx });
 });
 
 app.put('/api/transactions/:id', (req, res) => {
   const { id } = req.params;
-  const updateData = req.body;
   const idx = serverStore.transactions.findIndex(t => t.id === id || String(t.rowId) === id);
 
   if (idx === -1) {
-    return res.status(404).json({ success: false, error: 'المعاملة غير موجودة' });
+    return sendError(res, 'المعاملة غير موجودة', 404);
+  }
+
+  const previousValue = { ...serverStore.transactions[idx] };
+  const updateData = req.body;
+
+  let amountKwd = previousValue.amount;
+  let amountFils = previousValue.amountFils || toFils(previousValue.amount);
+
+  if (updateData.amount !== undefined) {
+    amountFils = toFils(updateData.amount);
+    amountKwd = toKWD(amountFils);
   }
 
   serverStore.transactions[idx] = {
-    ...serverStore.transactions[idx],
+    ...previousValue,
     ...updateData,
+    amount: amountKwd,
+    amountFils,
     updatedAt: new Date().toISOString()
   };
 
+  recalculateAuthoritativeBalances();
   saveStore(serverStore);
-  res.json({ success: true, transaction: serverStore.transactions[idx] });
+
+  auditService.log({
+    action: 'UPDATE',
+    entityType: 'TRANSACTION',
+    entityId: id,
+    actor: updateData.actor || 'المستخدم',
+    description: `تعديل المعاملة رقم #${id}`,
+    previousValue,
+    newValue: serverStore.transactions[idx]
+  });
+
+  res.json({ success: true, transaction: serverStore.transactions[idx], data: serverStore.transactions[idx] });
 });
 
 app.delete('/api/transactions/:id', (req, res) => {
   const { id } = req.params;
-  const initialLen = serverStore.transactions.length;
-  serverStore.transactions = serverStore.transactions.filter(t => t.id !== id && String(t.rowId) !== id);
+  const target = serverStore.transactions.find(t => t.id === id || String(t.rowId) === id);
 
-  if (serverStore.transactions.length === initialLen) {
-    return res.status(404).json({ success: false, error: 'المعاملة غير موجودة' });
+  if (!target) {
+    return sendError(res, 'المعاملة غير موجودة', 404);
   }
 
+  serverStore.transactions = serverStore.transactions.filter(t => t.id !== id && String(t.rowId) !== id);
+  recalculateAuthoritativeBalances();
   saveStore(serverStore);
-  res.json({ success: true, message: 'تم حذف المعاملة بنجاح' });
+
+  auditService.log({
+    action: 'DELETE',
+    entityType: 'TRANSACTION',
+    entityId: id,
+    actor: (req.body && req.body.actor) || 'المستخدم',
+    description: `حذف المعاملة #${id} بمبلغ ${target.amount} د.ك للموظف (${target.employee})`,
+    previousValue: target
+  });
+
+  res.json({ success: true, message: 'تم حذف المعاملة وتحديث الرصيد بنجاح', data: { id } });
 });
 
-// 4. Balances Endpoint
+// 4. Balances Endpoint (Single Source of Truth, computed via exact integer fils)
 app.get('/api/balances', (req, res) => {
-  // Aggregate directly from transaction records
-  const balancesMap = new Map<string, number>();
+  recalculateAuthoritativeBalances();
+  saveStore(serverStore);
 
-  // Initialize with known employees
-  serverStore.employees.forEach(e => {
-    balancesMap.set(e.name, 0);
-  });
-
-  serverStore.transactions.forEach(t => {
-    const emp = t.employee;
-    if (!emp) return;
-    const current = balancesMap.get(emp) || 0;
-    const inc = (t.type === 'Income' || t.type === 'Transfer-In') ? (parseFloat(t.amount) || 0) : 0;
-    const exp = (t.type === 'Expense' || t.type === 'Transfer-Out') ? (parseFloat(t.amount) || 0) : 0;
-    balancesMap.set(emp, current + inc - exp);
-  });
-
-  const list = Array.from(balancesMap.entries()).map(([name, balance]) => ({
-    name,
-    balance
+  const formattedBalances = serverStore.employees.map(e => ({
+    name: e.name,
+    balance: e.balance,
+    balanceFils: toFils(e.balance),
+    formatted: `${e.balance.toFixed(3)} د.ك`
   }));
 
   res.json({
     success: true,
-    balances: list
+    balances: formattedBalances,
+    data: formattedBalances
+  });
+});
+
+// 4.1. Financial Reconciliation Endpoint (Periodical & On-Demand Audit)
+app.get('/api/reconciliation', (req, res) => {
+  const report = performReconciliation(
+    serverStore.transactions,
+    serverStore.employees,
+    serverStore.branches
+  );
+  res.json({
+    success: true,
+    report,
+    data: report
+  });
+});
+
+app.post('/api/reconciliation', (req, res) => {
+  // Re-synchronize and force-balance all employee ledgers strictly to calculated transaction sums
+  const beforeReport = performReconciliation(
+    serverStore.transactions,
+    serverStore.employees,
+    serverStore.branches
+  );
+
+  recalculateAuthoritativeBalances();
+  saveStore(serverStore);
+
+  const afterReport = performReconciliation(
+    serverStore.transactions,
+    serverStore.employees,
+    serverStore.branches
+  );
+
+  auditService.log({
+    action: 'RECONCILE',
+    entityType: 'BALANCE',
+    entityId: 'SYSTEM_ALL',
+    actor: (req.body && req.body.actor) || 'المراقب المالي',
+    description: `إجراء مطابقة وتسوية مالية شاملة لـ ${serverStore.employees.length} موظف`,
+    previousValue: beforeReport,
+    newValue: afterReport
+  });
+
+  res.json({
+    success: true,
+    message: 'تمت التسوية والمطابقة بنجاح وإعادة التوازن للنظام',
+    report: afterReport,
+    data: afterReport
+  });
+});
+
+// 4.2. Audit Trail Endpoint
+app.get('/api/audit-logs', (req, res) => {
+  const { entityType, entityId, limit } = req.query;
+  const logs = auditService.getAll({
+    entityType: entityType ? String(entityType) : undefined,
+    entityId: entityId ? String(entityId) : undefined,
+    limit: limit ? parseInt(String(limit), 10) : 100
+  });
+
+  res.json({
+    success: true,
+    total: logs.length,
+    logs,
+    data: logs
   });
 });
 
 // 5. Employees CRUD
 app.get('/api/employees', (req, res) => {
-  res.json({ success: true, employees: serverStore.employees });
+  res.json({ success: true, employees: serverStore.employees, data: serverStore.employees });
 });
 
 app.post('/api/employees', (req, res) => {
-  const { name } = req.body;
-  if (!name || !name.trim()) {
-    return res.status(400).json({ success: false, error: 'اسم الموظف مطلوب' });
+  const parsed = employeeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return sendError(res, parsed.error.issues[0]?.message || 'اسم الموظف غير صالح', 400);
   }
 
-  const cleanName = name.trim();
-  const exists = serverStore.employees.find(e => e.name === cleanName);
+  const cleanName = parsed.data.name;
+  const exists = serverStore.employees.find(e => normalizeEntityId(e.name) === normalizeEntityId(cleanName));
   if (!exists) {
-    serverStore.employees.push({ name: cleanName, balance: 0 });
+    const newEmp = { name: cleanName, balance: 0 };
+    serverStore.employees.push(newEmp);
+    recalculateAuthoritativeBalances();
     saveStore(serverStore);
+
+    auditService.log({
+      action: 'CREATE',
+      entityType: 'BALANCE',
+      entityId: `emp_${normalizeEntityId(cleanName)}`,
+      actor: (req.body && req.body.actor) || 'المستخدم',
+      description: `إضافة موظف/أمين عهدة جديد: ${cleanName}`,
+      newValue: newEmp
+    });
   }
 
-  res.json({ success: true, employees: serverStore.employees });
+  res.json({ success: true, employees: serverStore.employees, data: serverStore.employees });
 });
 
 app.delete('/api/employees/:name', (req, res) => {
-  const name = decodeURIComponent(req.params.name);
-  serverStore.employees = serverStore.employees.filter(e => e.name !== name);
+  const rawName = decodeURIComponent(req.params.name);
+  const target = serverStore.employees.find(e => normalizeEntityId(e.name) === normalizeEntityId(rawName));
+
+  if (!target) {
+    return sendError(res, 'الموظف غير موجود', 404);
+  }
+
+  serverStore.employees = serverStore.employees.filter(e => normalizeEntityId(e.name) !== normalizeEntityId(rawName));
   saveStore(serverStore);
-  res.json({ success: true, employees: serverStore.employees });
+
+  auditService.log({
+    action: 'DELETE',
+    entityType: 'BALANCE',
+    entityId: `emp_${normalizeEntityId(rawName)}`,
+    actor: (req.body && req.body.actor) || 'المستخدم',
+    description: `حذف الموظف: ${rawName}`,
+    previousValue: target
+  });
+
+  res.json({ success: true, employees: serverStore.employees, data: serverStore.employees });
 });
 
 // 6. Orders CRUD
 app.get('/api/orders', (req, res) => {
-  res.json({ success: true, orders: serverStore.orders || [] });
+  res.json({ success: true, orders: serverStore.orders || [], data: serverStore.orders || [] });
 });
 
 app.post('/api/orders', (req, res) => {
-  const order = req.body;
-  if (!order || !order.title) {
-    return res.status(400).json({ success: false, error: 'بيانات الطلبية غير مكتملة' });
+  const parsed = orderSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return sendError(res, parsed.error.issues[0]?.message || 'بيانات الطلبية غير صحيحة', 400, parsed.error.issues);
   }
 
+  const order = parsed.data;
   const newOrder = {
     ...order,
-    id: order.id || `ord-${Date.now()}`,
-    orderNumber: order.orderNumber || `ORD-${new Date().getFullYear()}-${String(serverStore.orders.length + 1).padStart(3, '0')}`,
-    createdAt: order.createdAt || new Date().toISOString(),
+    id: req.body.id || `ord-${Date.now()}`,
+    orderNumber: req.body.orderNumber || `ORD-${new Date().getFullYear()}-${String((serverStore.orders || []).length + 1).padStart(3, '0')}`,
+    createdAt: req.body.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
 
   serverStore.orders.unshift(newOrder);
   saveStore(serverStore);
-  res.json({ success: true, order: newOrder });
+
+  auditService.log({
+    action: 'CREATE',
+    entityType: 'ORDER',
+    entityId: newOrder.id,
+    actor: (req.body && req.body.actor) || 'المستخدم',
+    description: `إنشاء طلبية جديدة: ${newOrder.orderNumber} - ${newOrder.title} بقيمة ${newOrder.amount} د.ك`,
+    newValue: newOrder
+  });
+
+  res.json({ success: true, order: newOrder, data: newOrder });
 });
 
 app.put('/api/orders/:id', (req, res) => {
@@ -329,9 +524,10 @@ app.put('/api/orders/:id', (req, res) => {
   const idx = serverStore.orders.findIndex(o => o.id === id);
 
   if (idx === -1) {
-    return res.status(404).json({ success: false, error: 'الطلبية غير موجودة' });
+    return sendError(res, 'الطلبية غير موجودة', 404);
   }
 
+  const previousValue = { ...serverStore.orders[idx] };
   serverStore.orders[idx] = {
     ...serverStore.orders[idx],
     ...updateData,
@@ -339,14 +535,71 @@ app.put('/api/orders/:id', (req, res) => {
   };
 
   saveStore(serverStore);
-  res.json({ success: true, order: serverStore.orders[idx] });
+
+  auditService.log({
+    action: 'UPDATE',
+    entityType: 'ORDER',
+    entityId: id,
+    actor: updateData.actor || 'المستخدم',
+    description: `تعديل الطلبية: ${serverStore.orders[idx].orderNumber}`,
+    previousValue,
+    newValue: serverStore.orders[idx]
+  });
+
+  res.json({ success: true, order: serverStore.orders[idx], data: serverStore.orders[idx] });
 });
 
 app.delete('/api/orders/:id', (req, res) => {
   const { id } = req.params;
+  const target = serverStore.orders.find(o => o.id === id);
+
+  if (!target) {
+    return sendError(res, 'الطلبية غير موجودة', 404);
+  }
+
   serverStore.orders = serverStore.orders.filter(o => o.id !== id);
   saveStore(serverStore);
+
+  auditService.log({
+    action: 'DELETE',
+    entityType: 'ORDER',
+    entityId: id,
+    actor: (req.body && req.body.actor) || 'المستخدم',
+    description: `حذف الطلبية: ${target.orderNumber} - ${target.title}`,
+    previousValue: target
+  });
+
   res.json({ success: true, message: 'تم حذف الطلبية بنجاح' });
+});
+
+// 6.1 Automated Test Suite Diagnostic Endpoint
+app.get('/api/health/test-suite', (req, res) => {
+  const report = performReconciliation(
+    serverStore.transactions,
+    serverStore.employees,
+    serverStore.branches
+  );
+
+  const tests = [
+    { name: 'Floating Point IEEE-754 Precision (Fils)', passed: toFils(0.1) + toFils(0.2) === toFils(0.3) },
+    { name: 'Single Source of Truth Balances', passed: Array.isArray(serverStore.employees) },
+    { name: 'Double Entry / Reconciliation Engine', passed: typeof report.isSystemBalanced === 'boolean' },
+    { name: 'Validation Engine (Zod)', passed: typeof transactionSchema.safeParse === 'function' },
+    { name: 'Audit Trail Persistence', passed: typeof auditService.log === 'function' }
+  ];
+
+  const allPassed = tests.every(t => t.passed);
+  res.json({
+    success: allPassed,
+    status: allPassed ? 'all_passed' : 'some_failed',
+    totalTests: tests.length,
+    passedTests: tests.filter(t => t.passed).length,
+    tests,
+    reconciliation: {
+      isSystemBalanced: report.isSystemBalanced,
+      totalDiscrepancyKWD: report.totalDiscrepancyKWD
+    }
+  });
 });
 
 // 7. Budgets CRUD

@@ -1,0 +1,24 @@
+[
+  {
+    "id": "aud_1788600199588_d3enw",
+    "timestamp": "2026-09-05T09:23:19.588Z",
+    "action": "CREATE",
+    "entityType": "TRANSACTION",
+    "entityId": "1788600199587",
+    "actor": "المستخدم",
+    "description": "إضافة معاملة إيراد / توريد بمبلغ 150.250 د.ك للموظف (بيتر ناصر)",
+    "newValue": {
+      "id": "1788600199587",
+      "rowId": "1788600199587",
+      "date": "2026-09-05",
+      "employee": "بيتر ناصر",
+      "branch": "الرئيسي",
+      "category": "عهدة",
+      "description": "تغذية عهدة أول المدة",
+      "amount": 150.25,
+      "amountFils": 150250,
+      "type": "Income",
+      "createdAt": "2026-09-05T09:23:19.587Z"
+    }
+  }
+]
