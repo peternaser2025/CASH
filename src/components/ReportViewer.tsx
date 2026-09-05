@@ -915,6 +915,10 @@ export default function ReportViewer({ employees, balances, branches, categories
                   aside, header, .no-print {
                     display: none !important;
                   }
+                  body.voucher-modal-active #printable-report,
+                  body.order-invoice-active #printable-report {
+                    display: none !important;
+                  }
                   @page {
                     margin: ${getPageMargins()};
                     size: ${printOptions.paperSize === 'A4-landscape' ? 'A4 landscape' : printOptions.paperSize === 'A5' ? 'A5' : 'A4 portrait'};
@@ -948,14 +952,18 @@ export default function ReportViewer({ employees, balances, branches, categories
                   }
                   th, td {
                     border: 1px solid #94a3b8 !important;
-                    padding: 6px 8px !important;
+                    padding: 4px 6px !important;
                     text-align: right !important;
-                    font-size: 10px !important;
+                    font-size: 9px !important;
                   }
                   th {
                     font-weight: 800 !important;
                     background-color: #f1f5f9 !important;
                     color: #0f172a !important;
+                  }
+                  .break-inside-avoid {
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
                   }
                   .no-print { display: none !important; }
                   .print-only { display: block !important; }
@@ -1625,31 +1633,31 @@ export default function ReportViewer({ employees, balances, branches, categories
               </div>
             </div>
 
-            {/* Redesigned Footer - Formal Bank Style */}
-            <div className="p-12 hidden print:block border-t-4 border-black bg-white">
-              <div className="grid grid-cols-1 gap-12 mb-16">
-                {/* Print Summary Table */}
-                <div className="grid grid-cols-2 gap-8">
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-black border-b-2 border-black pb-2">ملخص الحساب الإجمالي</h3>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-[10px] font-bold">
-                        <span>إجمالي المدين (وارد):</span>
-                        <span className="font-mono">{formatKWD(report.rows.reduce((acc, row) => {
+            {/* Formal Bank Style Print Footer - Optimized to fit cleanly */}
+            <div className="p-4 print:p-3 hidden print:block border-t-2 border-slate-900 bg-white break-inside-avoid">
+              <div className="space-y-4 mb-4">
+                {/* Print Summary Table: 3 compact columns */}
+                <div className="grid grid-cols-3 gap-3 border border-slate-300 rounded-xl p-3 bg-slate-50/50 break-inside-avoid">
+                  <div className="space-y-2 border-l border-slate-200 pl-3">
+                    <h3 className="text-[11px] font-black border-b border-slate-900 pb-1 text-slate-900">ملخص الحساب الإجمالي</h3>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[9px] font-bold">
+                        <span className="text-slate-600">إجمالي المدين (وارد):</span>
+                        <span className="font-mono text-emerald-700">{formatKWD(report.rows.reduce((acc, row) => {
                           const type = String(row[3] || '');
                           if (isTransferType(type)) return acc;
                           return acc + (parseFloat(row[5]) || 0);
                         }, 0))}</span>
                       </div>
-                      <div className="flex justify-between text-[10px] font-bold">
-                        <span>إجمالي الدائن (صادر):</span>
-                        <span className="font-mono">{formatKWD(report.rows.reduce((acc, row) => {
+                      <div className="flex justify-between text-[9px] font-bold">
+                        <span className="text-slate-600">إجمالي الدائن (صادر):</span>
+                        <span className="font-mono text-rose-700">{formatKWD(report.rows.reduce((acc, row) => {
                           const type = String(row[3] || '');
                           if (isTransferType(type)) return acc;
                           return acc + (parseFloat(row[6]) || 0);
                         }, 0))}</span>
                       </div>
-                      <div className="flex justify-between text-[10px] font-bold text-blue-600">
+                      <div className="flex justify-between text-[9px] font-bold text-blue-700">
                         <span>إجمالي التحويلات:</span>
                         <span className="font-mono">{formatKWD(report.rows.reduce((acc, row) => {
                           const type = String(row[3] || '');
@@ -1659,16 +1667,16 @@ export default function ReportViewer({ employees, balances, branches, categories
                           return acc;
                         }, 0))}</span>
                       </div>
-                      <div className="pt-2 border-t border-black flex justify-between text-xs font-black">
+                      <div className="pt-1.5 border-t border-slate-900 flex justify-between text-[11px] font-black text-slate-950">
                         <span>الرصيد النهائي:</span>
-                        <span className="font-mono">{formatKWD(report.finalBalance)}</span>
+                        <span className="font-mono">{formatKWD(report.finalBalance)} د.ك</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-black border-b-2 border-black pb-2">تحليل المصروفات حسب الفرع</h3>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                  <div className="space-y-2 border-l border-slate-200 pl-3">
+                    <h3 className="text-[11px] font-black border-b border-slate-900 pb-1 text-slate-900">المصروفات حسب الفرع</h3>
+                    <div className="space-y-1 max-h-28 overflow-hidden">
                       {(Object.entries(
                         report.rows.reduce((acc: Record<string, number>, row) => {
                           const branch = String(row[2] || 'عام');
@@ -1677,17 +1685,17 @@ export default function ReportViewer({ employees, balances, branches, categories
                           return acc;
                         }, {} as Record<string, number>)
                       ) as [string, number][]).map(([branch, total]) => (
-                        <div key={branch} className="flex justify-between text-[9px] border-b border-gray-100 py-1">
-                          <span className="font-bold">{branch}:</span>
-                          <span className="font-mono">{formatKWD(total)}</span>
+                        <div key={branch} className="flex justify-between text-[9px] border-b border-slate-200/50 py-0.5">
+                          <span className="font-bold text-slate-700">{branch}:</span>
+                          <span className="font-mono font-black">{formatKWD(total)}</span>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-black border-b-2 border-black pb-2">تحليل حسب شهر الاستحقاق</h3>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                  <div className="space-y-2">
+                    <h3 className="text-[11px] font-black border-b border-slate-900 pb-1 text-slate-900">شهور الاستحقاق</h3>
+                    <div className="space-y-1 max-h-28 overflow-hidden">
                       {(Object.entries(
                         report.rows.reduce((acc: Record<string, number>, row) => {
                           const targetMonth = row.length > 9 ? String(row[9] || '') : '';
@@ -1696,10 +1704,10 @@ export default function ReportViewer({ employees, balances, branches, categories
                           if (expense > 0) acc[targetMonth] = (acc[targetMonth] || 0) + expense;
                           return acc;
                         }, {} as Record<string, number>)
-                      ) as [string, number][]).sort((a, b) => b[0].localeCompare(a[0])).map(([month, total]) => (
-                        <div key={month} className="flex justify-between text-[9px] border-b border-gray-100 py-1">
-                          <span className="font-bold">{month}:</span>
-                          <span className="font-mono">{formatKWD(total)}</span>
+                      ) as [string, number][]).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 4).map(([month, total]) => (
+                        <div key={month} className="flex justify-between text-[9px] border-b border-slate-200/50 py-0.5">
+                          <span className="font-bold text-slate-700">{month}:</span>
+                          <span className="font-mono font-black">{formatKWD(total)}</span>
                         </div>
                       ))}
                     </div>
@@ -1708,7 +1716,7 @@ export default function ReportViewer({ employees, balances, branches, categories
 
                 {/* Official Multi-Box Signatures & Corporate Seal */}
                 {printOptions.showSignatures && (
-                  <div className="mt-8 pt-4 border-t-2 border-dashed border-gray-300">
+                  <div className="pt-2 break-inside-avoid">
                     <PrintSignatures
                       profile={companyProfile}
                       showStamp={printOptions.showStamp}
@@ -1721,13 +1729,13 @@ export default function ReportViewer({ employees, balances, branches, categories
                 )}
               </div>
               
-              <div className="flex justify-between items-end pt-8 border-t border-gray-100">
-                <div className="space-y-1">
-                  <p className="text-[8px] font-black text-gray-400 uppercase tracking-[0.4em]">{companyProfile.companyNameEn} | SECURE REPORTING ENGINE</p>
-                  <p className="text-[6px] font-bold text-gray-400 italic">هذا المستند تم استخراجه وتدقيقه إلكترونياً ويخضع لمعايير الرقابة والمطابقة المحاسبية الرسمية.</p>
+              <div className="flex justify-between items-end pt-3 border-t border-slate-200">
+                <div className="space-y-0.5">
+                  <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">{companyProfile.companyNameEn} | SECURE REPORTING ENGINE</p>
+                  <p className="text-[6px] font-bold text-slate-400 italic">هذا المستند تم استخراجه وتدقيقه إلكترونياً ويخضع لمعايير الرقابة والمطابقة المحاسبية الرسمية.</p>
                 </div>
                 <div className="text-left">
-                  <p className="text-[8px] font-black text-gray-900">صفحة 1 من 1</p>
+                  <p className="text-[8px] font-black text-slate-700">صفحة 1 من 1</p>
                 </div>
               </div>
             </div>

@@ -84,21 +84,103 @@ body {
   header, 
   nav,
   .no-print, 
-  button.no-print, 
-  .fixed:not(.printable-modal):not(.printable-voucher):not(.printable-dialog), 
-  .backdrop-blur-sm,
-  .backdrop-blur-xs,
-  .backdrop-blur-md,
+  button.no-print,
   input[type="text"]:not(.printable-input),
   input[type="search"],
-  select:not(.printable-select),
-  [role="dialog"]:not(.printable-modal):not(.printable-voucher) {
+  select:not(.printable-select) {
     display: none !important;
   }
 
-  /* If a modal voucher or report is actively printed, hide background siblings */
-  body:has(#printable-voucher) main > *:not(.printable-modal-wrapper),
-  body:has(#printable-order-invoice) main > *:not(.printable-modal-wrapper) {
+  /* When printing a voucher modal, isolate it completely and hide everything else */
+  body.voucher-modal-active #printable-report,
+  body.voucher-modal-active #printable-settlement-report,
+  body.voucher-modal-active .report-container,
+  body.voucher-modal-active .settlement-container,
+  body.voucher-modal-active main > *:not(.voucher-modal-wrapper):not(:has(.voucher-modal-wrapper)),
+  body.voucher-modal-active #root > div > main > *:not(:has(#printable-voucher)) {
+    display: none !important;
+  }
+
+  body.voucher-modal-active .voucher-modal-wrapper,
+  body.voucher-modal-active .printable-modal-wrapper {
+    display: block !important;
+    position: static !important;
+    background: white !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    inset: auto !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  body.voucher-modal-active .voucher-modal-card,
+  body.voucher-modal-active .printable-modal-card {
+    display: block !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  body.voucher-modal-active #printable-voucher {
+    display: block !important;
+    width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* When printing an order invoice modal, isolate it completely */
+  body.order-invoice-active #printable-report,
+  body.order-invoice-active #printable-settlement-report,
+  body.order-invoice-active main > *:not(.order-modal-wrapper):not(:has(.order-modal-wrapper)),
+  body.order-invoice-active #root > div > main > *:not(:has(#printable-order-invoice)) {
+    display: none !important;
+  }
+
+  body.order-invoice-active .order-modal-wrapper {
+    display: block !important;
+    position: static !important;
+    background: white !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    inset: auto !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  body.order-invoice-active .order-modal-card {
+    display: block !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  body.order-invoice-active #printable-order-invoice {
+    display: block !important;
+    width: 100% !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* General modal isolation fallback */
+  body:has(#printable-voucher) #printable-report,
+  body:has(#printable-voucher) #printable-settlement-report,
+  body:has(#printable-order-invoice) #printable-report,
+  body:has(#printable-order-invoice) #printable-settlement-report {
     display: none !important;
   }
 

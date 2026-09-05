@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Printer, 
@@ -45,6 +45,16 @@ export default function OrderInvoicePrintModal({
   const [companyProfile, setCompanyProfile] = useState<CompanyPrintProfile>(getCompanyProfile());
   const [printOptions, setPrintOptions] = useState<PrintDisplayOptions>(getPrintDisplayOptions());
 
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('order-invoice-active');
+      return () => {
+        document.body.classList.remove('order-invoice-active');
+        document.body.classList.remove('thermal-mode');
+      };
+    }
+  }, [isOpen]);
+
   if (!isOpen || !order) return null;
 
   const handlePrint = () => {
@@ -53,12 +63,16 @@ export default function OrderInvoicePrintModal({
     } else {
       document.body.classList.remove('thermal-mode');
     }
-
-    window.print();
+    document.body.classList.add('order-invoice-active');
 
     setTimeout(() => {
-      document.body.classList.remove('thermal-mode');
-    }, 1000);
+      window.print();
+      setTimeout(() => {
+        if (printOptions.paperSize === 'thermal-80mm') {
+          document.body.classList.remove('thermal-mode');
+        }
+      }, 1000);
+    }, 150);
   };
 
   const handleExportPDF = async () => {
@@ -91,12 +105,12 @@ export default function OrderInvoicePrintModal({
   return (
     <>
       <AnimatePresence>
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:static">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 overflow-y-auto print:p-0 print:bg-white print:static order-modal-wrapper printable-modal-wrapper">
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 15 }}
-            className={`bg-white w-full rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-6 print:border-none print:shadow-none print:my-0 ${
+            className={`bg-white w-full rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-6 print:border-none print:shadow-none print:my-0 order-modal-card ${
               isThermal ? 'max-w-[420px]' : isA5 ? 'max-w-2xl' : 'max-w-4xl'
             }`}
           >

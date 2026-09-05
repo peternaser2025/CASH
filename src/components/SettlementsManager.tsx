@@ -957,6 +957,35 @@ export default function SettlementsManager({
       <div id="printable-settlement-report" className="bg-white rounded-3xl border border-slate-200 shadow-md p-8 sm:p-12 print:border-none print:shadow-none print:p-2 space-y-8 relative">
         <PrintWatermark type={printOptions.watermark} />
         
+        <style dangerouslySetInnerHTML={{ __html: `
+          @media print {
+            body.voucher-modal-active #printable-settlement-report,
+            body.order-invoice-active #printable-settlement-report {
+              display: none !important;
+            }
+            @page {
+              margin: ${printOptions.margins === 'narrow' ? '8mm' : printOptions.margins === 'wide' ? '20mm' : '12mm'};
+              size: ${printOptions.paperSize === 'A4-landscape' ? 'A4 landscape' : printOptions.paperSize === 'A5' ? 'A5' : 'A4 portrait'};
+            }
+            #printable-settlement-report {
+              font-size: ${printOptions.fontSize === 'compact' ? '11px' : printOptions.fontSize === 'large' ? '14px' : '12.5px'};
+              width: 100% !important;
+              max-width: 100% !important;
+              margin: 0 auto !important;
+              padding: 0 !important;
+              background: white !important;
+            }
+            table {
+              border-collapse: collapse !important;
+              width: 100% !important;
+            }
+            tr {
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
+          }
+        ` }} />
+        
         {/* Official Letterhead Header */}
         <PrintHeader
           documentTitleAr="محضر جرد وتصفية وتسوية عهدة نقدية"
