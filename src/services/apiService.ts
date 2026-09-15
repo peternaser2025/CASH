@@ -266,6 +266,20 @@ export const apiService = {
     }
   },
 
+  // 9.1 Upload Excel Directly to Supabase in Exact Original Order
+  async uploadExcelToSupabase(rows: any[]): Promise<{ success: boolean; message?: string; totalInserted?: number; error?: string }> {
+    try {
+      const res = await fetch('/api/supabase/upload-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows, actor: 'المشرف المالي' })
+      });
+      return await res.json();
+    } catch (e: any) {
+      return { success: false, error: e.message || 'فشل الاتصال بالخادم لرفع الإكسيل' };
+    }
+  },
+
   // 10. Gemini AI Financial Audit
   async requestAiAudit(params: {
     branch?: string;

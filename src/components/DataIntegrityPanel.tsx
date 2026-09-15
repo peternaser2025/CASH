@@ -16,14 +16,24 @@ import {
   Trash2, 
   Play, 
   Database,
-  Search
+  Search,
+  FileSpreadsheet,
+  UploadCloud,
+  Check
 } from 'lucide-react';
+import * as xlsx from 'xlsx';
 import { apiService } from '../services/apiService';
 import { formatKWDFromFils, toFils, toKWD } from '../utils/money';
 import { SafeStorage } from '../utils/dataSafety';
 
 export default function DataIntegrityPanel() {
-  const [activeTab, setActiveTab] = useState<'reconciliation' | 'audit' | 'diagnostics' | 'backups'>('reconciliation');
+  const [activeTab, setActiveTab] = useState<'reconciliation' | 'audit' | 'diagnostics' | 'backups' | 'excel-import'>('reconciliation');
+
+  // 0. Excel Upload State
+  const [excelUploading, setExcelUploading] = useState(false);
+  const [excelParsedRows, setExcelParsedRows] = useState<any[]>([]);
+  const [excelFileName, setExcelFileName] = useState<string>('');
+  const [excelUploadResult, setExcelUploadResult] = useState<any>(null);
 
   // 1. Reconciliation State
   const [reconciliationReport, setReconciliationReport] = useState<any>(null);
@@ -179,6 +189,7 @@ export default function DataIntegrityPanel() {
       <div className="flex flex-wrap items-center gap-2 p-1.5 bg-gray-100 rounded-2xl border border-gray-200">
         {[
           { id: 'reconciliation', label: 'المطابقة المحاسبية (Reconciliation)', icon: Scale },
+          { id: 'excel-import', label: 'رفع شيت الإكسيل بنفس الترتيب (Supabase)', icon: FileSpreadsheet },
           { id: 'audit', label: 'سجل تتبّع التعديلات (Audit Trail)', icon: History },
           { id: 'diagnostics', label: 'فحوصات الدقة واختبارات النظام', icon: FileCode2 },
           { id: 'backups', label: 'النسخ الاحتياطي والأمان', icon: Database }
@@ -529,6 +540,197 @@ export default function DataIntegrityPanel() {
               </label>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TAB 5: In-Order Excel Uploader to Supabase */}
+      {activeTab === 'excel-import' && (
+        <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-lg uppercase">Supabase Direct</span>
+                <span className="px-2.5 py-1 bg-blue-100 text-blue-800 text-[10px] font-black rounded-lg">100% In-Order Guarantee</span>
+              </div>
+              <h3 className="font-black text-gray-900 text-xl mt-2">رفع شيت الإكسيل في قاعدة البيانات بنفس الترتيب 1:1</h3>
+              <p className="text-xs text-gray-500 font-medium mt-1">
+                يقوم هذا المعالج بقراءة شيت الإكسيل وتثبيت رقم السطر الأصلي (<code className="font-mono bg-gray-100 px-1 py-0.5 rounded">row_index</code>) وتخزينه في جدول <code className="font-mono bg-gray-100 px-1 py-0.5 rounded">excel_raw_ledger</code> دون أي إعادة خلط أو تغيير في الترتيب.
+              </p>
+            </div>
+
+            {excelParsedRows.length > 0 && (
+              <button
+                onClick={async () => {
+                  setExcelUploading(true);
+                  setExcelUploadResult(null);
+                  try {
+                    const res = await apiService.uploadExcelToSupabase(excelParsedRows);
+                    setExcelUploadResult(res);
+                    if (res.success) {
+                      showStatus('success', res.message || 'تم الرفع بالترتيب بنجاح!');
+                    } else {
+                      showStatus('error', res.error || 'فشل الرفع إلى Supabase');
+                    }
+                  } catch (e: any) {
+                    showStatus('error', e.message || 'حدث خطأ غير متوقع');
+                  } finally {
+                    setExcelUploading(false);
+                  }
+                }}
+                disabled={excelUploading}
+                className="flex items-center gap-2 px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs shadow-lg shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {excelUploading ? (
+                  <RefreshCw size={16} className="animate-spin" />
+                ) : (
+                  <UploadCloud size={16} />
+                )}
+                <span>{excelUploading ? 'جارٍ الرفع بالترتيب الدقيق...' : `تأكيد ورفع (${excelParsedRows.length}) صف للقاعدة الآن`}</span>
+              </button>
+            )}
+          </div>
+
+          {/* Upload Dropzone */}
+          <div className="p-8 border-2 border-dashed border-emerald-200 hover:border-emerald-400 bg-emerald-50/30 rounded-3xl text-center space-y-4 transition-all">
+            <div className="w-16 h-16 mx-auto bg-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center shadow-inner">
+              <FileSpreadsheet size={32} />
+            </div>
+            <div>
+              <h4 className="font-black text-gray-900 text-base">اختر ملف الإكسيل (.xlsx أو .xls أو .csv)</h4>
+              <p className="text-xs text-gray-500 mt-1 max-w-lg mx-auto">
+                سيتم مسح الأسطر من السطر الأول حتى الأخير تلقائياً، مع الاحتفاظ بـ ID المعاملة، التاريخ، الموظف، الفرع، القسم، المبالغ، والترتيب التسلسلي.
+              </p>
+            </div>
+
+            <label className="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-black text-xs cursor-pointer shadow-md transition-all">
+              <Upload size={16} />
+              <span>{excelFileName ? `تغيير الملف (${excelFileName})` : 'اختيار ملف الإكسيل من جهازك'}</span>
+              <input
+                type="file"
+                accept=".xlsx, .xls, .csv"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setExcelFileName(file.name);
+                  setExcelUploadResult(null);
+
+                  try {
+                    const buffer = await file.arrayBuffer();
+                    const wb = xlsx.read(buffer, { type: 'array' });
+                    const sheetName = wb.SheetNames[0];
+                    const ws = wb.Sheets[sheetName];
+
+                    // Convert to JSON with row index preserved
+                    const rawData: any[] = xlsx.utils.sheet_to_json(ws, { defval: '' });
+
+                    const mapped = rawData.map((row, idx) => ({
+                      rowIndex: idx + 2, // Excel row numbering starts at row 2
+                      id: row.ID || row.id || row['رقم المعاملة'] || `TX-${idx + 1}`,
+                      date: row.Date || row.date || row['التاريخ'] || '',
+                      employee: row.Employee || row.employee || row['الموظف'] || row['اسم الموظف'] || '',
+                      branch: row.Branch || row.branch || row['الفرع'] || '',
+                      department: row.Department || row.department || row['القسم'] || '',
+                      type: row.Type || row.type || row['النوع'] || 'Expense',
+                      category: row.Category || row.category || row['البند'] || row['التصنيف'] || '',
+                      amount: row.Amount || row.amount || row['المبلغ'] || row['المبلغ (د.ك)'] || 0,
+                      description: row.Description || row.description || row['البيان'] || row['الملاحظات'] || '',
+                      relatedId: row.Related_ID || row.related_id || row['سند مرتبط'] || '',
+                      timestamp: row.Timestamp || row.timestamp || row['الوقت'] || '',
+                      computerNumber: row['رقم الكمبيوتر'] || row.computerNumber || ''
+                    }));
+
+                    setExcelParsedRows(mapped);
+                    showStatus('success', `تمت قراءة ${mapped.length} صف من الشيت بالترتيب الأصلي بنجاح`);
+                  } catch (err: any) {
+                    console.error('Failed to parse excel:', err);
+                    showStatus('error', 'فشل قراءة ملف الإكسيل: ' + err.message);
+                  }
+                }}
+              />
+            </label>
+          </div>
+
+          {/* Success Banner */}
+          {excelUploadResult && (
+            <div className={`p-5 rounded-2xl border font-bold text-xs flex items-center justify-between ${
+              excelUploadResult.success 
+                ? 'bg-emerald-50 text-emerald-900 border-emerald-300' 
+                : 'bg-rose-50 text-rose-900 border-rose-300'
+            }`}>
+              <div className="flex items-center gap-3">
+                {excelUploadResult.success ? <CheckCircle2 size={20} className="text-emerald-600" /> : <AlertTriangle size={20} className="text-rose-600" />}
+                <div>
+                  <h4 className="font-black text-sm">{excelUploadResult.message || (excelUploadResult.success ? 'تم الرفع بنجاح' : 'فشل الرفع')}</h4>
+                  {excelUploadResult.totalInserted && (
+                    <p className="text-[11px] opacity-80 mt-0.5">عدد السجلات المدرجة بجدول excel_raw_ledger: {excelUploadResult.totalInserted}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Live Preview of Rows in Exact Order */}
+          {excelParsedRows.length > 0 && (
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <h4 className="font-black text-gray-800 text-sm flex items-center gap-2">
+                  <span>معاينة البيانات بالترتيب التسلسلي الفعلي</span>
+                  <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-md text-xs font-mono">{excelParsedRows.length} صف</span>
+                </h4>
+                <span className="text-[11px] text-gray-500">الترتيب من السطر رقم 2 تصاعدياً</span>
+              </div>
+
+              <div className="border border-gray-200 rounded-2xl overflow-hidden max-h-96 overflow-y-auto">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-gray-100 text-gray-700 font-black sticky top-0 border-b border-gray-200">
+                    <tr>
+                      <th className="p-3 w-16 text-center font-mono"># السطر</th>
+                      <th className="p-3">التاريخ</th>
+                      <th className="p-3">الموظف</th>
+                      <th className="p-3">الفرع</th>
+                      <th className="p-3">النوع</th>
+                      <th className="p-3">البند</th>
+                      <th className="p-3 text-left">المبلغ (د.ك)</th>
+                      <th className="p-3">البيان</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 font-medium">
+                    {excelParsedRows.slice(0, 50).map((row) => (
+                      <tr key={row.rowIndex} className="hover:bg-emerald-50/40 transition-colors">
+                        <td className="p-3 text-center font-mono font-bold text-gray-500 bg-gray-50/50">{row.rowIndex}</td>
+                        <td className="p-3 text-gray-700 whitespace-nowrap">{row.date}</td>
+                        <td className="p-3 font-bold text-gray-900">{row.employee}</td>
+                        <td className="p-3 text-gray-700">
+                          <span>{row.branch}</span>
+                          {row.department && (
+                            <span className="mr-1.5 px-1.5 py-0.5 bg-amber-100 text-amber-900 rounded text-[10px] font-black">{row.department}</span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                            row.type === 'Income' || row.type === 'إيراد'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}>
+                            {row.type}
+                          </span>
+                        </td>
+                        <td className="p-3 text-gray-600">{row.category}</td>
+                        <td className="p-3 text-left font-mono font-black text-gray-900" dir="ltr">
+                          {Number(row.amount).toFixed(3)}
+                        </td>
+                        <td className="p-3 text-gray-500 truncate max-w-xs">{row.description}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {excelParsedRows.length > 50 && (
+                <p className="text-center text-[11px] text-gray-400 font-medium">يتم عرض أول 50 صف للمعاينة السريعة، وسيتم رفع كافة الـ {excelParsedRows.length} صف بالكامل للقاعدة.</p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

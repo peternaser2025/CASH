@@ -8,6 +8,7 @@ import { transactionSchema, employeeSchema, orderSchema, settingsSchema } from '
 import { auditService } from './server/audit';
 import { performReconciliation } from './server/reconciliation';
 import { toFils, toKWD, normalizeEntityId } from './src/utils/money';
+import { getSupabaseServerClient } from './server/supabase';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -708,6 +709,81 @@ app.post('/api/sync', (req, res) => {
       orders: serverStore.orders.length
     }
   });
+});
+
+// 9.1. Direct In-Order Excel Uploader to Supabase
+app.post('/api/supabase/upload-excel', async (req, res) => {
+  try {
+    const { rows } = req.body;
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return sendError(res, 'لم يتم إرسال أي صفوف للرفع', 400);
+    }
+
+    const supabase = getSupabaseServerClient();
+    if (!supabase) {
+      return sendError(res, 'إعدادات الاتصال بـ Supabase غير مهيأة على الخادم', 500);
+    }
+
+    // Prepare rows in exact order with row_index matching Excel
+    const mappedRows = rows.map((r: any, idx: number) => {
+      const rowIndex = Number(r.rowIndex || r.row_index || (idx + 2));
+      const amountVal = parseFloat(String(r.amount || r.raw_amount || 0).replace(/[^0-9.-]/g, '')) || 0;
+
+      return {
+        row_index: rowIndex,
+        raw_id: r.id ? String(r.id).trim() : (r.raw_id ? String(r.raw_id).trim() : null),
+        raw_date: r.date ? String(r.date).trim() : (r.raw_date ? String(r.raw_date).trim() : null),
+        raw_employee: r.employee ? String(r.employee).trim() : (r.raw_employee ? String(r.raw_employee).trim() : null),
+        raw_branch: r.branch ? String(r.branch).trim() : (r.raw_branch ? String(r.raw_branch).trim() : null),
+        raw_department: r.department ? String(r.department).trim() : (r.raw_department ? String(r.raw_department).trim() : null),
+        raw_type: r.type ? String(r.type).trim() : (r.raw_type ? String(r.raw_type).trim() : null),
+        raw_category: r.category ? String(r.category).trim() : (r.raw_category ? String(r.raw_category).trim() : null),
+        raw_amount: Math.round(amountVal * 1000) / 1000,
+        raw_description: r.description ? String(r.description).trim() : (r.raw_description ? String(r.raw_description).trim() : null),
+        raw_related_id: r.relatedId ? String(r.relatedId).trim() : (r.raw_related_id ? String(r.raw_related_id).trim() : null),
+        raw_timestamp: r.timestamp ? String(r.timestamp).trim() : (r.raw_timestamp ? String(r.raw_timestamp).trim() : null),
+        raw_computer_number: r.computerNumber ? String(r.computerNumber).trim() : (r.raw_computer_number ? String(r.raw_computer_number).trim() : null)
+      };
+    });
+
+    // Sort strictly by row_index ascending to ensure in-order execution
+    mappedRows.sort((a, b) => a.row_index - b.row_index);
+
+    // Upsert to excel_raw_ledger in chunks of 200
+    const CHUNK_SIZE = 200;
+    let totalInserted = 0;
+
+    for (let i = 0; i < mappedRows.length; i += CHUNK_SIZE) {
+      const chunk = mappedRows.slice(i, i + CHUNK_SIZE);
+      const { error } = await supabase
+        .from('excel_raw_ledger')
+        .upsert(chunk, { onConflict: 'row_index' });
+
+      if (error) {
+        console.error('Supabase Excel upload error:', error);
+        return sendError(res, `خطأ في إدراج الدفعة (${i + 1} - ${i + chunk.length}): ${error.message}`, 500);
+      }
+      totalInserted += chunk.length;
+    }
+
+    auditService.log({
+      action: 'IMPORT',
+      entityType: 'SUPABASE_EXCEL',
+      entityId: `EXCEL_${Date.now()}`,
+      actor: (req.body && req.body.actor) || 'المستخدم',
+      description: `رفع وتخزين ${totalInserted} صف إكسيل في جدول excel_raw_ledger بالترتيب الدقيق للأصل`,
+      newValue: { count: totalInserted, minRow: mappedRows[0]?.row_index, maxRow: mappedRows[mappedRows.length - 1]?.row_index }
+    });
+
+    res.json({
+      success: true,
+      message: `تم رفع ${totalInserted} صف بنجاح إلى جدول excel_raw_ledger في Supabase بنفس ترتيب الإكسيل تماماً`,
+      totalInserted
+    });
+  } catch (err: any) {
+    console.error('Failed to upload excel to supabase:', err);
+    sendError(res, err.message || 'حدث خطأ أثناء رفع بيانات الإكسيل', 500);
+  }
 });
 
 // 10. Gemini AI Financial Auditor (Server-Side)

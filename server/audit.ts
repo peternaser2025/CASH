@@ -4,8 +4,8 @@ import path from 'path';
 export interface AuditRecord {
   id: string;
   timestamp: string;
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RECONCILE' | 'SETTLE';
-  entityType: 'TRANSACTION' | 'BALANCE' | 'ORDER' | 'SETTLEMENT' | 'SETTINGS';
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RECONCILE' | 'SETTLE' | 'IMPORT';
+  entityType: 'TRANSACTION' | 'BALANCE' | 'ORDER' | 'SETTLEMENT' | 'SETTINGS' | 'SUPABASE_EXCEL';
   entityId: string;
   actor: string;
   description: string;
