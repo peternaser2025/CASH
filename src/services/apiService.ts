@@ -46,6 +46,7 @@ export const apiService = {
       if (filters?.branch) params.append('branch', filters.branch);
       if (filters?.employee) params.append('employee', filters.employee);
       if (filters?.category) params.append('category', filters.category);
+      if (filters?.department) params.append('department', filters.department);
       if (filters?.startDate) params.append('startDate', filters.startDate);
       if (filters?.endDate) params.append('endDate', filters.endDate);
 

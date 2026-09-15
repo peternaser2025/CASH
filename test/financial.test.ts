@@ -64,6 +64,34 @@ const invalidZeroTx = transactionSchema.safeParse({
 });
 assert(!invalidZeroTx.success, 'Zero transaction amount is strictly rejected');
 
+// City department validation rule tests
+const validCityTxWithDept = transactionSchema.safeParse({
+  amount: 25.000,
+  employee: 'بيتر ناصر',
+  type: 'Expense',
+  branch: 'سيتي',
+  department: 'بهارات'
+});
+assert(validCityTxWithDept.success, 'City branch transaction with department is valid');
+
+const invalidOtherBranchWithDept = transactionSchema.safeParse({
+  amount: 25.000,
+  employee: 'بيتر ناصر',
+  type: 'Expense',
+  branch: 'الرئيسي',
+  department: 'بهارات'
+});
+assert(!invalidOtherBranchWithDept.success, 'Department assigned to non-City branch is strictly rejected');
+
+const validOtherBranchWithoutDept = transactionSchema.safeParse({
+  amount: 25.000,
+  employee: 'بيتر ناصر',
+  type: 'Expense',
+  branch: 'الرئيسي',
+  department: null
+});
+assert(validOtherBranchWithoutDept.success, 'Non-City branch without department is valid');
+
 const invalidOrder = orderSchema.safeParse({
   title: 'X', // too short
   amount: -100

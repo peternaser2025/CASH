@@ -229,6 +229,7 @@ export interface NormalizedReportRow {
   date: string;
   employee: string;
   branch: string;
+  department?: string | null;
   type: string;
   category: string;
   income: number;
@@ -355,6 +356,7 @@ export const parseReportRow = (row: any): NormalizedReportRow => {
       date: String(row.date || '').split('T')[0],
       employee: empStr || 'عام',
       branch: branchStr || 'المركز الرئيسي',
+      department: row.department ? String(row.department).trim() : null,
       type: typeStr || (inc > 0 ? 'إيراد' : 'مصروف'),
       category: catStr,
       income: inc,

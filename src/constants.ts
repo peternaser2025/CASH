@@ -27,3 +27,10 @@ export const CATEGORIES = [
   'سداد مستحقات وآجل',
   'أخرى'
 ];
+
+export const CITY_DEPARTMENTS = [
+  'بهارات',
+  'غذائي',
+  'استهلاكي'
+] as const;
+

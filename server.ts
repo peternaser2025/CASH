@@ -197,7 +197,7 @@ app.post('/api/settings', (req, res) => {
 
 // 3. Transactions CRUD & Reporting
 app.get('/api/transactions', (req, res) => {
-  const { branch, employee, category, startDate, endDate } = req.query;
+  const { branch, employee, category, department, startDate, endDate } = req.query;
   let list = [...serverStore.transactions];
 
   const isAll = (v: any) => !v || v === 'all' || v === 'All' || v === 'الكل' || v === 'كافة الفروع' || v === 'كل الفروع';
@@ -210,6 +210,13 @@ app.get('/api/transactions', (req, res) => {
   }
   if (!isAll(category)) {
     list = list.filter(t => t.category === category);
+  }
+  if (department && department !== 'All' && department !== 'الكل' && department !== '') {
+    if (department === 'unassigned' || department === 'غير محدد / بيانات سابقة' || department === 'none') {
+      list = list.filter(t => !t.department || String(t.department).trim() === '');
+    } else {
+      list = list.filter(t => t.department === department);
+    }
   }
   if (startDate) {
     list = list.filter(t => t.date >= String(startDate));
@@ -236,12 +243,17 @@ app.post('/api/transactions', (req, res) => {
   const amountFils = toFils(data.amount);
   const amountKwd = toKWD(amountFils);
 
+  // Strict enforcement: department ONLY allowed for branch 'سيتي'
+  const isCityBranch = (data.branch || '').trim() === 'سيتي';
+  const assignedDepartment = isCityBranch && data.department ? data.department.trim() : null;
+
   const tx = {
     id: newId,
     rowId: newId,
     date: data.date || new Date().toISOString().split('T')[0],
     employee: data.employee.trim(),
     branch: data.branch || 'الرئيسي',
+    department: assignedDepartment,
     category: data.category || 'نثريات',
     description: data.description || '',
     amount: amountKwd,
@@ -295,9 +307,18 @@ app.put('/api/transactions/:id', (req, res) => {
     amountKwd = toKWD(amountFils);
   }
 
+  const effectiveBranch = (updateData.branch !== undefined ? updateData.branch : previousValue.branch) || '';
+  const isCityBranch = effectiveBranch.trim() === 'سيتي';
+  let effectiveDepartment = updateData.department !== undefined ? updateData.department : previousValue.department;
+  if (!isCityBranch) {
+    effectiveDepartment = null;
+  }
+
   serverStore.transactions[idx] = {
     ...previousValue,
     ...updateData,
+    branch: effectiveBranch,
+    department: effectiveDepartment,
     amount: amountKwd,
     amountFils,
     updatedAt: new Date().toISOString()

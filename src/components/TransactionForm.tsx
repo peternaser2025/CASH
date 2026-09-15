@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Save, ArrowRightLeft, TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Calendar, Building2, User, Tag, Info, Coins, CalendarClock } from 'lucide-react';
+import { Save, ArrowRightLeft, TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Calendar, Building2, User, Tag, Info, Coins, CalendarClock, Layers } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { TransactionType } from '../types';
+import { CITY_DEPARTMENTS } from '../constants';
 
 interface TransactionFormProps {
   onComplete: () => void;
@@ -22,6 +23,7 @@ export default function TransactionForm({ onComplete, employees, branches, categ
     date: new Date().toISOString().split('T')[0],
     employee: initialEmployee || '',
     branch: '',
+    department: '',
     category: '',
     amount: '',
     description: initialEmployee ? `تغذية وتزويد عهدة الموظف ${initialEmployee}` : '',
@@ -74,8 +76,12 @@ export default function TransactionForm({ onComplete, employees, branches, categ
       }
     }
 
+    const isCity = formData.branch.trim() === 'سيتي';
+    const finalDepartment = isCity && formData.department ? formData.department.trim() : undefined;
+
     const data = {
       ...formData,
+      department: finalDepartment,
       employee: finalEmployee,
       category: finalCategory,
       description: finalDescription,
@@ -190,13 +196,46 @@ export default function TransactionForm({ onComplete, employees, branches, categ
               </label>
               <select
                 value={formData.branch}
-                onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
+                onChange={(e) => {
+                  const newBranch = e.target.value;
+                  setFormData({
+                    ...formData,
+                    branch: newBranch,
+                    department: newBranch.trim() === 'سيتي' ? formData.department : ''
+                  });
+                }}
                 className="w-full px-5 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none font-bold text-gray-900"
               >
                 <option value="">غير محدد / عام</option>
                 {branches.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             </div>
+
+            {formData.branch.trim() === 'سيتي' && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="space-y-2"
+              >
+                <label className="flex items-center gap-2 text-xs font-black text-amber-700 uppercase tracking-widest">
+                  <Layers size={14} className="text-amber-600" />
+                  القسم التشغيلي (فرع "سيتي" فقط)
+                </label>
+                <select
+                  value={formData.department}
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  className="w-full px-5 py-3 bg-amber-50/60 border border-amber-300/80 rounded-2xl focus:ring-4 focus:ring-amber-500/15 focus:border-amber-500 transition-all outline-none font-bold text-amber-950"
+                >
+                  <option value="">-- اختياري: حدد القسم الداخلي --</option>
+                  {CITY_DEPARTMENTS.map(dept => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+                <p className="text-[11px] font-semibold text-amber-700/80">
+                  خاص بفرع سيتي فقط: بهارات / غذائي / استهلاكي (الحركات السابقة تبقى بدون قسم)
+                </p>
+              </motion.div>
+            )}
 
             {type === 'Transfer' ? (
               <>

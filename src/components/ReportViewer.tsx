@@ -29,10 +29,12 @@ import {
   Columns,
   Check,
   SlidersHorizontal,
-  Settings2
+  Settings2,
+  Layers
 } from 'lucide-react';
 import { exportReportToExcel } from '../utils/excelExport';
 import { exportElementToPDF } from '../utils/pdfExport';
+import { CITY_DEPARTMENTS } from '../constants';
 import { 
   getCompanyProfile, 
   getPrintDisplayOptions, 
@@ -98,6 +100,7 @@ export default function ReportViewer({ employees, balances, branches, categories
   const [filters, setFilters] = useState<ReportFilter>({
     employee: initialEmployee || '',
     branch: '',
+    department: '',
     type: 'All',
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0]
@@ -335,6 +338,20 @@ export default function ReportViewer({ employees, balances, branches, categories
     if (filters.branch && filters.branch !== 'كافة الفروع' && filters.branch !== 'الكل') {
       if (!matchBranch(pRow.branch, filters.branch)) {
         return false;
+      }
+    }
+
+    // Department Filter (ONLY applicable when branch is 'سيتي')
+    const isCity = matchBranch(filters.branch, 'سيتي') || filters.branch === 'سيتي';
+    if (isCity && filters.department && filters.department !== 'All' && filters.department !== 'الكل' && filters.department !== '') {
+      if (filters.department === 'unassigned' || filters.department === 'غير محدد / بيانات سابقة') {
+        if (pRow.department && pRow.department.trim() !== '') {
+          return false;
+        }
+      } else {
+        if (!pRow.department || pRow.department.trim() !== filters.department.trim()) {
+          return false;
+        }
       }
     }
 
@@ -780,13 +797,42 @@ export default function ReportViewer({ employees, balances, branches, categories
               </label>
               <select
                 value={filters.branch}
-                onChange={(e) => setFilters({ ...filters, branch: e.target.value })}
+                onChange={(e) => {
+                  const newBranch = e.target.value;
+                  const isCity = newBranch === 'سيتي' || matchBranch(newBranch, 'سيتي');
+                  setFilters({
+                    ...filters,
+                    branch: newBranch,
+                    department: isCity ? filters.department : ''
+                  });
+                }}
                 className="w-full bg-slate-50 hover:bg-slate-100 font-bold text-xs text-slate-900 p-2.5 rounded-xl border border-slate-200 outline-none transition-colors cursor-pointer"
               >
                 <option value="">كافة الفروع</option>
                 {branches.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             </div>
+
+            {/* Department Filter - Only appears when branch is 'سيتي' */}
+            {(filters.branch === 'سيتي' || matchBranch(filters.branch, 'سيتي')) && (
+              <div className="p-4 space-y-2 bg-amber-50/70 border border-amber-200 rounded-2xl animate-fadeIn">
+                <label className="flex items-center gap-1.5 text-xs font-black text-amber-900">
+                  <Layers size={14} className="text-amber-600" />
+                  تصفية حسب القسم (فرع سيتي)
+                </label>
+                <select
+                  value={filters.department || ''}
+                  onChange={(e) => setFilters({ ...filters, department: e.target.value })}
+                  className="w-full bg-white hover:bg-amber-50/50 font-bold text-xs text-amber-950 p-2.5 rounded-xl border border-amber-300 outline-none transition-colors cursor-pointer"
+                >
+                  <option value="">كافة الأقسام</option>
+                  {CITY_DEPARTMENTS.map(dept => (
+                    <option key={dept} value={dept}>قسم {dept}</option>
+                  ))}
+                  <option value="unassigned">غير محدد / بيانات سابقة</option>
+                </select>
+              </div>
+            )}
 
             <div className="p-4 space-y-2">
               <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
@@ -1263,7 +1309,12 @@ export default function ReportViewer({ employees, balances, branches, categories
                         )}
                         {visibleColumns.branch && (
                           <td className="px-4 py-3 text-xs font-bold text-slate-700">
-                            {branch}
+                            <div>{branch}</div>
+                            {row.department && (
+                              <span className="inline-block mt-1 px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded text-[10px] font-black tracking-tight">
+                                {row.department}
+                              </span>
+                            )}
                           </td>
                         )}
                         {visibleColumns.opType && (
@@ -1877,13 +1928,36 @@ export default function ReportViewer({ employees, balances, branches, categories
                     <label className="text-[10px] font-black text-gray-400 uppercase">الفرع</label>
                     <select
                       value={editingTransaction.branch}
-                      onChange={(e) => setEditingTransaction({ ...editingTransaction, branch: e.target.value })}
+                      onChange={(e) => {
+                        const b = e.target.value;
+                        setEditingTransaction({
+                          ...editingTransaction,
+                          branch: b,
+                          department: b === 'سيتي' ? editingTransaction.department : ''
+                        });
+                      }}
                       className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
                     >
                       <option value="">غير محدد / عام</option>
                       {branches.map(b => <option key={b} value={b}>{b}</option>)}
                     </select>
                   </div>
+
+                  {editingTransaction.branch === 'سيتي' && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-amber-700 uppercase">القسم الداخلي (فرع سيتي)</label>
+                      <select
+                        value={editingTransaction.department || ''}
+                        onChange={(e) => setEditingTransaction({ ...editingTransaction, department: e.target.value })}
+                        className="w-full px-4 py-3 bg-amber-50/50 border border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none font-bold"
+                      >
+                        <option value="">غير محدد / بيانات سابقة</option>
+                        {CITY_DEPARTMENTS.map(d => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase">شهر الاستحقاق (اختياري)</label>

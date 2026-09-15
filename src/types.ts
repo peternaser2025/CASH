@@ -1,22 +1,30 @@
 export type TransactionType = 'Income' | 'Expense' | 'Transfer';
 
+export type CityDepartment = 'بهارات' | 'غذائي' | 'استهلاكي';
+
 export interface Transaction {
-  id?: number;
+  id?: number | string;
+  rowId?: number | string;
   date: string;
   employee: string;
   branch: string;
+  department?: CityDepartment | string | null;
+  departmentId?: string | null;
   type: TransactionType;
   category: string;
   amount: number;
+  amountFils?: number;
   description: string;
   sender?: string;
   receiver?: string;
   targetMonth?: string;
+  createdAt?: string;
 }
 
 export interface ReportFilter {
   employee?: string;
   branch?: string;
+  department?: string;
   category?: string;
   type?: string;
   startDate?: string;

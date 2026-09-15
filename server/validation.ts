@@ -8,12 +8,24 @@ export const transactionSchema = z.object({
   }, { message: 'المبلغ يجب أن يكون رقماً موجباً أكبر من الصفر' }),
   type: z.enum(['Income', 'Expense', 'Transfer', 'Transfer-In', 'Transfer-Out']).default('Expense'),
   branch: z.string().optional().default('الرئيسي'),
+  department: z.string().nullable().optional(),
+  departmentId: z.string().nullable().optional(),
   category: z.string().optional().default('نثريات'),
   description: z.string().optional().default(''),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'التاريخ يجب أن يكون بصيغة YYYY-MM-DD').optional(),
   targetMonth: z.string().optional(),
   sender: z.string().optional(),
   receiver: z.string().optional()
+}).refine((data) => {
+  // If department is provided, branch MUST be 'سيتي'
+  if (data.department && data.department.trim() !== '') {
+    const b = (data.branch || '').trim();
+    return b === 'سيتي';
+  }
+  return true;
+}, {
+  message: 'لا يمكن تحديد قسم داخلي (بهارات / غذائي / استهلاكي) إلا لحركات فرع "سيتي" فقط',
+  path: ['department']
 });
 
 export const employeeSchema = z.object({
