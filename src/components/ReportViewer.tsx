@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   FileText, 
@@ -29,7 +29,8 @@ import {
   getAccountingOperationType,
   matchBranch,
   parseReportRow,
-  NormalizedReportRow
+  NormalizedReportRow,
+  normalizeExcelDate
 } from '../utils/format';
 
 import ReportTable, { ComputedReportRow } from './report/ReportTable';
@@ -104,6 +105,35 @@ export default function ReportViewer({ employees, balances, branches, categories
     paperSize: 'A4-landscape'
   }));
   const [isPrintSettingsModalOpen, setIsPrintSettingsModalOpen] = useState(false);
+
+  // Auto-generate report when initialEmployee is passed from parent (e.g., from Balance cards or Journal)
+  useEffect(() => {
+    if (initialEmployee) {
+      setFilters(prev => ({ ...prev, employee: initialEmployee }));
+      const cleanFilters = {
+        employee: initialEmployee,
+        branch: '',
+        department: '',
+        type: '',
+        startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
+        endDate: new Date().toISOString().split('T')[0]
+      };
+      setLoading(true);
+      setError(null);
+      gasService.getReport(cleanFilters)
+        .then(data => {
+          if (data && Array.isArray(data.rows)) {
+            setReport(data);
+          }
+        })
+        .catch(err => {
+          console.error('Failed to auto-load report for employee:', err);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
+  }, [initialEmployee]);
 
   const toggleColumn = (colId: ReportColumnId) => {
     setVisibleColumns(prev => {
@@ -301,8 +331,8 @@ export default function ReportViewer({ employees, balances, branches, categories
 
   // Chronological sort
   const sortedFilteredRows = [...filteredRows].sort((a, b) => {
-    const timeA = new Date(a.date).getTime() || 0;
-    const timeB = new Date(b.date).getTime() || 0;
+    const timeA = new Date(normalizeExcelDate(a.date)).getTime() || 0;
+    const timeB = new Date(normalizeExcelDate(b.date)).getTime() || 0;
     if (timeA !== timeB) return timeA - timeB;
     return String(a.id || '').localeCompare(String(b.id || ''));
   });
@@ -781,9 +811,9 @@ export default function ReportViewer({ employees, balances, branches, categories
               <ReportTable
                 computedRows={computedRows}
                 openingBalance={initialOpeningBalance}
-                finalBalance={report.finalBalance}
-                totalIncome={report.rows.reduce((acc, row) => acc + (parseFloat(row[5]) || 0), 0)}
-                totalExpense={report.rows.reduce((acc, row) => acc + (parseFloat(row[6]) || 0), 0)}
+                finalBalance={cashEndingBalance}
+                totalIncome={filteredIn}
+                totalExpense={filteredCashOut}
                 visibleColumns={visibleColumns}
                 onPrintVoucher={handlePrintVoucher}
                 onEditTransaction={handleEditTransaction}
@@ -799,7 +829,8 @@ export default function ReportViewer({ employees, balances, branches, categories
               {/* Formal Bank Style Print Footer */}
               <ReportPrintFooter
                 rows={report.rows}
-                finalBalance={report.finalBalance}
+                computedRows={computedRows}
+                finalBalance={cashEndingBalance}
                 companyProfile={companyProfile}
                 showSignatures={printOptions.showSignatures}
                 showStamp={printOptions.showStamp}
@@ -842,7 +873,10 @@ export default function ReportViewer({ employees, balances, branches, categories
       <PrintSettingsModal
         isOpen={isPrintSettingsModalOpen}
         onClose={() => setIsPrintSettingsModalOpen(false)}
-        onSaved={(p) => setCompanyProfile(p)}
+        onSaved={(p) => {
+          setCompanyProfile(p);
+          setPrintOptions(getPrintDisplayOptions());
+        }}
       />
     </div>
   );

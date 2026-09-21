@@ -877,6 +877,10 @@ export default function App() {
                   categories={categories} 
                   employees={employeeNames} 
                   onRefresh={() => fetchData(true)}
+                  onViewReport={(emp) => {
+                    setPrefilledEmployee(emp);
+                    setActiveTab('reports');
+                  }}
                 />
               )}
               {activeTab === 'reports' && (

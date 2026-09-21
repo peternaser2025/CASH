@@ -23,7 +23,7 @@ import { formatKWD, isTransferType } from '../../utils/format';
 import { ComputedReportRow } from './ReportTable';
 
 interface ReportAnalyticsProps {
-  rows: any[][];
+  rows?: any[][];
   computedRows: ComputedReportRow[];
 }
 
@@ -120,29 +120,24 @@ export default function ReportAnalytics({ rows, computedRows }: ReportAnalyticsP
           </div>
           <div className="space-y-3">
             {(Object.entries(
-              rows.reduce((acc: Record<string, { current: number, accruals: number }>, row) => {
-                const branch = String(row[2] || 'عام');
-                const type = String(row[3] || '');
-                if (isTransferType(type)) return acc;
+              computedRows.reduce((acc: Record<string, { current: number; accruals: number }>, row) => {
+                const branch = String(row.branch || 'عام');
+                if (isTransferType(row.type, row.category)) return acc;
                 
-                const expense = parseFloat(String(row[6])) || 0;
+                const expense = row.expense || 0;
                 if (expense === 0) return acc;
 
-                const dateStr = String(row[0] || '');
-                const targetMonth = row.length > 9 ? String(row[9] || '') : '';
-                
                 if (!acc[branch]) acc[branch] = { current: 0, accruals: 0 };
                 
-                const transactionMonth = dateStr.slice(0, 7);
-                if (targetMonth && targetMonth !== transactionMonth) {
+                if (row.isAccrued) {
                   acc[branch].accruals += expense;
                 } else {
                   acc[branch].current += expense;
                 }
                 
                 return acc;
-              }, {} as Record<string, { current: number, accruals: number }>)
-            ) as [string, { current: number, accruals: number }][]).map(([branch, data]) => (
+              }, {} as Record<string, { current: number; accruals: number }>)
+            ) as [string, { current: number; accruals: number }][]).map(([branch, data]) => (
               <div key={branch} className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl space-y-1.5">
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-bold text-slate-800">{branch}</span>
@@ -160,6 +155,9 @@ export default function ReportAnalytics({ rows, computedRows }: ReportAnalyticsP
                 </div>
               </div>
             ))}
+            {computedRows.filter(r => r.expense > 0 && !isTransferType(r.type, r.category)).length === 0 && (
+              <p className="text-xs text-slate-400 italic text-center py-4">لا توجد مصروفات مسجلة</p>
+            )}
           </div>
         </div>
 
@@ -173,11 +171,10 @@ export default function ReportAnalytics({ rows, computedRows }: ReportAnalyticsP
           </div>
           <div className="space-y-2.5">
             {(Object.entries(
-              rows.reduce((acc: Record<string, number>, row) => {
-                const type = String(row[3] || '');
-                if (!isTransferType(type)) return acc;
-                const employee = String(row[1] || 'غير محدد');
-                const amount = parseFloat(String(row[5])) || parseFloat(String(row[6])) || 0;
+              computedRows.reduce((acc: Record<string, number>, row) => {
+                if (!isTransferType(row.type, row.category)) return acc;
+                const employee = String(row.employee || 'غير محدد');
+                const amount = (row.income > 0 ? row.income : row.expense) || 0;
                 acc[employee] = (acc[employee] || 0) + amount;
                 return acc;
               }, {} as Record<string, number>)
@@ -187,7 +184,7 @@ export default function ReportAnalytics({ rows, computedRows }: ReportAnalyticsP
                 <span className="font-mono font-extrabold text-blue-700 text-xs">{formatKWD(total)}</span>
               </div>
             ))}
-            {Object.keys(rows.filter(row => isTransferType(String(row[3] || '')))).length === 0 && (
+            {computedRows.filter(row => isTransferType(row.type, row.category)).length === 0 && (
               <p className="text-xs text-slate-400 italic text-center py-4">لا توجد تحويلات مسجلة</p>
             )}
           </div>
@@ -203,12 +200,12 @@ export default function ReportAnalytics({ rows, computedRows }: ReportAnalyticsP
           </div>
           <div className="space-y-2.5">
             {(Object.entries(
-              rows.reduce((acc: Record<string, { in: number; out: number }>, row) => {
-                const targetMonth = row.length > 9 ? String(row[9] || '') : '';
+              computedRows.reduce((acc: Record<string, { in: number; out: number }>, row) => {
+                const targetMonth = row.targetMonth || '';
                 if (!targetMonth) return acc;
                 if (!acc[targetMonth]) acc[targetMonth] = { in: 0, out: 0 };
-                acc[targetMonth].in += parseFloat(String(row[5])) || 0;
-                acc[targetMonth].out += parseFloat(String(row[6])) || 0;
+                acc[targetMonth].in += row.income || 0;
+                acc[targetMonth].out += row.expense || 0;
                 return acc;
               }, {} as Record<string, { in: number; out: number }>)
             ) as [string, { in: number; out: number }][]).sort((a, b) => b[0].localeCompare(a[0])).map(([month, totals]) => (
@@ -220,11 +217,7 @@ export default function ReportAnalytics({ rows, computedRows }: ReportAnalyticsP
                 </div>
               </div>
             ))}
-            {Object.keys(rows.reduce((acc: Record<string, any>, row) => {
-              const targetMonth = row.length > 9 ? String(row[9] || '') : '';
-              if (targetMonth) acc[targetMonth] = true;
-              return acc;
-            }, {})).length === 0 && (
+            {computedRows.filter(row => !!row.targetMonth).length === 0 && (
               <p className="text-xs text-slate-400 italic text-center py-4">لا توجد عمليات مخصصة لشهور محددة</p>
             )}
           </div>

@@ -56,6 +56,7 @@ interface DailyJournalProps {
   categories: string[];
   employees: string[];
   onRefresh?: () => void;
+  onViewReport?: (employeeName: string) => void;
 }
 
 export interface FundExpenseItem {
@@ -101,7 +102,8 @@ export default function DailyJournal({
   branches,
   categories,
   employees,
-  onRefresh
+  onRefresh,
+  onViewReport
 }: DailyJournalProps) {
   // Today's date by default (YYYY-MM-DD)
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -643,7 +645,10 @@ export default function DailyJournal({
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={() => loadAllTransactions(true)}
+            onClick={() => {
+              loadAllTransactions(true);
+              if (onRefresh) onRefresh();
+            }}
             disabled={loading}
             className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
             title="تحديث البيانات من السيرفر"
@@ -1166,19 +1171,30 @@ export default function DailyJournal({
                             )}
                           </td>
 
-                          {/* 9. Action Button to expand / collapse */}
+                          {/* 9. Action Button to expand / collapse & view report */}
                           <td className="py-2.5 px-2.5 text-center no-print">
-                            {rec.spentItems.length > 0 ? (
-                              <button
-                                onClick={() => toggleEmployeeExpand(rec.employee)}
-                                className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center ${
-                                  isExpanded ? 'bg-slate-900 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                                }`}
-                                title="عرض بنود ما تم صرفه"
-                              >
-                                {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                              </button>
-                            ) : null}
+                            <div className="flex items-center justify-center gap-1">
+                              {onViewReport && (
+                                <button
+                                  onClick={() => onViewReport(rec.employee)}
+                                  className="p-1.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer flex items-center justify-center"
+                                  title={`عرض كشف الحساب التفصيلي لـ ${rec.employee}`}
+                                >
+                                  <FileText size={14} />
+                                </button>
+                              )}
+                              {rec.spentItems.length > 0 ? (
+                                <button
+                                  onClick={() => toggleEmployeeExpand(rec.employee)}
+                                  className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center ${
+                                    isExpanded ? 'bg-slate-900 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                                  }`}
+                                  title="عرض بنود ما تم صرفه"
+                                >
+                                  {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                </button>
+                              ) : null}
+                            </div>
                           </td>
                         </tr>
 
@@ -1194,9 +1210,21 @@ export default function DailyJournal({
                                       مفردات وبنود ما صرفه ({rec.employee}) في تاريخ {selectedDate}:
                                     </span>
                                   </div>
-                                  <span className="text-xs font-mono font-black text-rose-700">
-                                    إجمالي المنصرف: {formatKWD(rec.todaySpent)} د.ك
-                                  </span>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-xs font-mono font-black text-rose-700">
+                                      إجمالي المنصرف: {formatKWD(rec.todaySpent)} د.ك
+                                    </span>
+                                    {onViewReport && (
+                                      <button
+                                        onClick={() => onViewReport(rec.employee)}
+                                        className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                        title={`الانتقال إلى كشف الحساب لـ ${rec.employee}`}
+                                      >
+                                        <FileText size={12} />
+                                        <span>كشف الحساب الكامل</span>
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
@@ -1364,7 +1392,10 @@ export default function DailyJournal({
       <PrintSettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        onSaved={(updatedProfile) => setCompanyProfile(updatedProfile)}
+        onSaved={(updatedProfile) => {
+          setCompanyProfile(updatedProfile);
+          setPrintOptions(getPrintDisplayOptions());
+        }}
       />
 
       {/* Official Voucher Modal */}
