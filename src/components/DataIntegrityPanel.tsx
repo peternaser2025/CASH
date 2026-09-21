@@ -24,6 +24,7 @@ import {
 import * as xlsx from 'xlsx';
 import { apiService } from '../services/apiService';
 import { formatKWDFromFils, toFils, toKWD } from '../utils/money';
+import { normalizeExcelDate } from '../utils/format';
 import { SafeStorage } from '../utils/dataSafety';
 
 export default function DataIntegrityPanel() {
@@ -622,12 +623,12 @@ export default function DataIntegrityPanel() {
                     const ws = wb.Sheets[sheetName];
 
                     // Convert to JSON with row index preserved
-                    const rawData: any[] = xlsx.utils.sheet_to_json(ws, { defval: '' });
+                    const rawData: any[] = xlsx.utils.sheet_to_json(ws, { defval: '', raw: true });
 
                     const mapped = rawData.map((row, idx) => ({
                       rowIndex: idx + 2, // Excel row numbering starts at row 2
                       id: row.ID || row.id || row['رقم المعاملة'] || `TX-${idx + 1}`,
-                      date: row.Date || row.date || row['التاريخ'] || '',
+                      date: normalizeExcelDate(row.Date ?? row.date ?? row['التاريخ'] ?? row['تاريخ'] ?? row.time ?? row.timestamp ?? ''),
                       employee: row.Employee || row.employee || row['الموظف'] || row['اسم الموظف'] || '',
                       branch: row.Branch || row.branch || row['الفرع'] || '',
                       department: row.Department || row.department || row['القسم'] || '',

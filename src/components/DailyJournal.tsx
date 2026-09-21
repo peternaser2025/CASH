@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
-import { parseReportRow, formatKWD, matchBranch, isTransferType, isAccrualType, isArabicSearchMatch } from '../utils/format';
+import { parseReportRow, formatKWD, matchBranch, isTransferType, isAccrualType, isArabicSearchMatch, normalizeExcelDate } from '../utils/format';
 import { exportReportToExcel } from '../utils/excelExport';
 import { exportElementToPDF } from '../utils/pdfExport';
 import { 
@@ -261,12 +261,13 @@ export default function DailyJournal({
         rec.branch = row.branch;
       }
 
-      const rowDate = (row.date || '').split('T')[0];
+      const rowDate = normalizeExcelDate(row.date);
+      const targetDate = normalizeExcelDate(selectedDate);
       const isTransfer = isTransferType(row.type, row.category, row.description);
       const isAccrual = isAccrualType(row.type, row.category, row.description);
 
       // 1. Transaction occurred BEFORE selectedDate => contributes to openingBalance
-      if (rowDate < selectedDate) {
+      if (rowDate && targetDate && rowDate < targetDate) {
         if (isTransfer) {
           rec.openingBalance += (row.income - row.expense);
         } else if (!isAccrual) {
@@ -274,7 +275,7 @@ export default function DailyJournal({
         }
       } 
       // 2. Transaction occurred ON selectedDate => current day's activity
-      else if (rowDate === selectedDate) {
+      else if (rowDate && targetDate && rowDate === targetDate) {
         rec.hasActivityToday = true;
 
         if (isTransfer) {

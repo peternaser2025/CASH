@@ -32,6 +32,7 @@ import { auth } from '../firebase';
 import { workspaceService } from '../services/workspaceService';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
+import { normalizeExcelDate, parseReportRow } from '../utils/format';
 
 const SAFE_GAS_CODE = `/**
  * ============================================================================
@@ -143,7 +144,15 @@ function doPost(e) {
         for (var i = 0; i < values.length; i++) {
           var r = values[i];
           var rId = r[0];
-          var rDate = String(r[1] || '').split('T')[0];
+          var rDate = '';
+          if (r[1] instanceof Date) {
+            rDate = Utilities.formatDate(r[1], Session.getScriptTimeZone() || 'GMT', 'yyyy-MM-dd');
+          } else if (typeof r[1] === 'number' && r[1] > 1000) {
+            var epoch = new Date(Date.UTC(1899, 11, 30) + Math.floor(r[1]) * 86400000);
+            rDate = Utilities.formatDate(epoch, 'GMT', 'yyyy-MM-dd');
+          } else {
+            rDate = String(r[1] || '').split('T')[0];
+          }
           var rType = String(r[2] || '');
           var rCat = String(r[3] || '');
           var rEmp = String(r[4] || '');
@@ -852,31 +861,14 @@ export default function GoogleTools({ balances, onRefresh }: GoogleToolsProps) {
       if (reportData && reportData.rows) {
         const accrualItems: any[] = [];
         reportData.rows.forEach((row: any, idx: number) => {
-          let category = '';
-          let description = '';
-          let date = '';
-          let branch = '';
-          let employee = '';
-          let amount = 0;
-          let type = '';
-
-          if (Array.isArray(row)) {
-            type = String(row[2] || '');
-            category = String(row[4] || row[3] || '');
-            description = String(row[8] || row[6] || '');
-            date = String(row[1] || '').split('T')[0];
-            branch = String(row[7] || 'الفرع الرئيسي');
-            employee = String(row[3] || row[4] || 'إدارة');
-            amount = parseFloat(String(row[5] || row[6] || 0)) || 0;
-          } else if (typeof row === 'object' && row !== null) {
-            type = String(row.type || '');
-            category = String(row.category || '');
-            description = String(row.description || row.notes || '');
-            date = String(row.date || '').split('T')[0];
-            branch = String(row.branch || 'الفرع الرئيسي');
-            employee = String(row.employee || 'إدارة');
-            amount = parseFloat(String(row.amount || row.expense || 0)) || 0;
-          }
+          const parsed = parseReportRow(row);
+          const type = parsed.type;
+          const category = parsed.category;
+          const description = parsed.description;
+          const date = parsed.date;
+          const branch = parsed.branch;
+          const employee = parsed.employee;
+          const amount = parsed.amount;
 
           const combined = `${category} ${description}`;
           const isAccrual = /آجل|مستحق|دين|فاتورة آجلة|ذمم|مشتريات آجلة|التزام/i.test(combined) || type === 'آجل' || category === 'مشتريات آجلة ومستحقات';

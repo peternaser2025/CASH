@@ -8,6 +8,7 @@ import { transactionSchema, employeeSchema, orderSchema, settingsSchema } from '
 import { auditService } from './server/audit';
 import { performReconciliation } from './server/reconciliation';
 import { toFils, toKWD, normalizeEntityId } from './src/utils/money';
+import { normalizeExcelDate } from './src/utils/format';
 import { getSupabaseServerClient } from './server/supabase';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -220,10 +221,16 @@ app.get('/api/transactions', (req, res) => {
     }
   }
   if (startDate) {
-    list = list.filter(t => t.date >= String(startDate));
+    const normStart = normalizeExcelDate(startDate);
+    if (normStart) {
+      list = list.filter(t => normalizeExcelDate(t.date) >= normStart);
+    }
   }
   if (endDate) {
-    list = list.filter(t => t.date <= String(endDate));
+    const normEnd = normalizeExcelDate(endDate);
+    if (normEnd) {
+      list = list.filter(t => normalizeExcelDate(t.date) <= normEnd);
+    }
   }
 
   res.json({
@@ -251,7 +258,7 @@ app.post('/api/transactions', (req, res) => {
   const tx = {
     id: newId,
     rowId: newId,
-    date: data.date || new Date().toISOString().split('T')[0],
+    date: normalizeExcelDate(data.date) || new Date().toISOString().split('T')[0],
     employee: data.employee.trim(),
     branch: data.branch || 'الرئيسي',
     department: assignedDepartment,
@@ -665,7 +672,11 @@ app.post('/api/sync', (req, res) => {
     transactions.forEach(t => {
       const id = String(t.id || t.rowId || t.rowIndex);
       if (id && !existingIds.has(id)) {
-        serverStore.transactions.push(t);
+        const cleanDate = normalizeExcelDate(t.date || t.raw_date || t['التاريخ']);
+        serverStore.transactions.push({
+          ...t,
+          date: cleanDate || t.date || new Date().toISOString().split('T')[0]
+        });
         existingIds.add(id);
       }
     });
@@ -732,7 +743,7 @@ app.post('/api/supabase/upload-excel', async (req, res) => {
       return {
         row_index: rowIndex,
         raw_id: r.id ? String(r.id).trim() : (r.raw_id ? String(r.raw_id).trim() : null),
-        raw_date: r.date ? String(r.date).trim() : (r.raw_date ? String(r.raw_date).trim() : null),
+        raw_date: normalizeExcelDate(r.date || r.raw_date || r['التاريخ'] || r['تاريخ']) || (r.date ? String(r.date).trim() : null),
         raw_employee: r.employee ? String(r.employee).trim() : (r.raw_employee ? String(r.raw_employee).trim() : null),
         raw_branch: r.branch ? String(r.branch).trim() : (r.raw_branch ? String(r.raw_branch).trim() : null),
         raw_department: r.department ? String(r.department).trim() : (r.raw_department ? String(r.raw_department).trim() : null),
