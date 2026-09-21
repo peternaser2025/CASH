@@ -25,7 +25,8 @@ import {
   FileCheck2,
   BookOpen,
   Target,
-  Truck
+  Truck,
+  CalendarCheck2
 } from 'lucide-react';
 import { 
   onAuthStateChanged, 
@@ -47,6 +48,7 @@ import { workspaceService } from './services/workspaceService';
 import Dashboard from './components/Dashboard';
 import TransactionForm from './components/TransactionForm';
 import ReportViewer from './components/ReportViewer';
+import DailyJournal from './components/DailyJournal';
 import EmployeeManager from './components/EmployeeManager';
 import GoogleTools from './components/GoogleTools';
 import ProfitLoss from './components/ProfitLoss';
@@ -62,7 +64,7 @@ import OrdersManager from './components/OrdersManager';
 export default function App() {
   const [user, setUser] = useState<User | any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'reports' | 'settlements' | 'orders' | 'journal-entries' | 'budgets' | 'employees' | 'google-tools' | 'profit-loss' | 'cost-control' | 'accruals' | 'global-search' | 'data-integrity'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'new-transaction' | 'daily-journal' | 'reports' | 'settlements' | 'orders' | 'journal-entries' | 'budgets' | 'employees' | 'google-tools' | 'profit-loss' | 'cost-control' | 'accruals' | 'global-search' | 'data-integrity'>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // App Data State
@@ -597,6 +599,14 @@ export default function App() {
               onClick={() => navigateTo('new-transaction')} 
             />
             <SidebarItem 
+              icon={<CalendarCheck2 size={18} />} 
+              label="اليومية المجمعة للصناديق" 
+              active={activeTab === 'daily-journal'} 
+              badge="يومي"
+              badgeType="success"
+              onClick={() => navigateTo('daily-journal')} 
+            />
+            <SidebarItem 
               icon={<FileText size={18} />} 
               label="كشف الحساب والعمليات" 
               active={activeTab === 'reports'} 
@@ -858,6 +868,15 @@ export default function App() {
                   categories={categories}
                   initialEmployee={prefilledEmployee}
                   initialType={prefilledEmployee ? 'Transfer' : 'Expense'}
+                />
+              )}
+              {activeTab === 'daily-journal' && (
+                <DailyJournal 
+                  balances={balances} 
+                  branches={branches} 
+                  categories={categories} 
+                  employees={employeeNames} 
+                  onRefresh={() => fetchData(true)}
                 />
               )}
               {activeTab === 'reports' && (

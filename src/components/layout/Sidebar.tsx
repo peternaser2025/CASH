@@ -17,12 +17,14 @@ import {
   FileCheck2,
   BookOpen,
   Target,
-  Truck
+  Truck,
+  CalendarCheck2
 } from 'lucide-react';
 
 export type TabId = 
   | 'dashboard' 
   | 'new-transaction' 
+  | 'daily-journal'
   | 'reports' 
   | 'settlements' 
   | 'orders' 
@@ -116,6 +118,14 @@ export default function Sidebar({
               badge="جديد +"
               badgeType="success"
               onClick={() => onNavigate('new-transaction')} 
+            />
+            <SidebarItem 
+              icon={<CalendarCheck2 size={18} />} 
+              label="اليومية المجمعة للصناديق" 
+              active={activeTab === 'daily-journal'} 
+              badge="يومي"
+              badgeType="success"
+              onClick={() => onNavigate('daily-journal')} 
             />
             <SidebarItem 
               icon={<FileText size={18} />} 
