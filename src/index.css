@@ -296,7 +296,7 @@ body {
   }
 
   /* Printable Voucher / Modal Exception */
-  .printable-modal, #printable-voucher, #printable-order-invoice, #printable-settlement-report, #printable-report {
+  .printable-modal, #printable-voucher, #printable-order-invoice, #printable-settlement-report, #printable-report, #printable-journal-report {
     position: static !important;
     background: white !important;
     padding: 0 !important;

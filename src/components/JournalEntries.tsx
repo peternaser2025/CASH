@@ -16,12 +16,26 @@ import {
   Calendar,
   User,
   Scale,
-  FileText
+  FileText,
+  SlidersHorizontal,
+  Settings2
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
 import { parseReportRow, matchBranch, normalizeArabic, formatKWD } from '../utils/format';
 import VoucherModal, { VoucherData } from './VoucherModal';
+import { exportElementToPDF } from '../utils/pdfExport';
+import { 
+  getCompanyProfile, 
+  getPrintDisplayOptions, 
+  PrintDisplayOptions,
+  CompanyPrintProfile
+} from '../utils/printConfig';
+import PrintHeader from './print/PrintHeader';
+import PrintSignatures from './print/PrintSignatures';
+import PrintWatermark from './print/PrintWatermark';
+import PrintToolbar from './print/PrintToolbar';
+import PrintSettingsModal from './PrintSettingsModal';
 
 interface JournalEntriesProps {
   balances: EmployeeBalance[];
@@ -60,6 +74,10 @@ export default function JournalEntries({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [companyProfile, setCompanyProfile] = useState<CompanyPrintProfile>(getCompanyProfile());
+  const [printOptions, setPrintOptions] = useState<PrintDisplayOptions>(getPrintDisplayOptions());
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeVoucher, setActiveVoucher] = useState<VoucherData | null>(null);
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
 
@@ -239,8 +257,41 @@ export default function JournalEntries({
     link.click();
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleExportPDF = async () => {
+    const el = document.getElementById('printable-journal-report');
+    if (!el) return;
+    setPdfLoading(true);
+    try {
+      await exportElementToPDF(el, {
+        filename: `دفتر_القيود_المحاسبية_${new Date().toISOString().split('T')[0]}.pdf`,
+        orientation: printOptions.paperSize === 'A4-landscape' ? 'landscape' : 'portrait',
+        margins: 'narrow',
+        scale: 100
+      });
+    } catch (e) {
+      console.error('Failed to export Journal to PDF:', e);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   return (
-    <div className="space-y-8" dir="rtl">
+    <div className="space-y-6" dir="rtl">
+      {/* Universal Print Toolbar */}
+      <PrintToolbar
+        options={printOptions}
+        onChangeOptions={setPrintOptions}
+        onPrint={handlePrint}
+        onExportPDF={handleExportPDF}
+        pdfLoading={pdfLoading}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        allowThermal={false}
+      />
+
       {/* Top Banner - Control & Export Bar */}
       <div className="no-print bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-6 sm:p-8 rounded-3xl border border-slate-700 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
@@ -414,35 +465,40 @@ export default function JournalEntries({
         </div>
       </div>
 
-      {/* Printable Letterhead - Visible only when printing */}
-      <div className="hidden print:block mb-6 p-4 border-b-2 border-slate-900 bg-white">
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-xl font-black text-slate-950">دفتر اليومية العامة وسجل القيود المحاسبية</h1>
-            <p className="text-xs text-slate-600 font-bold mt-1">نظام إدارة العهد والمصروفات — دولة الكويت</p>
-            <p className="text-[10px] text-slate-500 font-mono mt-0.5">تاريخ الاستخراج والطباعة: {new Date().toLocaleDateString('ar-KW')} - {new Date().toLocaleTimeString('ar-KW')}</p>
-          </div>
-          <div className="text-left bg-slate-50 p-2.5 rounded-xl border border-slate-300">
-            <span className="text-[9px] text-slate-500 font-bold block">إجمالي توازن القيود (Dr = Cr)</span>
-            <span className="text-lg font-black font-mono text-slate-900">{totals.totalDebit.toFixed(3)} د.ك</span>
-            <span className="text-[9px] text-emerald-700 font-bold block mt-0.5">قيود متوازنة ومعتمدة 100%</span>
-          </div>
-        </div>
-      </div>
+      {/* Main Journal Report Container for Print & PDF */}
+      <div id="printable-journal-report" className="space-y-6 relative bg-white p-2 sm:p-4 rounded-3xl print:p-0 print:border-none">
+        {/* Dynamic Watermark */}
+        <PrintWatermark type={printOptions.watermark} />
 
-      {/* Main Journal Table */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden print:border-none print:shadow-none">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <div>
-            <h2 className="text-base font-black text-slate-900">دفتر اليومية العامة وسجل القيود التفصيلي</h2>
-            <p className="text-xs text-slate-400 font-bold mt-0.5">
-              عرض القيود المحاسبية بصيغة طرف مدين وطرف دائن متطابقة
-            </p>
-          </div>
-          <span className="text-xs font-black text-slate-600 bg-white px-3 py-1.5 rounded-xl border border-slate-200 font-mono">
-            {filteredEntries.length} قيد مسجل
-          </span>
+        {/* Printable Official Header */}
+        <div className="print-only hidden print:block">
+          <PrintHeader
+            profile={companyProfile}
+            showLetterhead={printOptions.showLetterhead}
+            documentTitleAr="دفتر القيود المحاسبية اليومية وميزان المراجعة"
+            documentTitleEn="GENERAL JOURNAL ENTRIES & AUDIT TRIAL BALANCE"
+            extraMeta={[
+              { label: 'الفرع المستهدف', value: selectedBranch === 'all' ? 'كافة الفروع' : selectedBranch },
+              { label: 'أمين العهدة / الموظف', value: selectedEmployee === 'all' ? 'كافة الموظفين' : selectedEmployee },
+              { label: 'البند / التصنيف', value: selectedCategory === 'all' ? 'كافة البنود' : selectedCategory },
+              { label: 'إجمالي الجانبين (Dr = Cr)', value: `${totals.totalDebit.toFixed(3)} د.ك` }
+            ]}
+          />
         </div>
+
+        {/* Main Journal Table */}
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden print:border-none print:shadow-none">
+          <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 no-print">
+            <div>
+              <h2 className="text-base font-black text-slate-900">دفتر اليومية العامة وسجل القيود التفصيلي</h2>
+              <p className="text-xs text-slate-400 font-bold mt-0.5">
+                عرض القيود المحاسبية بصيغة طرف مدين وطرف دائن متطابقة
+              </p>
+            </div>
+            <span className="text-xs font-black text-slate-600 bg-white px-3 py-1.5 rounded-xl border border-slate-200 font-mono">
+              {filteredEntries.length} قيد مسجل
+            </span>
+          </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-right text-xs">
@@ -559,21 +615,25 @@ export default function JournalEntries({
         </div>
       </div>
 
-      {/* Official Signatures Footer Block for Printing */}
-      <div className="hidden print:block print-signatures-block">
-        <div className="print-signature-box">
-          <p>إعداد المحاسب القانوني</p>
-          <div className="print-signature-line">التوقيع والتاريخ</div>
-        </div>
-        <div className="print-signature-box">
-          <p>المراجع والمدقق المالي</p>
-          <div className="print-signature-line">التوقيع والتاريخ</div>
-        </div>
-        <div className="print-signature-box">
-          <p>اعتماد الإدارة المالية العامة</p>
-          <div className="print-signature-line">الختم والاعتماد</div>
+        {/* Standardized Print Signatures with Stamp and Verification QR */}
+        <div className="print-only hidden print:block mt-6">
+          <PrintSignatures
+            profile={companyProfile}
+            showStamp={printOptions.showStamp}
+            preparedBy="المحاسب المسؤول (رئيس قسم الحسابات)"
+            auditedBy="مراجع الحسابات (المدقق المالي المعتمد)"
+            approvedBy="المدير المالي (إدارة الرقابة المالية)"
+            receivedBy="الاعتماد النهائي (الإدارة العامة)"
+          />
         </div>
       </div>
+
+      {/* Print Settings Modal */}
+      <PrintSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onSaved={(p) => setCompanyProfile(p)}
+      />
 
       {/* Voucher Print Modal */}
       <VoucherModal
