@@ -1,9 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { 
-  Building2, 
-  Calendar, 
-  Tag, 
   FileText, 
   CheckCircle2, 
   X, 

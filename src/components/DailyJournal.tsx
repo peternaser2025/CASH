@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { 
   Calendar, 
   Printer, 
@@ -7,30 +6,18 @@ import {
   FileDown, 
   RefreshCw, 
   Search, 
-  Filter, 
   Wallet, 
   Building, 
   User, 
   ArrowDownRight, 
-  ArrowUpRight, 
-  ArrowRightLeft, 
-  CheckCircle2, 
-  DollarSign, 
   Receipt, 
   ChevronDown,
   ChevronUp,
   FileText,
   AlertCircle,
-  Building2,
   CalendarCheck2,
   TrendingDown,
-  TrendingUp,
-  Coins,
-  CreditCard,
-  ShieldCheck,
-  Check,
-  Eye,
-  SlidersHorizontal
+  Coins
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
@@ -53,7 +40,7 @@ import VoucherModal, { VoucherData } from './VoucherModal';
 interface DailyJournalProps {
   balances: EmployeeBalance[];
   branches: string[];
-  categories: string[];
+  categories?: string[];
   employees: string[];
   onRefresh?: () => void;
   onViewReport?: (employeeName: string) => void;
@@ -100,7 +87,6 @@ export interface FundDayRecord {
 export default function DailyJournal({
   balances,
   branches,
-  categories,
   employees,
   onRefresh,
   onViewReport
@@ -127,7 +113,7 @@ export default function DailyJournal({
     ...getPrintDisplayOptions(),
     paperSize: 'A4-landscape'
   }));
-  const [printDetailLevel, setPrintDetailLevel] = useState<'summary' | 'detailed'>('detailed');
+  const [printDetailLevel] = useState<'summary' | 'detailed'>('detailed');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { Building2, ShieldCheck } from 'lucide-react';
 import QRCodeBadge from './QRCodeBadge';
 import { CompanyPrintProfile, getCompanyProfile } from '../../utils/printConfig';
 
@@ -25,8 +25,7 @@ export default function PrintHeader({
   showQRCode = true,
   qrPayload,
   showLetterhead = true,
-  extraMeta = [],
-  variant = 'formal'
+  extraMeta = []
 }: PrintHeaderProps) {
   const comp = profile || getCompanyProfile();
   const currentDate = date || new Date().toISOString().split('T')[0];

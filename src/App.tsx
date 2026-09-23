@@ -21,7 +21,6 @@ import {
   ShieldCheck,
   Menu,
   X,
-  ChevronLeft,
   FileCheck2,
   BookOpen,
   Target,

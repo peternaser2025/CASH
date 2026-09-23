@@ -193,7 +193,7 @@ export const formatKWD = (amount: number | string | undefined | null): string =>
 /**
  * Formats a number with a sign for financial statements
  */
-export const formatFinancialAmount = (amount: number | string | undefined | null, type?: string): string => {
+export const formatFinancialAmount = (amount: number | string | undefined | null): string => {
   if (amount === undefined || amount === null) return '0.000';
   const value = typeof amount === 'string' ? parseFloat(amount) : amount;
   if (isNaN(value)) return '0.000';
@@ -350,7 +350,7 @@ export const getAccountingOperationType = (
   category: string = '', 
   description: string = '', 
   income: number = 0, 
-  expense: number = 0
+  _expense: number = 0
 ): string => {
   const combined = `${type} ${category} ${description}`;
   

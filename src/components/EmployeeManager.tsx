@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { UserPlus, Users, CheckCircle2, AlertCircle, Loader2, ShieldCheck, UserCheck, Search, Trash2, Key, Copy, Check, FileSpreadsheet, Lock, Scale, Coins, CalendarClock, X, Printer, FileText, Award } from 'lucide-react';
+import { UserPlus, CheckCircle2, AlertCircle, Loader2, ShieldCheck, UserCheck, Search, Trash2, Key, Copy, Check, FileSpreadsheet, Lock, CalendarClock, X, Printer, Award } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
 import { formatKWD } from '../utils/format';
 import { exportReportToExcel } from '../utils/excelExport';
 import VoucherModal, { VoucherData } from './VoucherModal';
-import { tafqeetKWD } from '../utils/tafqeet';
 
 interface EmployeeManagerProps {
   balances: EmployeeBalance[];

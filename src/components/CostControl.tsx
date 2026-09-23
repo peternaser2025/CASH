@@ -1,15 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Target, 
   ShieldAlert, 
   TrendingDown, 
-  DollarSign, 
   Sliders, 
   Zap, 
-  AlertTriangle, 
   CheckCircle2, 
-  Info, 
   RefreshCw, 
   Printer, 
   FileSpreadsheet,
@@ -17,13 +12,9 @@ import {
   Trash2, 
   Save, 
   Building, 
-  Search, 
-  ArrowUpRight, 
-  BarChart2, 
   Percent,
   Layers,
-  Sparkles,
-  PieChart
+  Sparkles
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { formatKWD, isTransferType, isIncomeType, isExpenseType, matchBranch, parseReportRow } from '../utils/format';
@@ -98,7 +89,6 @@ export default function CostControl({ branches, categories, onRefresh }: CostCon
   const [actualExpenses, setActualExpenses] = useState<Record<string, number>>({});
   const [totalSales, setTotalSales] = useState<number>(0);
   const [loadingData, setLoadingData] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Custom budget edit form inputs
   const [editingCategory, setEditingCategory] = useState<string>('');
@@ -135,17 +125,9 @@ export default function CostControl({ branches, categories, onRefresh }: CostCon
     localStorage.setItem('kwd_cost_tasks', JSON.stringify(updatedTasks));
   };
 
-  // Safe row parser helper
-  const getRowValue = (row: any, index: number, key: string) => {
-    if (Array.isArray(row)) return row[index];
-    if (row && typeof row === 'object') return row[key];
-    return undefined;
-  };
-
   // Pull actual expenses for selected month & branch
   const fetchCostData = async () => {
     setLoadingData(true);
-    setErrorMessage(null);
     try {
       const [year, monthStr] = selectedMonth.split('-');
       const yearNum = parseInt(year);
@@ -199,7 +181,6 @@ export default function CostControl({ branches, categories, onRefresh }: CostCon
 
     } catch (err) {
       console.error('Error pulling cost control data:', err);
-      setErrorMessage('تعذر جلب بيانات المصاريف أوتوماتيكياً من السيرفر.');
     } finally {
       setLoadingData(false);
     }
@@ -218,23 +199,6 @@ export default function CostControl({ branches, categories, onRefresh }: CostCon
       ...budgets,
       [catName]: {
         category: catName,
-        monthlyLimit: val,
-        isFixedCost: newIsFixed
-      }
-    };
-    saveBudgetsToStorage(updated);
-    setEditingCategory('');
-    setNewLimitInput('');
-  };
-
-  // Add custom budget category
-  const handleAddCustomCategoryBudget = () => {
-    if (!editingCategory || !newLimitInput) return;
-    const val = parseFloat(newLimitInput) || 0;
-    const updated = {
-      ...budgets,
-      [editingCategory]: {
-        category: editingCategory,
         monthlyLimit: val,
         isFixedCost: newIsFixed
       }
@@ -430,7 +394,10 @@ export default function CostControl({ branches, categories, onRefresh }: CostCon
           </button>
 
           <button
-            onClick={fetchCostData}
+            onClick={() => {
+              fetchCostData();
+              if (onRefresh) onRefresh();
+            }}
             disabled={loadingData}
             className="flex items-center gap-2 px-5 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full font-black text-xs transition-all cursor-pointer"
           >

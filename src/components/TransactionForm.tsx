@@ -94,7 +94,7 @@ export default function TransactionForm({ onComplete, employees, branches, categ
 
     if (result.success) {
       setStatus({ type: 'success', message: `تم تسجيل العملية بنجاح برقم: ${result.id}` });
-      setTimeout(() => onComplete(), 2000);
+      setTimeout(() => onComplete(), 800);
     } else {
       setStatus({ type: 'error', message: result.error || 'حدث خطأ أثناء التسجيل' });
       setLoading(false);

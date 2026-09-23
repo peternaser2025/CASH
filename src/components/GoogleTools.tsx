@@ -32,7 +32,7 @@ import { auth } from '../firebase';
 import { workspaceService } from '../services/workspaceService';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
-import { normalizeExcelDate, parseReportRow } from '../utils/format';
+import { parseReportRow } from '../utils/format';
 
 const SAFE_GAS_CODE = `/**
  * ============================================================================

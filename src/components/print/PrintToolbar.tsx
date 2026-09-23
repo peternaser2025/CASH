@@ -5,9 +5,6 @@ import {
   Settings, 
   FileText, 
   Receipt, 
-  Check, 
-  Eye, 
-  SlidersHorizontal,
   Stamp
 } from 'lucide-react';
 import { PrintDisplayOptions } from '../../utils/printConfig';

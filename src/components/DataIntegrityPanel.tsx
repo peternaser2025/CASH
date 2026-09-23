@@ -10,20 +10,17 @@ import {
   CheckCircle2, 
   AlertTriangle, 
   XCircle, 
-  ArrowRightLeft, 
   PlusCircle, 
   Edit3, 
   Trash2, 
   Play, 
-  Database,
-  Search,
-  FileSpreadsheet,
-  UploadCloud,
-  Check
+  Database, 
+  Search, 
+  FileSpreadsheet, 
+  UploadCloud 
 } from 'lucide-react';
 import * as xlsx from 'xlsx';
 import { apiService } from '../services/apiService';
-import { formatKWDFromFils, toFils, toKWD } from '../utils/money';
 import { normalizeExcelDate } from '../utils/format';
 import { SafeStorage } from '../utils/dataSafety';
 

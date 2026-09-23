@@ -3,28 +3,20 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Search, 
   Filter, 
-  Calendar, 
   Building, 
   User, 
   Tag, 
   ArrowDownRight, 
   ArrowUpRight, 
   Printer, 
-  Download, 
   RefreshCw, 
   FileSpreadsheet, 
-  Hash, 
-  Coins, 
-  CheckCircle2, 
   X, 
   ExternalLink,
-  ChevronDown,
-  Sparkles,
-  SlidersHorizontal,
   ArrowRightLeft
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
-import { formatKWD, isTransferType, isExpenseType, isIncomeType, parseReportRow, isArabicSearchMatch, matchBranch } from '../utils/format';
+import { formatKWD, isTransferType, parseReportRow, isArabicSearchMatch, matchBranch } from '../utils/format';
 
 interface SearchResultRow {
   index: number;
@@ -61,7 +53,6 @@ export default function GlobalSearch({ branches, categories, employees }: Global
 
   const [loading, setLoading] = useState<boolean>(false);
   const [allRows, setAllRows] = useState<SearchResultRow[]>([]);
-  const [hasSearched, setHasSearched] = useState<boolean>(false);
 
   // Selected Transaction for Detail Modal / Receipt
   const [selectedTx, setSelectedTx] = useState<SearchResultRow | null>(null);
@@ -69,7 +60,6 @@ export default function GlobalSearch({ branches, categories, employees }: Global
   // Initial load or execute search
   const performSearch = async () => {
     setLoading(true);
-    setHasSearched(true);
     try {
       const reportData = await gasService.getReport({
         branch: 'All',
@@ -111,6 +101,8 @@ export default function GlobalSearch({ branches, categories, employees }: Global
   // Filter matching rows with high-performance memoization
   const filteredRows = useMemo(() => {
     return allRows.filter(row => {
+      const isTransfer = isTransferType(row.type, row.category, row.description);
+
       // 1. Branch
       if (selectedBranch !== 'All' && !matchBranch(row.branch, selectedBranch)) return false;
 
@@ -120,10 +112,10 @@ export default function GlobalSearch({ branches, categories, employees }: Global
       // 3. Employee
       if (selectedEmployee !== 'All' && !isArabicSearchMatch(selectedEmployee, row.employee)) return false;
 
-      // 4. Type
-      if (selectedType === 'Expense' && (!isExpenseType(row.type, row.category, row.description) || row.expense <= 0)) return false;
-      if (selectedType === 'Income' && (!isIncomeType(row.type, row.category, row.description) || row.income <= 0)) return false;
-      if (selectedType === 'Transfer' && !isTransferType(row.type, row.category, row.description)) return false;
+      // 4. Type (Inflow / Outflow / Transfer)
+      if (selectedType === 'Expense' && (row.expense <= 0 || isTransfer)) return false;
+      if (selectedType === 'Income' && (row.income <= 0 || isTransfer)) return false;
+      if (selectedType === 'Transfer' && !isTransfer) return false;
 
       // 5. Amount Range
       const val = row.expense > 0 ? row.expense : row.income;
@@ -150,10 +142,43 @@ export default function GlobalSearch({ branches, categories, employees }: Global
     });
   }, [allRows, selectedBranch, selectedCategory, selectedEmployee, selectedType, minAmount, maxAmount, searchTerm]);
 
+  // Auditor classification counts (for quick filters & visual legend)
+  const counts = useMemo(() => {
+    let incoming = 0;
+    let outgoing = 0;
+    let transfers = 0;
+    for (const r of allRows) {
+      if (isTransferType(r.type, r.category, r.description)) {
+        transfers++;
+      } else if (r.income > 0) {
+        incoming++;
+      } else if (r.expense > 0) {
+        outgoing++;
+      }
+    }
+    return { incoming, outgoing, transfers, total: allRows.length };
+  }, [allRows]);
+
+  const filteredCounts = useMemo(() => {
+    let incoming = 0;
+    let outgoing = 0;
+    let transfers = 0;
+    for (const r of filteredRows) {
+      if (isTransferType(r.type, r.category, r.description)) {
+        transfers++;
+      } else if (r.income > 0) {
+        incoming++;
+      } else if (r.expense > 0) {
+        outgoing++;
+      }
+    }
+    return { incoming, outgoing, transfers, total: filteredRows.length };
+  }, [filteredRows]);
+
   // Calculate search result KPIs with memoization
   const { totalInflow, totalOutflow, netCashflow } = useMemo(() => {
-    const inflow = filteredRows.reduce((acc, r) => acc + (isTransferType(r.type, r.category) ? 0 : r.income), 0);
-    const outflow = filteredRows.reduce((acc, r) => acc + (isTransferType(r.type, r.category) ? 0 : r.expense), 0);
+    const inflow = filteredRows.reduce((acc, r) => acc + (isTransferType(r.type, r.category, r.description) ? 0 : r.income), 0);
+    const outflow = filteredRows.reduce((acc, r) => acc + (isTransferType(r.type, r.category, r.description) ? 0 : r.expense), 0);
     return {
       totalInflow: inflow,
       totalOutflow: outflow,
@@ -313,17 +338,17 @@ export default function GlobalSearch({ branches, categories, employees }: Global
           {/* Transaction Type */}
           <div className="space-y-1.5">
             <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Filter size={14} className="text-blue-600" /> نوع العملية
+              <Filter size={14} className="text-blue-600" /> نوع وطبيعة العملية
             </label>
             <select
               value={selectedType}
               onChange={e => setSelectedType(e.target.value)}
               className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl font-bold text-xs text-gray-900 outline-none focus:border-blue-500 cursor-pointer"
             >
-              <option value="All">الكل (مصروف/إيراد/تحويل)</option>
-              <option value="Expense">مصروفات فقط 🔴</option>
-              <option value="Income">إيرادات ومبيعات فقط 🟢</option>
-              <option value="Transfer">تحويل حركة عهدة 🔵</option>
+              <option value="All">كافة العمليات (الكل: {counts.total})</option>
+              <option value="Income">حركات الداخل (الوارد فقط 🟢: {counts.incoming})</option>
+              <option value="Expense">حركات الخارج (المنصرف فقط 🔴: {counts.outgoing})</option>
+              <option value="Transfer">حركات التحويل بين العهد 🔵: {counts.transfers}</option>
             </select>
           </div>
 
@@ -396,45 +421,154 @@ export default function GlobalSearch({ branches, categories, employees }: Global
           <div className="text-3xl font-black font-mono text-gray-900 mt-1">
             {filteredRows.length} <span className="text-xs font-sans text-gray-400">عملية</span>
           </div>
-        </div>
-
-        <div className="bg-white border-2 border-gray-900 rounded-[2rem] p-6 shadow-sm">
-          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">إجمالي الوارد بالبحث</span>
-          <div className="text-3xl font-black font-mono text-emerald-600 mt-1">
-            {formatKWD(totalInflow)} <span className="text-xs font-sans text-emerald-400">KWD</span>
+          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100 text-[10px] font-black text-gray-500">
+            <span className="text-emerald-700">🟢 داخل: {filteredCounts.incoming}</span>
+            <span>•</span>
+            <span className="text-rose-700">🔴 خارج: {filteredCounts.outgoing}</span>
+            {filteredCounts.transfers > 0 && (
+              <>
+                <span>•</span>
+                <span className="text-blue-700">🔵 تحويل: {filteredCounts.transfers}</span>
+              </>
+            )}
           </div>
         </div>
 
-        <div className="bg-white border-2 border-gray-900 rounded-[2rem] p-6 shadow-sm">
-          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">إجمالي المنصرف بالبحث</span>
-          <div className="text-3xl font-black font-mono text-rose-600 mt-1">
-            {formatKWD(totalOutflow)} <span className="text-xs font-sans text-rose-400">KWD</span>
+        <div className="bg-white border-2 border-gray-900 rounded-[2rem] p-6 shadow-sm relative overflow-hidden">
+          <div className="absolute top-0 right-0 left-0 h-1.5 bg-emerald-500"></div>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black text-emerald-800 uppercase tracking-widest flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+              إجمالي حركات الداخل (الوارد)
+            </span>
+            <div className="p-1 bg-emerald-100 text-emerald-800 rounded-md">
+              <ArrowDownRight size={14} className="stroke-[2.5]" />
+            </div>
           </div>
+          <div className="text-3xl font-black font-mono text-emerald-600 mt-2">
+            +{formatKWD(totalInflow)} <span className="text-xs font-sans text-emerald-500">KWD</span>
+          </div>
+          <p className="text-[10px] font-bold text-gray-400 mt-1">إيرادات ومبيعات وتوريدات وتغذية أرصدة</p>
         </div>
 
-        <div className="bg-white border-2 border-gray-900 rounded-[2rem] p-6 shadow-sm">
-          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">صافي محصلة نتائج البحث</span>
-          <div className={`text-3xl font-black font-mono mt-1 ${netCashflow >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-            {formatKWD(netCashflow)} <span className="text-xs font-sans text-gray-400">KWD</span>
+        <div className="bg-white border-2 border-gray-900 rounded-[2rem] p-6 shadow-sm relative overflow-hidden">
+          <div className="absolute top-0 right-0 left-0 h-1.5 bg-rose-500"></div>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black text-rose-800 uppercase tracking-widest flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span>
+              إجمالي حركات الخارج (المنصرف)
+            </span>
+            <div className="p-1 bg-rose-100 text-rose-800 rounded-md">
+              <ArrowUpRight size={14} className="stroke-[2.5]" />
+            </div>
           </div>
+          <div className="text-3xl font-black font-mono text-rose-600 mt-2">
+            -{formatKWD(totalOutflow)} <span className="text-xs font-sans text-rose-500">KWD</span>
+          </div>
+          <p className="text-[10px] font-bold text-gray-400 mt-1">مصاريف تشغيلية ومشتريات ونثريات</p>
+        </div>
+
+        <div className="bg-white border-2 border-gray-900 rounded-[2rem] p-6 shadow-sm relative overflow-hidden">
+          <div className={`absolute top-0 right-0 left-0 h-1.5 ${netCashflow >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
+          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">صافي المحصلة المالية للبحث</span>
+          <div className={`text-3xl font-black font-mono mt-2 ${netCashflow >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+            {netCashflow >= 0 ? '+' : ''}{formatKWD(netCashflow)} <span className="text-xs font-sans text-gray-400">KWD</span>
+          </div>
+          <p className="text-[10px] font-bold text-gray-400 mt-1">
+            {netCashflow >= 0 ? 'فائض نقدي لحركات البحث' : 'عجز / استهلاك نقدي'}
+          </p>
         </div>
 
       </div>
 
       {/* Results Table */}
       <div className="bg-white border-2 border-gray-900 rounded-[2.5rem] p-8 space-y-6 shadow-sm">
-        <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+        
+        {/* Table Header & Actions */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-4">
           <div>
-            <h3 className="text-xl font-black text-gray-900">سجل نتائج البحث التفصيلي ({filteredRows.length})</h3>
-            <p className="text-xs font-bold text-gray-400 mt-1">مرتبة بحسب السلسلة والترتيب الزمني مع إمكانية المعاينة والطباعة</p>
+            <h3 className="text-xl font-black text-gray-900">سجل نتائج البحث والتدقيق التفصيلي ({filteredRows.length})</h3>
+            <p className="text-xs font-bold text-gray-400 mt-1">مرتبة بحسب السلسلة والترتيب الزمني مع التمييز اللوني البصري الفوري للحركات</p>
           </div>
-          <button
-            onClick={() => window.print()}
-            className="px-5 py-2.5 bg-gray-900 text-white rounded-xl text-xs font-black flex items-center gap-2 no-print cursor-pointer"
-          >
-            <Printer size={14} />
-            طباعة الكشف
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => window.print()}
+              className="px-5 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-xl text-xs font-black flex items-center gap-2 no-print cursor-pointer transition-colors shadow-2xs"
+            >
+              <Printer size={14} />
+              طباعة الكشف
+            </button>
+          </div>
+        </div>
+
+        {/* Auditor Visual Legend & Fast Filtering Bar */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl no-print">
+          {/* Visual Legend */}
+          <div className="flex flex-wrap items-center gap-3 text-xs font-bold">
+            <span className="text-slate-500 font-black text-[11px] uppercase tracking-wider ml-1">دليل التدقيق البصري:</span>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100/90 border border-emerald-300 text-emerald-900 text-xs shadow-2xs">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              <ArrowDownRight size={13} className="text-emerald-700 stroke-[2.5]" />
+              <span>أخضر: حركات الداخل (إيرادات، توريدات، تغذية)</span>
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-100/90 border border-rose-300 text-rose-900 text-xs shadow-2xs">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+              <ArrowUpRight size={13} className="text-rose-700 stroke-[2.5]" />
+              <span>أحمر: حركات الخارج (مصاريف، مشتريات، نثريات)</span>
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-100/90 border border-blue-300 text-blue-900 text-xs shadow-2xs">
+              <ArrowRightLeft size={13} className="text-blue-700" />
+              <span>أزرق: تحويلات بين العهد والصناديق</span>
+            </div>
+          </div>
+
+          {/* Quick Auditor Filter Chips */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-black text-slate-400 ml-1">تصفية سريعة:</span>
+            <button
+              onClick={() => setSelectedType('All')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                selectedType === 'All'
+                  ? 'bg-gray-900 text-white shadow-xs'
+                  : 'bg-white hover:bg-slate-200 text-slate-700 border border-slate-300'
+              }`}
+            >
+              الكل ({filteredCounts.total})
+            </button>
+            <button
+              onClick={() => setSelectedType('Income')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                selectedType === 'Income'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300'
+              }`}
+            >
+              <ArrowDownRight size={13} className="stroke-[2.5]" />
+              <span>الداخل فقط 🟢 ({filteredCounts.incoming})</span>
+            </button>
+            <button
+              onClick={() => setSelectedType('Expense')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                selectedType === 'Expense'
+                  ? 'bg-rose-600 text-white shadow-xs'
+                  : 'bg-rose-50 hover:bg-rose-100 text-rose-900 border border-rose-300'
+              }`}
+            >
+              <ArrowUpRight size={13} className="stroke-[2.5]" />
+              <span>الخارج فقط 🔴 ({filteredCounts.outgoing})</span>
+            </button>
+            <button
+              onClick={() => setSelectedType('Transfer')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                selectedType === 'Transfer'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-300'
+              }`}
+            >
+              <ArrowRightLeft size={13} />
+              <span>التحويلات 🔵 ({filteredCounts.transfers})</span>
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -454,68 +588,150 @@ export default function GlobalSearch({ branches, categories, employees }: Global
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-right border-collapse border-2 border-gray-900">
+          <div className="overflow-x-auto rounded-2xl border-2 border-gray-900">
+            <table className="w-full text-right border-collapse">
               <thead>
                 <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
-                  <th className="px-5 py-4 border-l border-white/10 text-center">#</th>
-                  <th className="px-5 py-4 border-l border-white/10">التاريخ والوقت</th>
-                  <th className="px-5 py-4 border-l border-white/10">الفرع</th>
-                  <th className="px-5 py-4 border-l border-white/10">التصنيف</th>
-                  <th className="px-5 py-4 border-l border-white/10">الموظف المسؤول</th>
-                  <th className="px-5 py-4 border-l border-white/10">البيان والتفاصيل</th>
-                  <th className="px-5 py-4 border-l border-white/10 text-center">الوارد (إيراد)</th>
-                  <th className="px-5 py-4 border-l border-white/10 text-center">المنصرف (مصروف)</th>
-                  <th className="px-5 py-4 text-center no-print">التفاصيل</th>
+                  <th className="px-4 py-4 border-l border-white/10 text-center w-12">#</th>
+                  <th className="px-4 py-4 border-l border-white/10 whitespace-nowrap">التاريخ والوقت</th>
+                  <th className="px-4 py-4 border-l border-white/10 text-center whitespace-nowrap">طبيعة الحركة</th>
+                  <th className="px-4 py-4 border-l border-white/10 whitespace-nowrap">الفرع</th>
+                  <th className="px-4 py-4 border-l border-white/10 whitespace-nowrap">التصنيف</th>
+                  <th className="px-4 py-4 border-l border-white/10 whitespace-nowrap">الموظف المسؤول</th>
+                  <th className="px-5 py-4 border-l border-white/10 min-w-[200px]">البيان والتفاصيل</th>
+                  <th className="px-5 py-4 border-l border-white/10 text-center whitespace-nowrap bg-emerald-950/70 text-emerald-300">
+                    الوارد (داخل 🟢)
+                  </th>
+                  <th className="px-5 py-4 border-l border-white/10 text-center whitespace-nowrap bg-rose-950/70 text-rose-300">
+                    المنصرف (خارج 🔴)
+                  </th>
+                  <th className="px-4 py-4 text-center no-print whitespace-nowrap">التفاصيل</th>
                 </tr>
               </thead>
-              <tbody className="divide-y-2 divide-gray-900 font-bold text-xs text-gray-800">
+              <tbody className="divide-y divide-gray-200 font-bold text-xs text-gray-800">
                 {filteredRows.map((row) => {
-                  const isTransfer = isTransferType(row.type, row.category);
+                  const isTransfer = isTransferType(row.type, row.category, row.description);
+                  const isInflow = row.income > 0;
+                  const isOutflow = row.expense > 0;
+
+                  let rowBg = "hover:bg-slate-50";
+                  let borderAccent = "border-r-[6px] border-r-gray-300";
+                  let flowBadge = null;
+
+                  if (isTransfer) {
+                    if (isInflow) {
+                      rowBg = "bg-blue-50/30 hover:bg-blue-100/50";
+                      borderAccent = "border-r-[6px] border-r-blue-500";
+                      flowBadge = (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-blue-100 text-blue-900 border border-blue-300 shadow-2xs whitespace-nowrap">
+                          <ArrowRightLeft size={12} className="text-blue-700" />
+                          <span>تحويل داخل 🟢</span>
+                        </span>
+                      );
+                    } else {
+                      rowBg = "bg-blue-50/20 hover:bg-blue-100/40";
+                      borderAccent = "border-r-[6px] border-r-blue-400";
+                      flowBadge = (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-blue-100 text-blue-900 border border-blue-300 shadow-2xs whitespace-nowrap">
+                          <ArrowRightLeft size={12} className="text-blue-700" />
+                          <span>تحويل خارج 🔴</span>
+                        </span>
+                      );
+                    }
+                  } else if (isInflow) {
+                    // Green classification for INFLOW / الداخل
+                    rowBg = "bg-emerald-50/40 hover:bg-emerald-100/60";
+                    borderAccent = "border-r-[6px] border-r-emerald-500";
+                    flowBadge = (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs whitespace-nowrap">
+                        <ArrowDownRight size={13} className="text-emerald-700 stroke-[2.5]" />
+                        <span>داخل (وارد)</span>
+                      </span>
+                    );
+                  } else if (isOutflow) {
+                    // Red classification for OUTFLOW / الخارج
+                    rowBg = "bg-rose-50/40 hover:bg-rose-100/60";
+                    borderAccent = "border-r-[6px] border-r-rose-500";
+                    flowBadge = (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-100 text-rose-900 border border-rose-300 shadow-2xs whitespace-nowrap">
+                        <ArrowUpRight size={13} className="text-rose-700 stroke-[2.5]" />
+                        <span>خارج (منصرف)</span>
+                      </span>
+                    );
+                  } else {
+                    rowBg = "hover:bg-gray-50";
+                    borderAccent = "border-r-[6px] border-r-gray-300";
+                    flowBadge = (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 border border-gray-200 whitespace-nowrap">
+                        قيد تسوية
+                      </span>
+                    );
+                  }
+
                   return (
-                    <tr key={row.index} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="px-5 py-4 border-l border-gray-900 font-mono text-center text-gray-400 font-black">
+                    <tr key={row.index} className={`${rowBg} ${borderAccent} transition-colors`}>
+                      <td className="px-4 py-3.5 border-l border-gray-200 font-mono text-center text-gray-400 font-black">
                         {row.index}
                       </td>
 
-                      <td className="px-5 py-4 border-l border-gray-900 font-mono text-gray-600 whitespace-nowrap">
-                        <div>{row.date}</div>
-                        {row.time && <div className="text-[10px] text-gray-400">{row.time}</div>}
+                      <td className="px-4 py-3.5 border-l border-gray-200 font-mono text-gray-700 whitespace-nowrap">
+                        <div className="font-bold">{row.date}</div>
+                        {row.time && <div className="text-[10px] text-gray-400 font-medium">{row.time}</div>}
                       </td>
 
-                      <td className="px-5 py-4 border-l border-gray-900 font-black whitespace-nowrap">
+                      <td className="px-4 py-3.5 border-l border-gray-200 text-center whitespace-nowrap">
+                        {flowBadge}
+                      </td>
+
+                      <td className="px-4 py-3.5 border-l border-gray-200 font-black text-gray-900 whitespace-nowrap">
                         {row.branch}
                       </td>
 
-                      <td className="px-5 py-4 border-l border-gray-900 whitespace-nowrap">
+                      <td className="px-4 py-3.5 border-l border-gray-200 whitespace-nowrap">
                         <span className={`px-2.5 py-1 rounded-md text-[10px] font-black inline-block ${
-                          isTransfer ? 'bg-blue-100 text-blue-900' : 
-                          row.expense > 0 ? 'bg-rose-100 text-rose-900' : 'bg-emerald-100 text-emerald-900'
+                          isTransfer ? 'bg-blue-100 text-blue-900 border border-blue-200' : 
+                          isInflow ? 'bg-emerald-100 text-emerald-900 border border-emerald-200' : 
+                          'bg-rose-100 text-rose-900 border border-rose-200'
                         }`}>
                           {row.category}
                         </span>
                       </td>
 
-                      <td className="px-5 py-4 border-l border-gray-900 whitespace-nowrap font-black">
+                      <td className="px-4 py-3.5 border-l border-gray-200 whitespace-nowrap font-black text-gray-800">
                         {row.employee || '-'}
                       </td>
 
-                      <td className="px-5 py-4 border-l border-gray-900 max-w-md font-medium text-gray-700 leading-snug">
+                      <td className="px-5 py-3.5 border-l border-gray-200 max-w-md font-medium text-gray-800 leading-snug">
                         {row.description}
                       </td>
 
-                      <td className="px-5 py-4 border-l border-gray-900 text-center font-mono font-black text-emerald-600 whitespace-nowrap">
-                        {row.income > 0 ? formatKWD(row.income) : '-'}
+                      {/* Income (داخل 🟢) */}
+                      <td className="px-5 py-3.5 border-l border-gray-200 text-center font-mono font-black whitespace-nowrap">
+                        {row.income > 0 ? (
+                          <span className="inline-flex items-center gap-0.5 px-2.5 py-1 bg-emerald-100/90 text-emerald-800 border border-emerald-300 rounded-lg shadow-2xs font-mono font-black">
+                            +{formatKWD(row.income)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300 font-normal">-</span>
+                        )}
                       </td>
 
-                      <td className="px-5 py-4 border-l border-gray-900 text-center font-mono font-black text-rose-600 whitespace-nowrap">
-                        {row.expense > 0 ? formatKWD(row.expense) : '-'}
+                      {/* Expense (خارج 🔴) */}
+                      <td className="px-5 py-3.5 border-l border-gray-200 text-center font-mono font-black whitespace-nowrap">
+                        {row.expense > 0 ? (
+                          <span className="inline-flex items-center gap-0.5 px-2.5 py-1 bg-rose-100/90 text-rose-800 border border-rose-300 rounded-lg shadow-2xs font-mono font-black">
+                            -{formatKWD(row.expense)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300 font-normal">-</span>
+                        )}
                       </td>
 
-                      <td className="px-5 py-4 text-center no-print whitespace-nowrap">
+                      <td className="px-4 py-3.5 text-center no-print whitespace-nowrap">
                         <button
                           onClick={() => setSelectedTx(row)}
-                          className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg text-[11px] font-black cursor-pointer transition-all inline-flex items-center gap-1"
+                          className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg text-[11px] font-black cursor-pointer transition-all inline-flex items-center gap-1 shadow-2xs"
+                          title="معاينة تفاصيل السند"
                         >
                           <ExternalLink size={12} /> معاينة
                         </button>
@@ -532,81 +748,138 @@ export default function GlobalSearch({ branches, categories, employees }: Global
 
       {/* Transaction Detail Modal */}
       <AnimatePresence>
-        {selectedTx && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm no-print">
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white border-2 border-gray-900 rounded-[2.5rem] max-w-lg w-full p-8 space-y-6 shadow-2xl relative overflow-hidden"
-            >
-              <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-blue-600 text-white rounded-2xl">
-                    <Hash size={22} />
+        {selectedTx && (() => {
+          const isModalInflow = selectedTx.income > 0;
+          const isModalTransfer = isTransferType(selectedTx.type, selectedTx.category, selectedTx.description);
+
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm no-print">
+              <motion.div 
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className={`bg-white border-2 rounded-[2.5rem] max-w-lg w-full p-8 space-y-6 shadow-2xl relative overflow-hidden ${
+                  isModalTransfer 
+                    ? 'border-blue-900' 
+                    : isModalInflow 
+                      ? 'border-emerald-600' 
+                      : 'border-rose-600'
+                }`}
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-3 rounded-2xl text-white shadow-sm ${
+                      isModalTransfer 
+                        ? 'bg-blue-600' 
+                        : isModalInflow 
+                          ? 'bg-emerald-600' 
+                          : 'bg-rose-600'
+                    }`}>
+                      {isModalTransfer ? (
+                        <ArrowRightLeft size={22} />
+                      ) : isModalInflow ? (
+                        <ArrowDownRight size={22} className="stroke-[2.5]" />
+                      ) : (
+                        <ArrowUpRight size={22} className="stroke-[2.5]" />
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-gray-900">سند العملية المالية #{selectedTx.index}</h3>
+                      <p className="text-xs font-bold text-gray-400">تاريخ القيد: {selectedTx.date}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-lg font-black text-gray-900">سند العملية المالية #{selectedTx.index}</h3>
-                    <p className="text-xs font-bold text-gray-400">تاريخ القيد: {selectedTx.date}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedTx(null)}
-                  className="text-gray-400 hover:text-gray-600 font-black text-lg"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="p-6 bg-gray-50 rounded-2xl border border-gray-200 space-y-4 font-bold text-xs text-gray-800">
-                <div className="flex justify-between items-center pb-2 border-b border-gray-200">
-                  <span className="text-gray-400">الفرع:</span>
-                  <span className="font-black text-gray-900">{selectedTx.branch}</span>
+                  <button
+                    onClick={() => setSelectedTx(null)}
+                    className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 font-black cursor-pointer transition-colors"
+                  >
+                    ✕
+                  </button>
                 </div>
 
-                <div className="flex justify-between items-center pb-2 border-b border-gray-200">
-                  <span className="text-gray-400">التصنيف الرئيسي:</span>
-                  <span className="font-black text-blue-600">{selectedTx.category}</span>
-                </div>
-
-                <div className="flex justify-between items-center pb-2 border-b border-gray-200">
-                  <span className="text-gray-400">الموظف المسؤول:</span>
-                  <span className="font-black text-gray-900">{selectedTx.employee || 'عام'}</span>
-                </div>
-
-                <div className="flex justify-between items-center pb-2 border-b border-gray-200">
-                  <span className="text-gray-400">المبلغ الإجمالي:</span>
-                  <span className="font-mono text-base font-black text-gray-900">
-                    {formatKWD(selectedTx.expense > 0 ? selectedTx.expense : selectedTx.income)} KWD
+                {/* Operation Direction Banner */}
+                <div className={`p-3.5 rounded-2xl border flex items-center justify-between text-xs font-black ${
+                  isModalTransfer
+                    ? 'bg-blue-50 border-blue-200 text-blue-900'
+                    : isModalInflow
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      : 'bg-rose-50 border-rose-200 text-rose-900'
+                }`}>
+                  <span className="flex items-center gap-1.5">
+                    {isModalTransfer ? (
+                      <>
+                        <ArrowRightLeft size={14} className="text-blue-600" />
+                        <span>تحويل نقدي بين العهد والصناديق</span>
+                      </>
+                    ) : isModalInflow ? (
+                      <>
+                        <ArrowDownRight size={15} className="text-emerald-600 stroke-[2.5]" />
+                        <span>حركة واردة (داخل الصندوق 🟢)</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowUpRight size={15} className="text-rose-600 stroke-[2.5]" />
+                        <span>حركة منصرفة (خارج الصندوق 🔴)</span>
+                      </>
+                    )}
+                  </span>
+                  <span className="font-mono text-sm">
+                    {isModalInflow ? `+${formatKWD(selectedTx.income)}` : `-${formatKWD(selectedTx.expense)}`} KWD
                   </span>
                 </div>
 
-                <div className="space-y-1">
-                  <span className="text-gray-400">البيان والتفاصيل:</span>
-                  <p className="p-3 bg-white border border-gray-200 rounded-xl font-medium text-gray-900 leading-relaxed">
-                    {selectedTx.description}
-                  </p>
+                <div className="p-6 bg-gray-50 rounded-2xl border border-gray-200 space-y-4 font-bold text-xs text-gray-800">
+                  <div className="flex justify-between items-center pb-2 border-b border-gray-200">
+                    <span className="text-gray-400">الفرع:</span>
+                    <span className="font-black text-gray-900">{selectedTx.branch}</span>
+                  </div>
+
+                  <div className="flex justify-between items-center pb-2 border-b border-gray-200">
+                    <span className="text-gray-400">التصنيف الرئيسي:</span>
+                    <span className="font-black text-blue-600">{selectedTx.category}</span>
+                  </div>
+
+                  <div className="flex justify-between items-center pb-2 border-b border-gray-200">
+                    <span className="text-gray-400">الموظف المسؤول:</span>
+                    <span className="font-black text-gray-900">{selectedTx.employee || 'عام'}</span>
+                  </div>
+
+                  <div className="flex justify-between items-center pb-2 border-b border-gray-200">
+                    <span className="text-gray-400">المبلغ الإجمالي:</span>
+                    <span className={`font-mono text-base font-black ${
+                      isModalInflow ? 'text-emerald-700' : 'text-rose-700'
+                    }`}>
+                      {formatKWD(selectedTx.expense > 0 ? selectedTx.expense : selectedTx.income)} KWD
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-gray-400">البيان والتفاصيل:</span>
+                    <p className="p-3 bg-white border border-gray-200 rounded-xl font-medium text-gray-900 leading-relaxed">
+                      {selectedTx.description}
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => window.print()}
-                  className="flex-1 py-3.5 bg-gray-900 hover:bg-gray-800 text-white rounded-2xl font-black text-xs flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Printer size={16} /> طباعة السند
-                </button>
-                <button
-                  onClick={() => setSelectedTx(null)}
-                  className="px-6 py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-2xl font-black text-xs cursor-pointer"
-                >
-                  إغلاق
-                </button>
-              </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => window.print()}
+                    className="flex-1 py-3.5 bg-gray-900 hover:bg-gray-800 text-white rounded-2xl font-black text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm"
+                  >
+                    <Printer size={16} /> طباعة السند
+                  </button>
+                  <button
+                    onClick={() => setSelectedTx(null)}
+                    className="px-6 py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-2xl font-black text-xs cursor-pointer transition-colors"
+                  >
+                    إغلاق
+                  </button>
+                </div>
 
-            </motion.div>
-          </div>
-        )}
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
 
     </div>

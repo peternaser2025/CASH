@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  FileText, 
   ShieldAlert, 
   CheckCircle2, 
   Clock, 
   Search, 
   Filter, 
-  DollarSign, 
   CreditCard, 
   Building, 
   User, 
@@ -17,7 +15,6 @@ import {
   Printer, 
   FileSpreadsheet,
   ArrowUpRight, 
-  ChevronDown, 
   AlertTriangle, 
   Send, 
   BadgeAlert,
@@ -25,10 +22,8 @@ import {
   Tag,
   Info,
   Check,
-  TrendingUp,
   BarChart3,
   CalendarClock,
-  Layers,
   Sparkles,
   ArrowDownRight
 } from 'lucide-react';
@@ -40,9 +35,7 @@ import {
   YAxis, 
   Tooltip, 
   CartesianGrid, 
-  Cell,
-  AreaChart,
-  Area
+  Cell
 } from 'recharts';
 import { gasService } from '../services/gasService';
 import { formatKWD, isTransferType, matchBranch, parseReportRow, isAccrualType } from '../utils/format';
@@ -133,44 +126,6 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
       } catch (e) {}
     }
   }, []);
-
-  // Safe helper to extract values from transaction rows whether array or object
-  const getRowVal = (row: any, arrayIndex: number, objKeys: string[]) => {
-    if (!row) return '';
-    if (Array.isArray(row)) {
-      return row[arrayIndex] !== undefined ? row[arrayIndex] : '';
-    }
-    if (typeof row === 'object') {
-      for (const key of objKeys) {
-        if (row[key] !== undefined && row[key] !== null) {
-          return row[key];
-        }
-      }
-    }
-    return '';
-  };
-
-  // Safe helper to extract numeric amount safely
-  const getRowAmount = (row: any, type: 'expense' | 'income' | 'amount') => {
-    if (!row) return 0;
-    if (Array.isArray(row)) {
-      if (type === 'income') return parseFloat(String(row[5] || 0)) || 0;
-      if (type === 'expense') return parseFloat(String(row[6] || 0)) || 0;
-      return parseFloat(String(row[6] || row[5] || 0)) || 0;
-    }
-    if (typeof row === 'object') {
-      if (type === 'income') {
-        if (row.income !== undefined) return parseFloat(String(row.income)) || 0;
-        return row.type === 'Income' ? (parseFloat(String(row.amount)) || 0) : 0;
-      }
-      if (type === 'expense') {
-        if (row.expense !== undefined) return parseFloat(String(row.expense)) || 0;
-        return (row.type === 'Expense' || row.type === 'مصروف' || !row.type) ? (parseFloat(String(row.amount)) || 0) : 0;
-      }
-      return parseFloat(String(row.amount !== undefined ? row.amount : (row.expense || row.income || 0))) || 0;
-    }
-    return 0;
-  };
 
   // Fetch all transactions from Google Sheets and extract Accrued/Credit items
   const fetchAccruals = async () => {
@@ -331,16 +286,6 @@ export default function AccrualLedger({ branches, categories, employees, onRefre
   useEffect(() => {
     fetchAccruals();
   }, [selectedBranch, settledHistory, startDate, endDate, enableDateFilter]);
-
-  // Mark single item as paid/settled directly without adding a new cash payout row
-  const handleMarkAsPaid = (item: AccrualItem) => {
-    const updatedSettled = {
-      ...settledHistory,
-      [item.id]: item.amount
-    };
-    setSettledHistory(updatedSettled);
-    localStorage.setItem('kwd_accrual_settlements', JSON.stringify(updatedSettled));
-  };
 
   // Bulk mark all currently visible items as settled
   const handleBulkMarkAllAsPaid = () => {

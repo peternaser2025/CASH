@@ -1,4 +1,4 @@
-import { Transaction, ReportFilter, EmployeeBalance, ReportData } from '../types';
+import { ReportFilter, EmployeeBalance, ReportData } from '../types';
 import { apiService } from './apiService';
 
 // Standard Vite env variable access

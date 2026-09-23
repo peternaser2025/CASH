@@ -26,7 +26,7 @@ export interface FullReconciliationReport {
 export function performReconciliation(
   transactions: any[],
   employees: { name: string; balance: number }[],
-  branches: string[]
+  _branches: string[] = []
 ): FullReconciliationReport {
   const items: ReconciliationResultItem[] = [];
   let totalDiscrepancyFils = 0;

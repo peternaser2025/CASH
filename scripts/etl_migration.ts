@@ -1,22 +1,21 @@
-import * as xlsx from 'xlsx';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // ============================================================================
 // ضبط متغيرات البيئة والاتصال بـ Supabase
 // ============================================================================
-const SUPABASE_URL: string = process.env.SUPABASE_URL || '';
-const SUPABASE_SERVICE_ROLE_KEY: string = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const EXCEL_FILE_PATH: string = './data/cash_ledger_source.xlsx';
+export const SUPABASE_URL: string = process.env.SUPABASE_URL || '';
+export const SUPABASE_SERVICE_ROLE_KEY: string = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+export const EXCEL_FILE_PATH: string = './data/cash_ledger_source.xlsx';
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.warn('تنبيه: SUPABASE_URL و SUPABASE_SERVICE_ROLE_KEY غير محددين، يتم العمل في وضع المحاكاة أو الإعداد المسبق.');
 }
 
-const supabase: SupabaseClient = createClient(SUPABASE_URL || 'https://placeholder.supabase.co', SUPABASE_SERVICE_ROLE_KEY || 'placeholder', {
+export const supabase: SupabaseClient = createClient(SUPABASE_URL || 'https://placeholder.supabase.co', SUPABASE_SERVICE_ROLE_KEY || 'placeholder', {
   auth: { persistSession: false }
 });
 
-interface ExcelRawTransaction {
+export interface ExcelRawTransaction {
   ID?: any;
   Date?: any;
   Employee?: any;
@@ -30,13 +29,13 @@ interface ExcelRawTransaction {
   'رقم الكمبيوتر'?: any;
 }
 
-interface ExcelRawEmployee {
+export interface ExcelRawEmployee {
   'Employee Name'?: any;
   'Current Balance'?: any;
   Status?: any;
 }
 
-interface ProcessedTransaction {
+export interface ProcessedTransaction {
   id: string;
   date: string;
   employee: string;
@@ -53,12 +52,12 @@ interface ProcessedTransaction {
   isZeroingCycleIntent: boolean;
 }
 
-function cleanText(val: any): string {
+export function cleanText(val: any): string {
   if (val === null || val === undefined) return '';
   return String(val).trim().replace(/\s+/g, ' ');
 }
 
-function parseKWD(val: any): number {
+export function parseKWD(val: any): number {
   if (val === null || val === undefined || val === '') return 0.000;
   const str = String(val).replace(/[^0-9.-]/g, '');
   const parsed = parseFloat(str);
@@ -66,7 +65,7 @@ function parseKWD(val: any): number {
   return Math.round(parsed * 1000) / 1000;
 }
 
-function parseISODate(val: any): string {
+export function parseISODate(val: any): string {
   if (!val) return new Date().toISOString().split('T')[0];
   if (typeof val === 'number') {
     const excelEpoch = new Date(Date.UTC(1899, 11, 30));
@@ -81,7 +80,7 @@ function parseISODate(val: any): string {
   return new Date().toISOString().split('T')[0];
 }
 
-function extractAccrualMonth(dateStr: string, description: string): string {
+export function extractAccrualMonth(dateStr: string, description: string): string {
   const desc = description.toLowerCase();
   const yearMatch = dateStr.substring(0, 4);
 
@@ -101,14 +100,14 @@ function extractAccrualMonth(dateStr: string, description: string): string {
   return dateStr.substring(0, 7);
 }
 
-function checkClosingIntent(type: string, desc: string, cat: string): { isClosing: boolean; isZeroing: boolean } {
+export function checkClosingIntent(type: string, desc: string, cat: string): { isClosing: boolean; isZeroing: boolean } {
   const combined = `${type} ${desc} ${cat}`.toLowerCase();
   const isZeroing = combined.includes('تصفير') || combined.includes('تصفير شهر');
   const isClosing = isZeroing || combined.includes('إغلاق') || combined.includes('اغلاق') || combined.includes('تص') || combined.includes('اقفال');
   return { isClosing, isZeroing };
 }
 
-async function syncJournalEntryWithLines(
+export async function syncJournalEntryWithLines(
   entryNumber: string,
   entryDate: string,
   referenceType: string,

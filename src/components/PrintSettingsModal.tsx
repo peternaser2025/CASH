@@ -1,18 +1,11 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Building2, 
   Save, 
   X, 
   Printer, 
   RotateCcw, 
-  ShieldCheck, 
-  Check, 
-  FileText,
-  Phone,
-  Mail,
-  MapPin,
-  Stamp
+  Check 
 } from 'lucide-react';
 import { 
   CompanyPrintProfile, 

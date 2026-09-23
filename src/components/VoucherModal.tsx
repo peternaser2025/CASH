@@ -1,21 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Printer, 
-  Download, 
   X, 
   CheckCircle2, 
   FileText, 
-  Building, 
-  User, 
-  Calendar, 
-  CreditCard, 
   Copy, 
-  Check, 
-  ArrowRightLeft, 
-  Share2,
-  Stamp,
-  Receipt
+  Check 
 } from 'lucide-react';
 import { formatKWD } from '../utils/format';
 import { tafqeetKWD } from '../utils/tafqeet';

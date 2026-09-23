@@ -1,15 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Printer, 
   X, 
-  FileText, 
   CheckCircle2, 
-  Clock, 
-  Building2, 
-  User, 
-  Truck, 
-  Package, 
   Receipt
 } from 'lucide-react';
 import { formatKWD } from '../utils/format';

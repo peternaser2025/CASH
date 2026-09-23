@@ -3,7 +3,6 @@ import QRCodeBadge from './QRCodeBadge';
 import { formatKWD } from '../../utils/format';
 import { tafqeetKWD } from '../../utils/tafqeet';
 import { CompanyPrintProfile, getCompanyProfile } from '../../utils/printConfig';
-import { Building2 } from 'lucide-react';
 
 interface ThermalReceiptViewProps {
   title: string;

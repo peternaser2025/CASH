@@ -4,7 +4,6 @@ import {
   RefreshCw, 
   TrendingUp, 
   TrendingDown, 
-  AlertTriangle, 
   CheckCircle2, 
   ShieldAlert, 
   Building, 
@@ -12,8 +11,6 @@ import {
   Save, 
   DollarSign,
   PieChart as PieIcon,
-  Percent,
-  Sliders,
   Printer
 } from 'lucide-react';
 import { gasService } from '../services/gasService';

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { Wallet, TrendingUp, TrendingDown, RefreshCw, Users, Activity, ArrowUpRight, ArrowDownRight, FileSpreadsheet, Search, Filter, ShieldCheck, Scale, Printer, Building, Calendar, FileText } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, RefreshCw, Users, Activity, ArrowUpRight, ArrowDownRight, FileSpreadsheet, Search, ShieldCheck, Scale, Printer, Plus, FileText } from 'lucide-react';
 import { EmployeeBalance } from '../types';
 import { formatKWD } from '../utils/format';
 import { sumMoney } from '../utils/money';
@@ -254,12 +254,12 @@ export default function Dashboard({ balances, loading, onRefresh, onFeedCustody,
         <div className="overflow-x-auto">
           <table className="w-full text-right">
             <thead>
-              <tr className="text-gray-400 text-xs font-black uppercase tracking-widest border-b border-gray-50 bg-slate-50/50">
-                <th className="px-8 py-5">الموظف / العهدة</th>
-                <th className="px-8 py-5 text-center">الحالة المالية</th>
-                <th className="px-8 py-5 text-center">نسبة الحصة من السيولة</th>
-                <th className="px-8 py-5">الرصيد الحالي</th>
-                <th className="px-8 py-5 text-left">التوثيق</th>
+              <tr className="text-gray-400 text-xs font-black uppercase tracking-widest border-b border-gray-100 bg-slate-50/70">
+                <th className="px-6 py-4">الموظف / العهدة</th>
+                <th className="px-6 py-4 text-center">الحالة المالية</th>
+                <th className="px-6 py-4 text-center">نسبة الحصة من السيولة</th>
+                <th className="px-6 py-4">الرصيد الحالي</th>
+                <th className="px-6 py-4 text-center no-print">الإجراءات والعمليات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -316,7 +316,7 @@ export default function Dashboard({ balances, loading, onRefresh, onFeedCustody,
                           </div>
                         </div>
                       </td>
-                      <td className="px-8 py-5">
+                      <td className="px-6 py-4">
                         <div className="flex flex-col">
                           <span className={`text-xl font-black font-mono ${item.balance < 0 ? 'text-rose-600' : 'text-gray-900'}`}>
                             {formatKWD(item.balance)}
@@ -324,10 +324,31 @@ export default function Dashboard({ balances, loading, onRefresh, onFeedCustody,
                           <span className="text-[10px] text-gray-400 font-bold uppercase">دينار كويتي</span>
                         </div>
                       </td>
-                      <td className="px-8 py-5 text-left">
-                        <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold border border-slate-200">
-                          <ShieldCheck size={14} className="text-emerald-600" />
-                          <span>موثق</span>
+                      <td className="px-6 py-4 text-center no-print">
+                        <div className="flex items-center justify-center gap-2">
+                          {onFeedCustody && (
+                            <button
+                              onClick={() => onFeedCustody(item.name)}
+                              className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-black transition-all flex items-center gap-1 border border-emerald-200 cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
+                              title={`تغذية عهدة ${item.name}`}
+                            >
+                              <Plus size={13} className="stroke-[2.5]" />
+                              <span>تغذية</span>
+                            </button>
+                          )}
+                          {onViewReport && (
+                            <button
+                              onClick={() => onViewReport(item.name)}
+                              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-black transition-all flex items-center gap-1 border border-slate-200 cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
+                              title={`كشف حساب ${item.name}`}
+                            >
+                              <FileText size={13} />
+                              <span>كشف الحساب</span>
+                            </button>
+                          )}
+                          <div className="hidden lg:inline-flex items-center gap-1 px-2 py-1 bg-slate-50 text-slate-500 rounded-lg text-[10px] font-bold border border-slate-200" title="عهدة موثقة ومطابقة">
+                            <ShieldCheck size={12} className="text-emerald-600" />
+                          </div>
                         </div>
                       </td>
                     </tr>

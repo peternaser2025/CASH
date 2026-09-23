@@ -9,28 +9,21 @@ import {
   DollarSign, 
   CheckCircle2, 
   AlertTriangle, 
-  FileSpreadsheet, 
   Layers,
   ArrowDownLeft,
-  ArrowUpRight,
+  ArrowUpRight, 
   ClipboardList,
   ShieldCheck,
   Building,
-  Sparkles,
   ArrowRightLeft,
   ShoppingBag,
   SlidersHorizontal,
   Download,
-  Eye,
-  FileText,
-  Building2,
-  Receipt,
   X,
   Loader2,
   TrendingUp,
   Gauge,
-  FileDown,
-  Check
+  FileDown
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
@@ -48,12 +41,9 @@ import PrintWatermark from './print/PrintWatermark';
 import PrintToolbar from './print/PrintToolbar';
 import PrintSettingsModal from './PrintSettingsModal';
 import { 
-  formatKWD, 
   parseReportRow, 
   isArabicSearchMatch, 
   isTransferType, 
-  isIncomeType, 
-  isExpenseType, 
   isAccrualType, 
   extractTransferParties, 
   matchBranch 
@@ -62,7 +52,7 @@ import {
 interface SettlementsManagerProps {
   balances: EmployeeBalance[];
   branches: string[];
-  categories: string[];
+  categories?: string[];
   employees: string[];
   onRefresh: () => void;
 }
@@ -72,7 +62,6 @@ type PrintMode = 'all' | 'summary' | 'transfers' | 'purchases' | 'branches';
 export default function SettlementsManager({
   balances,
   branches,
-  categories,
   employees,
   onRefresh
 }: SettlementsManagerProps) {
@@ -98,7 +87,6 @@ export default function SettlementsManager({
   const [showBranchesSection, setShowBranchesSection] = useState(true);
   const [showTransfersSection, setShowTransfersSection] = useState(true);
   const [showPurchasesSection, setShowPurchasesSection] = useState(true);
-  const [showSummaryTable, setShowSummaryTable] = useState(true);
 
   // Search & Filter States
   const [purchaseSearch, setPurchaseSearch] = useState('');

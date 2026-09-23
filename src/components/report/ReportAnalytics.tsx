@@ -27,7 +27,7 @@ interface ReportAnalyticsProps {
   computedRows: ComputedReportRow[];
 }
 
-export default function ReportAnalytics({ rows, computedRows }: ReportAnalyticsProps) {
+export default function ReportAnalytics({ computedRows }: ReportAnalyticsProps) {
   return (
     <>
       {/* Visual Analytics Charts Section */}

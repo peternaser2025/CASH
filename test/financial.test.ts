@@ -1,4 +1,4 @@
-import { toFils, toKWD, addMoney, subMoney, sumMoney, isMoneyEqual, normalizeEntityId } from '../src/utils/money';
+import { toFils, addMoney, subMoney, sumMoney, isMoneyEqual, normalizeEntityId } from '../src/utils/money';
 import { performReconciliation } from '../server/reconciliation';
 import { transactionSchema, orderSchema } from '../server/validation';
 

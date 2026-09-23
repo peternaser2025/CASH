@@ -6,8 +6,6 @@ import {
   AlertCircle, 
   CheckCircle2, 
   Wallet, 
-  ArrowRight,
-  ShieldCheck,
   Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';

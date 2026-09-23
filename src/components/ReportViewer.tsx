@@ -57,13 +57,13 @@ export const ALL_COLUMNS: { id: ReportColumnId; label: string; desc: string }[] 
 
 interface ReportViewerProps {
   employees: string[];
-  balances: EmployeeBalance[];
+  balances?: EmployeeBalance[];
   branches: string[];
   categories: string[];
   initialEmployee?: string;
 }
 
-export default function ReportViewer({ employees, balances, branches, categories, initialEmployee }: ReportViewerProps) {
+export default function ReportViewer({ employees, balances = [], branches, categories, initialEmployee }: ReportViewerProps) {
   const [filters, setFilters] = useState<ReportFilter>({
     employee: initialEmployee || '',
     branch: '',
@@ -83,6 +83,13 @@ export default function ReportViewer({ employees, balances, branches, categories
   const [activeVoucher, setActiveVoucher] = useState<VoucherData | null>(null);
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+
+  // Live Ledger Balance for selected employee
+  const liveEmployeeBalance = React.useMemo(() => {
+    if (!filters.employee || !balances.length) return null;
+    const found = balances.find(b => b.name.trim() === filters.employee.trim());
+    return found ? found.balance : null;
+  }, [filters.employee, balances]);
 
   // Column Customization State
   const [visibleColumns, setVisibleColumns] = useState<Record<ReportColumnId, boolean>>({
@@ -630,6 +637,31 @@ export default function ReportViewer({ employees, balances, branches, categories
         loading={loading}
         totalRecordsCount={report ? report.rows.length : undefined}
       />
+
+      {/* Live Custody Ledger Summary Card */}
+      {filters.employee && liveEmployeeBalance !== null && (
+        <div className="no-print p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-base shadow-xs">
+              {filters.employee.charAt(0)}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black text-slate-900">{filters.employee}</span>
+                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-black">
+                  رصيد الخزينة الحي
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-medium">الرصيد الفعلي المعتمد في السجلات المركزية للعهدة</p>
+            </div>
+          </div>
+          <div className="text-left font-mono">
+            <span className={`text-xl font-black ${liveEmployeeBalance < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+              {formatKWD(liveEmployeeBalance)} د.ك
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Error Message */}
       {error && (

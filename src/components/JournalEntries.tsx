@@ -5,24 +5,18 @@ import {
   Printer, 
   RefreshCw, 
   Search, 
-  Filter, 
   Copy, 
   Check, 
   Layers, 
-  ArrowRightLeft, 
   CheckCircle2, 
-  FileSpreadsheet,
-  Building,
-  Calendar,
-  User,
-  Scale,
-  FileText,
-  SlidersHorizontal,
-  Settings2
+  Building, 
+  User, 
+  Scale, 
+  FileText 
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
-import { parseReportRow, matchBranch, normalizeArabic, formatKWD } from '../utils/format';
+import { parseReportRow, matchBranch, normalizeArabic } from '../utils/format';
 import VoucherModal, { VoucherData } from './VoucherModal';
 import { exportElementToPDF } from '../utils/pdfExport';
 import { 
@@ -38,7 +32,7 @@ import PrintToolbar from './print/PrintToolbar';
 import PrintSettingsModal from './PrintSettingsModal';
 
 interface JournalEntriesProps {
-  balances: EmployeeBalance[];
+  balances?: EmployeeBalance[];
   branches: string[];
   categories: string[];
   employees: string[];
@@ -61,7 +55,6 @@ interface JournalLine {
 }
 
 export default function JournalEntries({
-  balances,
   branches,
   categories,
   employees,
@@ -515,7 +508,7 @@ export default function JournalEntries({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-bold">
-              {filteredEntries.map((e, index) => (
+              {filteredEntries.map(e => (
                 <React.Fragment key={e.id}>
                   {/* Debit Line */}
                   <tr className="hover:bg-slate-50/50 transition-colors">

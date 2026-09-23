@@ -5,8 +5,6 @@ import {
   AlertTriangle, 
   ShieldAlert, 
   CheckCircle2, 
-  Coins, 
-  ArrowUpRight, 
   Sliders, 
   Volume2, 
   VolumeX, 
@@ -16,11 +14,8 @@ import {
   ChevronUp, 
   Settings, 
   X, 
-  Info,
-  Clock,
-  Sparkles,
-  RefreshCw,
-  Scale
+  Clock, 
+  RefreshCw 
 } from 'lucide-react';
 import { EmployeeBalance } from '../types';
 import { formatKWD } from '../utils/format';
@@ -104,7 +99,7 @@ export default function CustodyAlertRadar({ balances, onFeedCustody, onViewRepor
   };
 
   // Categorize balances into alert statuses
-  const { alertedList, criticalCount, depletedCount, warningCount, safeCount } = useMemo(() => {
+  const { alertedList, criticalCount, depletedCount, warningCount } = useMemo(() => {
     let crit = 0;
     let dep = 0;
     let warn = 0;

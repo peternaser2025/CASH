@@ -1,4 +1,4 @@
-import { EmployeeBalance, Order, ReportFilter, ReportData, Transaction } from '../types';
+import { EmployeeBalance, Order, ReportFilter, ReportData } from '../types';
 
 export const apiService = {
   // 1. Health & Server Status

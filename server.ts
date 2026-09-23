@@ -1,18 +1,14 @@
 import express from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
-import { transactionSchema, employeeSchema, orderSchema, settingsSchema } from './server/validation';
+import { transactionSchema, employeeSchema, orderSchema } from './server/validation';
 import { auditService } from './server/audit';
 import { performReconciliation } from './server/reconciliation';
 import { toFils, toKWD, normalizeEntityId } from './src/utils/money';
 import { normalizeExcelDate } from './src/utils/format';
 import { getSupabaseServerClient } from './server/supabase';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;
@@ -137,18 +133,6 @@ function recalculateAuthoritativeBalances() {
 }
 
 // Unified API Response Formatter
-function sendSuccess(res: express.Response, data: any, message?: string, meta?: any, statusCode = 200) {
-  return res.status(statusCode).json({
-    success: true,
-    data,
-    message,
-    meta: {
-      timestamp: new Date().toISOString(),
-      ...meta
-    }
-  });
-}
-
 function sendError(res: express.Response, error: string, statusCode = 400, details?: any) {
   return res.status(statusCode).json({
     success: false,
@@ -168,7 +152,7 @@ recalculateAuthoritativeBalances();
 // ----------------------------------------------------
 
 // 1. Health & Server Status
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -182,7 +166,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // 2. Settings (Branches & Categories)
-app.get('/api/settings', (req, res) => {
+app.get('/api/settings', (_req, res) => {
   res.json({
     branches: serverStore.branches,
     categories: serverStore.categories
@@ -373,7 +357,7 @@ app.delete('/api/transactions/:id', (req, res) => {
 });
 
 // 4. Balances Endpoint (Single Source of Truth, computed via exact integer fils)
-app.get('/api/balances', (req, res) => {
+app.get('/api/balances', (_req, res) => {
   recalculateAuthoritativeBalances();
   saveStore(serverStore);
 
@@ -392,7 +376,7 @@ app.get('/api/balances', (req, res) => {
 });
 
 // 4.1. Financial Reconciliation Endpoint (Periodical & On-Demand Audit)
-app.get('/api/reconciliation', (req, res) => {
+app.get('/api/reconciliation', (_req, res) => {
   const report = performReconciliation(
     serverStore.transactions,
     serverStore.employees,
@@ -458,7 +442,7 @@ app.get('/api/audit-logs', (req, res) => {
 });
 
 // 5. Employees CRUD
-app.get('/api/employees', (req, res) => {
+app.get('/api/employees', (_req, res) => {
   res.json({ success: true, employees: serverStore.employees, data: serverStore.employees });
 });
 
@@ -513,7 +497,7 @@ app.delete('/api/employees/:name', (req, res) => {
 });
 
 // 6. Orders CRUD
-app.get('/api/orders', (req, res) => {
+app.get('/api/orders', (_req, res) => {
   res.json({ success: true, orders: serverStore.orders || [], data: serverStore.orders || [] });
 });
 
@@ -602,7 +586,7 @@ app.delete('/api/orders/:id', (req, res) => {
 });
 
 // 6.1 Automated Test Suite Diagnostic Endpoint
-app.get('/api/health/test-suite', (req, res) => {
+app.get('/api/health/test-suite', (_req, res) => {
   const report = performReconciliation(
     serverStore.transactions,
     serverStore.employees,
@@ -632,7 +616,7 @@ app.get('/api/health/test-suite', (req, res) => {
 });
 
 // 7. Budgets CRUD
-app.get('/api/budgets', (req, res) => {
+app.get('/api/budgets', (_req, res) => {
   res.json({ success: true, budgets: serverStore.budgets || [] });
 });
 
@@ -646,7 +630,7 @@ app.post('/api/budgets', (req, res) => {
 });
 
 // 8. Settlements CRUD
-app.get('/api/settlements', (req, res) => {
+app.get('/api/settlements', (_req, res) => {
   res.json({ success: true, settlements: serverStore.settlements || [] });
 });
 
@@ -859,7 +843,7 @@ async function start() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

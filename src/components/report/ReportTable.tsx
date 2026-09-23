@@ -2,8 +2,7 @@ import React from 'react';
 import { 
   Edit2, 
   Trash2, 
-  Printer, 
-  CheckCircle2 
+  Printer 
 } from 'lucide-react';
 import { formatKWD, isIncomeType, isTransferType } from '../../utils/format';
 import { ReportColumnId } from '../ReportViewer';

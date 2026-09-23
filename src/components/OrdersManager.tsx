@@ -1,42 +1,28 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Truck,
-  Calendar,
   Clock,
   AlertTriangle,
   CheckCircle2,
   Plus,
   Search,
-  Filter,
   Eye,
   Edit,
   Trash2,
   FileSpreadsheet,
   Printer,
   FileDown,
-  ChevronDown,
   Building2,
   User,
-  Phone,
   Package,
-  Check,
   X,
-  Layers,
-  ArrowRight,
-  TrendingUp,
-  AlertCircle,
-  Timer,
-  CheckCircle,
   ListOrdered,
   CalendarClock,
   Kanban,
-  FileText,
   DollarSign,
   Loader2,
-  RefreshCw,
-  Sparkles
+  RefreshCw
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
 import { Order, OrderItem, OrderPriority, OrderStatus, OrderType, PaymentStatus } from '../types';
 import { formatKWD, normalizeArabicSearch } from '../utils/format';
@@ -685,6 +671,18 @@ export default function OrdersManager({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Refresh Button */}
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-black rounded-xl transition-all cursor-pointer"
+              title="تحديث ومزامنة البيانات"
+            >
+              <RefreshCw size={15} />
+              <span className="hidden sm:inline">تحديث</span>
+            </button>
+          )}
+
           {/* Add New Order Button */}
           <button
             onClick={handleOpenCreateModal}

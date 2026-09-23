@@ -1,17 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
-  Calendar, 
-  Building, 
   Calculator, 
   Save, 
   History, 
   RefreshCw, 
   CheckCircle, 
-  AlertTriangle, 
   Printer, 
   Trash2, 
   FileSpreadsheet, 
@@ -19,21 +13,20 @@ import {
   X,
   Search,
   FileText,
-  HelpCircle,
   Tag,
-  Package
+  Package,
+  Loader2
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
 import { formatKWD, isTransferType, matchBranch, parseReportRow } from '../utils/format';
 import { exportReportToExcel } from '../utils/excelExport';
 import { exportElementToPDF } from '../utils/pdfExport';
-import { Loader2 } from 'lucide-react';
 
 interface ProfitLossProps {
   branches: string[];
-  categories: string[];
-  balances: EmployeeBalance[];
+  categories?: string[];
+  balances?: EmployeeBalance[];
   onRefresh: () => void;
 }
 
@@ -74,7 +67,7 @@ interface SavedPLRecord {
   notes?: string;
 }
 
-export default function ProfitLoss({ branches, categories, balances, onRefresh }: ProfitLossProps) {
+export default function ProfitLoss({ branches, onRefresh }: ProfitLossProps) {
   // Selections
   const [selectedBranch, setSelectedBranch] = useState<string>(branches[0] || 'المكتب الرئيسي');
   
@@ -346,7 +339,6 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
   const [pulledUnpaidExpenses, setPulledUnpaidExpenses] = useState<number>(0);
   const [pulledUnpaidPurchases, setPulledUnpaidPurchases] = useState<number>(0);
   const [loadingPulled, setLoadingPulled] = useState<boolean>(false);
-  const [pullError, setPullError] = useState<string | null>(null);
 
   // Drilldown Modal state
   const [detailModal, setDetailModal] = useState<{
@@ -379,30 +371,13 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
     }
   }, []);
 
-  // Safe helper to extract values from transaction rows
-  const getRowValue = (row: any, index: number, key: string) => {
-    if (Array.isArray(row)) {
-      return row[index];
-    } else if (row && typeof row === 'object') {
-      return row[key];
-    }
-    return undefined;
-  };
-
   // Pull transactions for the selected branch and month
   const handlePullBranchData = async () => {
     if (!selectedBranch || !selectedMonth) return;
     setLoadingPulled(true);
-    setPullError(null);
 
     try {
-      const [year, monthStr] = selectedMonth.split('-');
-      const yearNum = parseInt(year);
-      const monthNum = parseInt(monthStr) - 1;
-      
-      const startDate = `${year}-${monthStr}-01`;
-      const lastDay = new Date(yearNum, monthNum + 1, 0).getDate();
-      const endDate = `${year}-${monthStr}-${String(lastDay).padStart(2, '0')}`;
+      const defaultMonthDate = `${selectedMonth}-01`;
 
       // Fetch full report to accurately process targetMonth vs creation date
       const reportData = await gasService.getReport({
@@ -429,7 +404,7 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
 
       reportData.rows.forEach((rawRow: any, idx: number) => {
         const pRow = parseReportRow(rawRow);
-        const date = pRow.date || startDate;
+        const date = pRow.date || defaultMonthDate;
         const employee = pRow.employee || 'عام';
         const branch = pRow.branch || selectedBranch;
 
@@ -553,7 +528,6 @@ export default function ProfitLoss({ branches, categories, balances, onRefresh }
 
     } catch (err) {
       console.error('Error pulling branch P&L data:', err);
-      setPullError('فشل جلب الحركات المالية التلقائية من السيرفر.');
     } finally {
       setLoadingPulled(false);
     }

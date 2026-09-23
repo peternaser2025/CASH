@@ -1,5 +1,4 @@
 import React from 'react';
-import { Stamp as StampIcon, CheckCircle2 } from 'lucide-react';
 import { CompanyPrintProfile, getCompanyProfile } from '../../utils/printConfig';
 
 interface PrintSignaturesProps {
@@ -65,7 +64,7 @@ export default function PrintSignatures({
                 </span>
                 <div className="h-[1px] w-12 bg-emerald-700/60 my-0.5" />
                 <span className="text-[8px] font-black text-emerald-700 tracking-wider">
-                  ★ مُـعـتـمـد ★
+                  {customStampText || '★ مُـعـتـمـد ★'}
                 </span>
                 <span className="text-[6px] font-mono font-bold text-emerald-800">
                   {currentDate}
