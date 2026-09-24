@@ -17,7 +17,8 @@ import {
   AlertCircle,
   CalendarCheck2,
   TrendingDown,
-  Coins
+  Coins,
+  Layers
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
@@ -36,6 +37,7 @@ import PrintWatermark from './print/PrintWatermark';
 import PrintToolbar from './print/PrintToolbar';
 import PrintSettingsModal from './PrintSettingsModal';
 import VoucherModal, { VoucherData } from './VoucherModal';
+import BranchMultiColumnJournal from './journal/BranchMultiColumnJournal';
 
 interface DailyJournalProps {
   balances: EmployeeBalance[];
@@ -94,6 +96,7 @@ export default function DailyJournal({
   // Today's date by default (YYYY-MM-DD)
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+  const [journalViewMode, setJournalViewMode] = useState<'branch-multicolumn' | 'fund-summary'>('branch-multicolumn');
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'spent' | 'owing' | 'inactive'>('all');
@@ -473,6 +476,106 @@ export default function DailyJournal({
 
   // Export to Excel
   const handleExportExcel = () => {
+    if (journalViewMode === 'branch-multicolumn') {
+      const activeBranches = branches.filter(b => b && b !== 'all' && b !== 'عام');
+      const filteredDayTx = parsedRows.filter(row => {
+        if (row.date && selectedDate && row.date !== selectedDate) return false;
+        if (selectedBranch !== 'all' && !matchBranch(row.branch, selectedBranch)) return false;
+        if (selectedEmployee !== 'all' && row.employee.trim().toLowerCase() !== selectedEmployee.trim().toLowerCase()) return false;
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          const combined = `${row.employee} ${row.category} ${row.description} ${row.branch}`.toLowerCase();
+          if (!combined.includes(q)) return false;
+        }
+        return true;
+      });
+
+      const branchHeaders = activeBranches.map(b => `مصروفات فرع ${b} (-)`);
+      const headers = [
+        'م',
+        'المسؤول / الصندوق',
+        'الفرع التابع',
+        'التصنيف',
+        'البيان والتفاصيل',
+        'عمود المقبوضات (وارد +)',
+        ...branchHeaders,
+        'مصروفات أخرى / غير مصنفة (-)',
+        'إجمالي المصروفات (-)',
+        'صافي الأثر النقدي (د.ك)'
+      ];
+
+      let totReceipts = 0;
+      let totExpenses = 0;
+      const branchExpenseSums: Record<string, number> = {};
+      activeBranches.forEach(b => { branchExpenseSums[b] = 0; });
+      let totOther = 0;
+
+      const rows = filteredDayTx.map((row, idx) => {
+        const receiptAmt = row.income > 0 ? row.income : 0;
+        const expAmt = row.expense > 0 ? row.expense : 0;
+        totReceipts += receiptAmt;
+        totExpenses += expAmt;
+
+        let matchedBranch = '';
+        if (expAmt > 0) {
+          for (const b of activeBranches) {
+            if (matchBranch(row.branch, b)) {
+              matchedBranch = b;
+              break;
+            }
+          }
+          if (matchedBranch) {
+            branchExpenseSums[matchedBranch] = (branchExpenseSums[matchedBranch] || 0) + expAmt;
+          } else {
+            totOther += expAmt;
+          }
+        }
+
+        return [
+          idx + 1,
+          row.employee,
+          row.branch,
+          row.category,
+          row.description,
+          receiptAmt,
+          ...activeBranches.map(b => b === matchedBranch ? expAmt : 0),
+          matchedBranch ? 0 : expAmt,
+          expAmt,
+          receiptAmt - expAmt
+        ];
+      });
+
+      const totalsRow = [
+        'الإجمالي العام لليومية',
+        '-',
+        '-',
+        '-',
+        `عدد العمليات: ${rows.length}`,
+        totReceipts,
+        ...activeBranches.map(b => branchExpenseSums[b] || 0),
+        totOther,
+        totExpenses,
+        totReceipts - totExpenses
+      ];
+
+      exportReportToExcel({
+        fileName: `يومية_المقبوضات_ومصروفات_الأفرع_${selectedDate}`,
+        sheetName: 'اليومية التحليلية بالأفرع',
+        reportTitle: `دفتر اليومية العامة والتحليلية متعددة الأعمدة (المقبوضات ومصروفات الأفرع)`,
+        subtitle: `تاريخ اليومية: ${selectedDate} | إجمالي المقبوضات: ${formatKWD(totReceipts)} د.ك | إجمالي المصروفات: ${formatKWD(totExpenses)} د.ك | صافي اليومية: ${formatKWD(totReceipts - totExpenses)} د.ك`,
+        summaryCards: [
+          { label: 'إجمالي المقبوضات اليومية (+)', value: totReceipts },
+          { label: 'إجمالي مصروفات الأفرع (-)', value: totExpenses },
+          { label: 'صافي حركة اليومية (د.ك)', value: totReceipts - totExpenses },
+          { label: 'عدد العمليات', value: `${rows.length} حركة` }
+        ],
+        headers,
+        rows,
+        totalsRow
+      });
+      return;
+    }
+
     const fileName = `يومية_الصناديق_صرف_وعليه_${selectedDate}`;
 
     // Table 1: Funds Summary (صرف إيه وعليه إيه)
@@ -573,14 +676,18 @@ export default function DailyJournal({
 
   // Export to PDF
   const handleExportPDF = async () => {
-    const el = document.getElementById('printable-daily-journal');
+    const targetId = journalViewMode === 'branch-multicolumn' ? 'printable-branch-journal' : 'printable-daily-journal';
+    const el = document.getElementById(targetId);
     if (!el) return;
 
     setPdfLoading(true);
     try {
       const orientation = printOptions.paperSize === 'A4-portrait' ? 'portrait' : 'landscape';
+      const filename = journalViewMode === 'branch-multicolumn'
+        ? `يومية_المقبوضات_ومصروفات_الأفرع_${selectedDate}.pdf`
+        : `يومية_الصناديق_صرف_وعليه_${selectedDate}.pdf`;
       await exportElementToPDF(el, {
-        filename: `يومية_الصناديق_صرف_وعليه_${selectedDate}.pdf`,
+        filename,
         orientation,
         margins: 'narrow',
         scale: 100
@@ -645,7 +752,7 @@ export default function DailyJournal({
 
           <button
             onClick={handleExportPDF}
-            disabled={loading || pdfLoading || filteredFundRecords.length === 0}
+            disabled={loading || pdfLoading || (journalViewMode === 'branch-multicolumn' ? parsedRows.length === 0 : filteredFundRecords.length === 0)}
             className="px-4 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-40"
           >
             <FileDown size={16} />
@@ -654,7 +761,7 @@ export default function DailyJournal({
 
           <button
             onClick={handleExportExcel}
-            disabled={loading || filteredFundRecords.length === 0}
+            disabled={loading || (journalViewMode === 'branch-multicolumn' ? parsedRows.length === 0 : filteredFundRecords.length === 0)}
             className="px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-40"
           >
             <FileSpreadsheet size={16} />
@@ -663,13 +770,57 @@ export default function DailyJournal({
 
           <button
             onClick={handlePrint}
-            disabled={loading || filteredFundRecords.length === 0}
+            disabled={loading || (journalViewMode === 'branch-multicolumn' ? parsedRows.length === 0 : filteredFundRecords.length === 0)}
             className="px-5 py-3 bg-slate-950 hover:bg-black text-white rounded-xl font-black text-xs flex items-center gap-2 shadow-md transition-all cursor-pointer disabled:opacity-40"
           >
             <Printer size={16} />
             <span>طباعة اليومية</span>
           </button>
         </div>
+      </div>
+
+      {/* View Mode Switcher (No Print) */}
+      <div className="no-print bg-slate-100 p-1.5 rounded-2xl flex flex-col sm:flex-row items-stretch gap-2 border border-slate-200">
+        <button
+          onClick={() => setJournalViewMode('branch-multicolumn')}
+          className={`flex-1 py-3 px-4 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center sm:justify-start gap-2.5 cursor-pointer ${
+            journalViewMode === 'branch-multicolumn'
+              ? 'bg-white text-emerald-950 shadow-xs border border-slate-200'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Layers size={18} className={journalViewMode === 'branch-multicolumn' ? 'text-emerald-600' : 'text-slate-400'} />
+          <div className="text-right">
+            <div className="flex items-center gap-2">
+              <span className="font-black">اليومية التحليلية بالأفرع والمقبوضات (الأمريكية)</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold ${
+                journalViewMode === 'branch-multicolumn' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+              }`}>
+                مقسمة بالأفرع
+              </span>
+            </div>
+            <span className="text-[11px] text-slate-500 font-medium">
+              عمود مخصص للمقبوضات + أعمدة مستقلة لمصروفات كل فرع + إجمالي المنصرف والصافي + طباعة رسمية
+            </span>
+          </div>
+        </button>
+
+        <button
+          onClick={() => setJournalViewMode('fund-summary')}
+          className={`flex-1 py-3 px-4 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center sm:justify-start gap-2.5 cursor-pointer ${
+            journalViewMode === 'fund-summary'
+              ? 'bg-white text-slate-950 shadow-xs border border-slate-200'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Wallet size={18} className={journalViewMode === 'fund-summary' ? 'text-emerald-600' : 'text-slate-400'} />
+          <div className="text-right">
+            <span className="font-black">موقف الصناديق والعهد (صرف إيه وعليه إيه)</span>
+            <span className="text-[11px] text-slate-500 font-medium block">
+              كشف تفصيلي لحسابات أمناء الصناديق: الرصيد الافتتاحي، الوارد، ما صرفه، وما عليه في ذمته
+            </span>
+          </div>
+        </button>
       </div>
 
       {/* Filter Control Bar (no-print) */}
@@ -826,8 +977,24 @@ export default function DailyJournal({
         </div>
       )}
 
-      {/* Print Toolbar Component */}
-      <div className="no-print">
+      {/* Primary Content: Multi-column Branch Journal (Default) vs Fund Summary */}
+      {journalViewMode === 'branch-multicolumn' ? (
+        <BranchMultiColumnJournal
+          selectedDate={selectedDate}
+          transactions={parsedRows}
+          branches={branches}
+          companyProfile={companyProfile}
+          printOptions={printOptions}
+          onChangePrintOptions={setPrintOptions}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          searchQuery={searchQuery}
+          selectedBranchFilter={selectedBranch}
+          selectedEmployeeFilter={selectedEmployee}
+        />
+      ) : (
+        <>
+          {/* Print Toolbar Component */}
+          <div className="no-print">
         <PrintToolbar
           options={printOptions}
           onChangeOptions={setPrintOptions}
@@ -1373,6 +1540,8 @@ export default function DailyJournal({
           />
         </div>
       </div>
+    </>
+  )}
 
       {/* Print Settings Modal */}
       <PrintSettingsModal
