@@ -14,6 +14,7 @@ import {
   Printer
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
+import { apiService } from '../services/apiService';
 import { parseReportRow, isTransferType, matchBranch } from '../utils/format';
 
 interface BudgetManagerProps {
@@ -102,6 +103,13 @@ export default function BudgetManager({
   const handleSaveBudgets = () => {
     localStorage.setItem('kwd_category_budgets', JSON.stringify(categoryBudgets));
     localStorage.setItem('kwd_branch_budgets', JSON.stringify(branchBudgets));
+    
+    // Asynchronously sync with backend database
+    apiService.saveBudgets([
+      { type: 'categories', data: categoryBudgets, updatedAt: new Date().toISOString() },
+      { type: 'branches', data: branchBudgets, updatedAt: new Date().toISOString() }
+    ]).catch(err => console.warn('Budget backend sync:', err));
+
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };

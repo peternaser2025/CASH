@@ -27,6 +27,7 @@ import * as XLSX from 'xlsx';
 import { Order, OrderItem, OrderPriority, OrderStatus, OrderType, PaymentStatus } from '../types';
 import { formatKWD, normalizeArabicSearch } from '../utils/format';
 import { exportElementToPDF } from '../utils/pdfExport';
+import { apiService } from '../services/apiService';
 import PrintHeader from './print/PrintHeader';
 import PrintSignatures from './print/PrintSignatures';
 import OrderInvoicePrintModal from './OrderInvoicePrintModal';
@@ -231,6 +232,22 @@ export default function OrdersManager({
       console.error('Failed to save orders to localStorage', e);
     }
   }, [orders]);
+
+  // Initial continuous sync with backend server /api/orders
+  useEffect(() => {
+    apiService.getOrders().then(backendOrders => {
+      if (backendOrders && backendOrders.length > 0) {
+        setOrders(prev => {
+          const map = new Map<string, Order>();
+          backendOrders.forEach(o => map.set(o.id, o));
+          prev.forEach(o => {
+            if (!map.has(o.id)) map.set(o.id, o);
+          });
+          return Array.from(map.values());
+        });
+      }
+    }).catch(() => {});
+  }, []);
 
   // Real-time calculation of days remaining / overdue status
   const getDeliveryStatus = (dueDateStr: string, status: OrderStatus) => {
@@ -487,6 +504,11 @@ export default function OrdersManager({
       setOrders(prev => [orderToSave, ...prev]);
     }
 
+    // Persist to backend server asynchronously
+    apiService.saveOrder(orderToSave).catch(err => {
+      console.warn('Background server save failed for order, saved locally:', err);
+    });
+
     setIsFormModalOpen(false);
     setEditingOrder(null);
   };
@@ -495,6 +517,9 @@ export default function OrdersManager({
   const handleDeleteOrder = (id: string, title: string) => {
     if (window.confirm(`هل أنت متأكد من حذف الطلبية: "${title}" نهائياً؟`)) {
       setOrders(prev => prev.filter(o => o.id !== id));
+      apiService.deleteOrder(id).catch(err => {
+        console.warn('Background server delete failed for order:', err);
+      });
       if (selectedOrderDetails?.id === id) {
         setSelectedOrderDetails(null);
       }
@@ -503,16 +528,22 @@ export default function OrdersManager({
 
   // Quick Status Transition
   const handleQuickStatusChange = (orderId: string, newStatus: OrderStatus) => {
+    let updatedOrderObj: Order | undefined;
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
         const update: Partial<Order> = { status: newStatus, updatedAt: new Date().toISOString() };
         if (newStatus === 'delivered' && !o.actualDeliveryDate) {
           update.actualDeliveryDate = new Date().toISOString().split('T')[0];
         }
-        return { ...o, ...update };
+        updatedOrderObj = { ...o, ...update };
+        return updatedOrderObj;
       }
       return o;
     }));
+
+    if (updatedOrderObj) {
+      apiService.saveOrder(updatedOrderObj).catch(() => {});
+    }
 
     if (selectedOrderDetails && selectedOrderDetails.id === orderId) {
       setSelectedOrderDetails(prev => prev ? { ...prev, status: newStatus } : null);

@@ -121,6 +121,47 @@ assert(report2.isSystemBalanced === false, 'Imbalance is immediately detected');
 assert(report2.items[0].discrepancyKWD === 150, 'Discrepancy correctly calculated as 150.000 KWD');
 assert(report2.items[0].status === 'discrepancy_detected', 'Status flagged as discrepancy_detected');
 
+// 5. Cashier Daily Closing & Dual Column Journal Integrity Tests
+console.log('\n[5] Testing Cashier Daily Closing & Dual Column Math...');
+const openingBalance = 120.500;
+const cashierReceipts = [
+  { amount: 50.000, branch: 'فرع السالمية' },
+  { amount: 80.250, branch: 'فرع حولي' }
+];
+const cashierExpenses = [
+  { amount: 30.000, branch: 'فرع السالمية' },
+  { amount: 45.500, branch: 'فرع حولي' },
+  { amount: 15.250, branch: 'فرع الشويخ' }
+];
+
+const sumReceipts = cashierReceipts.reduce((acc, r) => addMoney(acc, r.amount), 0);
+const sumExpenses = cashierExpenses.reduce((acc, e) => addMoney(acc, e.amount), 0);
+const expectedClosing = addMoney(subMoney(openingBalance, sumExpenses), sumReceipts);
+
+assert(sumReceipts === 130.25, `Sum of receipts = 130.250 KWD (got ${sumReceipts})`);
+assert(sumExpenses === 90.75, `Sum of expenses = 90.750 KWD (got ${sumExpenses})`);
+assert(expectedClosing === 160.0, `Cashier closing balance = 160.000 KWD (got ${expectedClosing})`);
+
+// Drawer count & discrepancy test
+const actualCountExact = 160.000;
+const diffExact = Math.round((actualCountExact - expectedClosing) * 1000) / 1000;
+assert(diffExact === 0, 'Exact count produces 0 discrepancy');
+
+const actualCountShort = 155.000;
+const diffShort = Math.round((actualCountShort - expectedClosing) * 1000) / 1000;
+assert(diffShort === -5.0, `Shortage of 5.000 KWD detected (got ${diffShort})`);
+
+// Branch aggregation test
+const branchSums: Record<string, number> = {};
+cashierExpenses.forEach(e => {
+  branchSums[e.branch] = addMoney(branchSums[e.branch] || 0, e.amount);
+});
+assert(branchSums['فرع السالمية'] === 30.000, 'Salmiya branch expenses total 30.000 KWD');
+assert(branchSums['فرع حولي'] === 45.500, 'Hawally branch expenses total 45.500 KWD');
+assert(branchSums['فرع الشويخ'] === 15.250, 'Shuwaikh branch expenses total 15.250 KWD');
+const totalBranchSums = Object.values(branchSums).reduce((a, b) => addMoney(a, b), 0);
+assert(totalBranchSums === sumExpenses, 'Sum of branch expenses exactly matches total expenses');
+
 console.log('----------------------------------------------------');
 console.log(`🎯 COMPLETED: ${passedTests}/${totalTests} TESTS PASSED`);
 console.log('----------------------------------------------------');
