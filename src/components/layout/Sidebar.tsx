@@ -84,12 +84,15 @@ export default function Sidebar({
             </div>
             <div>
               <span className="font-black text-lg lg:text-xl tracking-tight text-white">KWD Finance</span>
-              <p className="text-[11px] font-bold text-slate-500">نظام إدارة العهد والمصروفات</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">النظام المالي الذكي</p>
+              </div>
             </div>
           </div>
           <button 
             onClick={onCloseMobileMenu}
-            className="md:hidden text-slate-400 hover:text-white p-1 rounded-lg"
+            className="md:hidden p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-900 cursor-pointer"
           >
             <X size={20} />
           </button>
@@ -307,6 +310,10 @@ export function SidebarItem({
           <ChevronLeft size={14} className="text-slate-700 group-hover:text-slate-500 group-hover:-translate-x-0.5 transition-all" />
         )}
       </div>
+
+      {active && (
+        <span className="absolute right-0 top-1/4 h-1/2 w-1 bg-white rounded-l-full"></span>
+      )}
     </button>
   );
 }

@@ -33,7 +33,7 @@ body {
 }
 
 .arabic-text {
-  font-family: 'Inter', sans-serif; /* Inter supports Arabic glyphs well, but we can add a specific Arabic font if needed */
+  font-family: 'Cairo', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 /* World-class Print Styles for Reports, Ledgers, Invoices & Financial Statements */

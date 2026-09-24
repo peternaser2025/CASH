@@ -70,8 +70,8 @@ export default function AuthManager({
           <div className="w-16 h-16 bg-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20 mb-4">
             <Wallet size={32} className="text-white" />
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight">KWD Finance</h1>
-          <p className="text-sm font-bold text-slate-400 mt-1">نظام إدارة العهد والمصروفات النقدية والتدقيق المالي</p>
+          <h1 className="text-2xl font-black text-white tracking-tight">KWD Finance Pro</h1>
+          <p className="text-sm font-bold text-slate-400 mt-1">نظام العهد النقدية والمصروفات الموحد للشركات</p>
           
           {/* Status Indicator */}
           <div className="mt-4 flex items-center gap-2">
