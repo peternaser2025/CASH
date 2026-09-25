@@ -1,4 +1,4 @@
-import { toFils, addMoney, subMoney, sumMoney, isMoneyEqual, normalizeEntityId } from '../src/utils/money';
+import { toFils, toKWD, addMoney, subMoney, sumMoney, isMoneyEqual, normalizeEntityId } from '../src/utils/money';
 import { performReconciliation } from '../server/reconciliation';
 import { transactionSchema, orderSchema } from '../server/validation';
 
@@ -161,6 +161,41 @@ assert(branchSums['فرع حولي'] === 45.500, 'Hawally branch expenses total 
 assert(branchSums['فرع الشويخ'] === 15.250, 'Shuwaikh branch expenses total 15.250 KWD');
 const totalBranchSums = Object.values(branchSums).reduce((a, b) => addMoney(a, b), 0);
 assert(totalBranchSums === sumExpenses, 'Sum of branch expenses exactly matches total expenses');
+
+// 6. Report Ledger Column Sum & Running Balance Mathematical Identity Tests
+console.log('\n[6] Testing Report Table Mathematical Identity...');
+const reportOpening = 100.000;
+const testRows = [
+  { income: 50.000, expense: 0, isAccrued: false },
+  { income: 22.000, expense: 0, isAccrued: false }, // Custody transfer in
+  { income: 0, expense: 30.000, isAccrued: false }, // Cash expense
+  { income: 0, expense: 15.000, isAccrued: true },  // Accrued/credit purchase (not paid yet)
+  { income: 0, expense: 12.000, isAccrued: false }  // Cash expense
+];
+
+let runningFils = toFils(reportOpening);
+let sumColInFils = 0;
+let sumColCashOutFils = 0;
+let sumColAccrualFils = 0;
+
+testRows.forEach(r => {
+  sumColInFils += toFils(r.income);
+  if (!r.isAccrued) {
+    runningFils += toFils(r.income) - toFils(r.expense);
+    sumColCashOutFils += toFils(r.expense);
+  } else {
+    sumColAccrualFils += toFils(r.expense);
+  }
+});
+
+const calculatedEndingBalance = toKWD(toFils(reportOpening) + sumColInFils - sumColCashOutFils);
+const finalRowBalance = toKWD(runningFils);
+
+assert(toKWD(sumColInFils) === 72.000, 'Income column sum equals exactly 72.000 KWD (50 + 22)');
+assert(toKWD(sumColCashOutFils) === 42.000, 'Cash out column sum equals exactly 42.000 KWD (30 + 12)');
+assert(toKWD(sumColAccrualFils) === 15.000, 'Accruals isolated as 15.000 KWD without deducting from cash');
+assert(calculatedEndingBalance === 130.000, 'Final balance = 100 + 72 - 42 = 130.000 KWD');
+assert(finalRowBalance === calculatedEndingBalance, 'Last row running balance strictly matches calculated ending balance');
 
 console.log('----------------------------------------------------');
 console.log(`🎯 COMPLETED: ${passedTests}/${totalTests} TESTS PASSED`);

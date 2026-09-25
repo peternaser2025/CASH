@@ -15,7 +15,8 @@ import {
   AlertTriangle,
   Scale
 } from 'lucide-react';
-import { NormalizedReportRow, formatKWD, matchBranch, isTransferType, isAccrualType } from '../../utils/format';
+import { NormalizedReportRow, formatKWD, matchBranch, isTransferType, isAccrualType, normalizeExcelDate } from '../../utils/format';
+import { toFils, toKWD } from '../../utils/money';
 import { tafqeetKWD } from '../../utils/tafqeet';
 import { CompanyPrintProfile, PrintDisplayOptions } from '../../utils/printConfig';
 import PrintHeader from '../print/PrintHeader';
@@ -106,15 +107,15 @@ export default function CashierDailyClosingJournal({
 
   // Calculate actual physical cash in drawer
   const actualDrawerCash = useMemo(() => {
-    const total = 
-      (denominations.d20 * 20) +
-      (denominations.d10 * 10) +
-      (denominations.d5 * 5) +
-      (denominations.d1 * 1) +
-      (denominations.dHalf * 0.5) +
-      (denominations.dQuarter * 0.25) +
-      (denominations.coins || 0);
-    return Math.round(total * 1000) / 1000;
+    const totalFils = 
+      (denominations.d20 * 20000) +
+      (denominations.d10 * 10000) +
+      (denominations.d5 * 5000) +
+      (denominations.d1 * 1000) +
+      (denominations.dHalf * 500) +
+      (denominations.dQuarter * 250) +
+      toFils(denominations.coins || 0);
+    return toKWD(totalFils);
   }, [denominations]);
 
   // 1. Separate transactions of the selected date into Receipts and Branch Expenses
@@ -122,12 +123,14 @@ export default function CashierDailyClosingJournal({
     const receiptsList: CashierReceiptItem[] = [];
     const expensesList: CashierExpenseItem[] = [];
 
+    const normSelectedDate = normalizeExcelDate(selectedDate);
+
     // Filter by date and criteria
     transactions.forEach(row => {
-      const rowDate = (row.date || '').trim();
+      const normRowDate = normalizeExcelDate(row.date);
 
       // Check if matches the selected day
-      const isDateMatch = !rowDate || !selectedDate || rowDate === selectedDate;
+      const isDateMatch = !normRowDate || !normSelectedDate || normRowDate === normSelectedDate;
       if (!isDateMatch) return;
 
       // Check employee filter
@@ -180,18 +183,18 @@ export default function CashierDailyClosingJournal({
     });
 
     // Compute opening balance before this date if possible
-    let opBal = 0;
+    let opBalFils = 0;
     if (openingBalanceOverride !== undefined) {
-      opBal = openingBalanceOverride;
+      opBalFils = toFils(openingBalanceOverride);
     } else {
-      // Sum all income - expense strictly before selectedDate
+      // Sum all income - expense strictly before selectedDate using exact integer fils
       transactions.forEach(row => {
-        const rowDate = (row.date || '').trim();
-        if (rowDate && selectedDate && rowDate < selectedDate) {
+        const normRowDate = normalizeExcelDate(row.date);
+        if (normRowDate && normSelectedDate && normRowDate < normSelectedDate) {
           if (selectedEmployeeFilter === 'all' || row.employee.trim().toLowerCase() === selectedEmployeeFilter.trim().toLowerCase()) {
-            opBal += (row.income || 0);
+            opBalFils += toFils(row.income || 0);
             if (!isAccrualType(row.type, row.category, row.description)) {
-              opBal -= (row.expense || 0);
+              opBalFils -= toFils(row.expense || 0);
             }
           }
         }
@@ -201,7 +204,7 @@ export default function CashierDailyClosingJournal({
     return {
       receipts: receiptsList,
       expenses: expensesList,
-      openingBalanceCalculated: Math.round(opBal * 1000) / 1000
+      openingBalanceCalculated: toKWD(opBalFils)
     };
   }, [transactions, selectedDate, selectedBranchFilter, selectedEmployeeFilter, searchQuery, openingBalanceOverride]);
 
@@ -226,41 +229,49 @@ export default function CashierDailyClosingJournal({
 
   // 3. Bottom Totals & Branch Breakdown (وتجميعات تحت بالكل والرصيد)
   const totals = useMemo(() => {
-    const totalReceipts = receipts.reduce((sum, r) => sum + r.amount, 0);
-    const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+    const totalReceiptsFils = receipts.reduce((sum, r) => sum + toFils(r.amount), 0);
+    const totalExpensesFils = expenses.reduce((sum, e) => sum + toFils(e.amount), 0);
 
     // Group expenses by Branch (فرع كذا صرف إجمالي كذا)
-    const branchMap: Record<string, { branch: string; total: number; count: number }> = {};
+    const branchMap: Record<string, { branch: string; totalFils: number; count: number }> = {};
     expenses.forEach(e => {
       const bName = e.branch.trim() || 'فرع عام / غير محدد';
       if (!branchMap[bName]) {
-        branchMap[bName] = { branch: bName, total: 0, count: 0 };
+        branchMap[bName] = { branch: bName, totalFils: 0, count: 0 };
       }
-      branchMap[bName].total += e.amount;
+      branchMap[bName].totalFils += toFils(e.amount);
       branchMap[bName].count += 1;
     });
 
-    const branchSummaryList = Object.values(branchMap).sort((a, b) => b.total - a.total);
+    const branchSummaryList = Object.values(branchMap)
+      .map(b => ({
+        branch: b.branch,
+        total: toKWD(b.totalFils),
+        count: b.count
+      }))
+      .sort((a, b) => b.total - a.total);
 
     // Cash Closing Calculation:
     // رصيد أول اليوم + إجمالي المقبوضات - إجمالي المنصرف = رصيد نهاية اليوم بالصندوق
-    const closingBalance = openingBalanceCalculated + totalReceipts - totalExpenses;
-    const roundedClosing = Math.round(closingBalance * 1000) / 1000;
+    const opBalFils = toFils(openingBalanceCalculated);
+    const netCashChangeFils = totalReceiptsFils - totalExpensesFils;
+    const closingBalanceFils = opBalFils + netCashChangeFils;
 
     // Discrepancy if actual drawer cash counted
-    const hasCountedCash = actualDrawerCash > 0;
-    const discrepancy = hasCountedCash ? Math.round((actualDrawerCash - roundedClosing) * 1000) / 1000 : 0;
+    const actualDrawerCashFils = toFils(actualDrawerCash);
+    const hasCountedCash = actualDrawerCashFils > 0;
+    const discrepancyFils = hasCountedCash ? (actualDrawerCashFils - closingBalanceFils) : 0;
 
     return {
-      totalReceipts: Math.round(totalReceipts * 1000) / 1000,
-      totalExpenses: Math.round(totalExpenses * 1000) / 1000,
-      netCashChange: Math.round((totalReceipts - totalExpenses) * 1000) / 1000,
+      totalReceipts: toKWD(totalReceiptsFils),
+      totalExpenses: toKWD(totalExpensesFils),
+      netCashChange: toKWD(netCashChangeFils),
       openingBalance: openingBalanceCalculated,
-      closingBalance: roundedClosing,
+      closingBalance: toKWD(closingBalanceFils),
       branchSummaryList,
       hasCountedCash,
       actualDrawerCash,
-      discrepancy
+      discrepancy: toKWD(discrepancyFils)
     };
   }, [receipts, expenses, openingBalanceCalculated, actualDrawerCash]);
 

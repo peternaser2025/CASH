@@ -14,7 +14,8 @@ import {
   FileDown,
   Info
 } from 'lucide-react';
-import { NormalizedReportRow, formatKWD, matchBranch, isTransferType, isAccrualType } from '../../utils/format';
+import { NormalizedReportRow, formatKWD, matchBranch, isTransferType, isAccrualType, normalizeExcelDate } from '../../utils/format';
+import { toFils, toKWD } from '../../utils/money';
 import { CompanyPrintProfile, PrintDisplayOptions } from '../../utils/printConfig';
 import PrintHeader from '../print/PrintHeader';
 import PrintSignatures from '../print/PrintSignatures';
@@ -106,10 +107,12 @@ export default function BranchMultiColumnJournal({
 
   // 2. Filter transactions for the selected day and criteria
   const dayTransactions = useMemo(() => {
+    const normSelectedDate = normalizeExcelDate(selectedDate);
+
     return transactions.filter(row => {
       // Date match
-      const rowDate = (row.date || '').trim();
-      if (rowDate && selectedDate && rowDate !== selectedDate) {
+      const normRowDate = normalizeExcelDate(row.date);
+      if (normRowDate && normSelectedDate && normRowDate !== normSelectedDate) {
         return false;
       }
 
@@ -136,45 +139,41 @@ export default function BranchMultiColumnJournal({
 
   // 3. Map transactions into Multi-Column Journal structure
   const { multiColumnRows, totals, branchBreakdown } = useMemo(() => {
-    let runningBalance = 0;
-    let totalReceipts = 0;
-    let totalExpenses = 0;
-    const branchExpenseTotals: Record<string, number> = {};
-    let totalOtherExpense = 0;
+    let runningBalanceFils = 0;
+    let totalReceiptsFils = 0;
+    let totalExpensesFils = 0;
+    const branchExpenseTotalsFils: Record<string, number> = {};
+    let totalOtherExpenseFils = 0;
 
     // Initialize branch totals
     displayBranches.forEach(b => {
-      branchExpenseTotals[b] = 0;
+      branchExpenseTotalsFils[b] = 0;
     });
 
     // Breakdown for branch matrix
     const breakdownMap: Record<string, {
       name: string;
-      receipts: number;
-      expenses: number;
+      receiptsFils: number;
+      expensesFils: number;
       count: number;
     }> = {};
 
     displayBranches.forEach(b => {
-      breakdownMap[b] = { name: b, receipts: 0, expenses: 0, count: 0 };
+      breakdownMap[b] = { name: b, receiptsFils: 0, expensesFils: 0, count: 0 };
     });
-    breakdownMap['أخرى'] = { name: 'فروع أخرى / عام', receipts: 0, expenses: 0, count: 0 };
+    breakdownMap['أخرى'] = { name: 'فروع أخرى / عام', receiptsFils: 0, expensesFils: 0, count: 0 };
 
     const rows: MultiColumnRow[] = dayTransactions.map((row, idx) => {
       const isTransfer = isTransferType(row.type, row.category, row.description);
       const isAccrual = isAccrualType(row.type, row.category, row.description);
 
       // Receipts (مقبوضات / وارد)
-      let receiptAmount = 0;
-      if (row.income > 0) {
-        receiptAmount = row.income;
-      }
+      const receiptFils = row.income > 0 ? toFils(row.income) : 0;
+      const receiptAmount = toKWD(receiptFils);
 
       // Expenses (مصروفات / من صرف)
-      let expenseAmount = 0;
-      if (row.expense > 0 && !isAccrual) {
-        expenseAmount = row.expense;
-      }
+      const expenseFils = (row.expense > 0 && !isAccrual) ? toFils(row.expense) : 0;
+      const expenseAmount = toKWD(expenseFils);
 
       // Distribute expense across branch columns
       const rowBranchExpenses: Record<string, number> = {};
@@ -183,7 +182,7 @@ export default function BranchMultiColumnJournal({
       });
 
       let matchedBranchName = '';
-      if (expenseAmount > 0) {
+      if (expenseFils > 0) {
         for (const b of displayBranches) {
           if (matchBranch(row.branch, b)) {
             matchedBranchName = b;
@@ -193,24 +192,24 @@ export default function BranchMultiColumnJournal({
 
         if (matchedBranchName) {
           rowBranchExpenses[matchedBranchName] = expenseAmount;
-          branchExpenseTotals[matchedBranchName] = (branchExpenseTotals[matchedBranchName] || 0) + expenseAmount;
+          branchExpenseTotalsFils[matchedBranchName] = (branchExpenseTotalsFils[matchedBranchName] || 0) + expenseFils;
         } else {
-          totalOtherExpense += expenseAmount;
+          totalOtherExpenseFils += expenseFils;
         }
       }
 
       // Track branch breakdown
       const targetBranchKey = matchedBranchName || (displayBranches.find(b => matchBranch(row.branch, b)) || 'أخرى');
       if (breakdownMap[targetBranchKey]) {
-        breakdownMap[targetBranchKey].receipts += receiptAmount;
-        breakdownMap[targetBranchKey].expenses += expenseAmount;
+        breakdownMap[targetBranchKey].receiptsFils += receiptFils;
+        breakdownMap[targetBranchKey].expensesFils += expenseFils;
         breakdownMap[targetBranchKey].count += 1;
       }
 
-      totalReceipts += receiptAmount;
-      totalExpenses += expenseAmount;
-      const netImpact = receiptAmount - expenseAmount;
-      runningBalance += netImpact;
+      totalReceiptsFils += receiptFils;
+      totalExpensesFils += expenseFils;
+      const netImpactFils = receiptFils - expenseFils;
+      runningBalanceFils += netImpactFils;
 
       return {
         index: idx + 1,
@@ -224,24 +223,36 @@ export default function BranchMultiColumnJournal({
         branchExpenses: rowBranchExpenses,
         otherBranchExpense: matchedBranchName ? 0 : expenseAmount,
         totalExpense: expenseAmount,
-        netImpact,
-        runningBalance,
+        netImpact: toKWD(netImpactFils),
+        runningBalance: toKWD(runningBalanceFils),
         isTransfer,
         isAccrual,
         targetMonth: row.targetMonth
       };
     });
 
-    const breakdownList = Object.values(breakdownMap).filter(b => b.count > 0 || b.receipts > 0 || b.expenses > 0);
+    const branchExpenseTotals: Record<string, number> = {};
+    displayBranches.forEach(b => {
+      branchExpenseTotals[b] = toKWD(branchExpenseTotalsFils[b] || 0);
+    });
+
+    const breakdownList = Object.values(breakdownMap)
+      .map(b => ({
+        name: b.name,
+        receipts: toKWD(b.receiptsFils),
+        expenses: toKWD(b.expensesFils),
+        count: b.count
+      }))
+      .filter(b => b.count > 0 || b.receipts > 0 || b.expenses > 0);
 
     return {
       multiColumnRows: rows,
       totals: {
-        totalReceipts,
-        totalExpenses,
+        totalReceipts: toKWD(totalReceiptsFils),
+        totalExpenses: toKWD(totalExpensesFils),
         branchExpenseTotals,
-        totalOtherExpense,
-        netBalance: totalReceipts - totalExpenses,
+        totalOtherExpense: toKWD(totalOtherExpenseFils),
+        netBalance: toKWD(totalReceiptsFils - totalExpensesFils),
         count: rows.length
       },
       branchBreakdown: breakdownList

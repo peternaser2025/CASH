@@ -31,6 +31,8 @@ interface ReportTableProps {
   finalBalance: number;
   totalIncome: number;
   totalExpense: number;
+  totalCashExpense?: number;
+  totalAccrual?: number;
   visibleColumns: Record<ReportColumnId, boolean>;
   onPrintVoucher: (row: ComputedReportRow, rowIndexInSheet: number) => void;
   onEditTransaction: (row: ComputedReportRow, rowIndexInSheet: number) => void;
@@ -43,6 +45,8 @@ export default function ReportTable({
   finalBalance,
   totalIncome,
   totalExpense,
+  totalCashExpense,
+  totalAccrual,
   visibleColumns,
   onPrintVoucher,
   onEditTransaction,
@@ -242,20 +246,27 @@ export default function ReportTable({
         <tfoot className="bg-slate-900 text-white font-bold text-xs">
           <tr>
             {leadingColSpan > 0 && (
-              <td colSpan={leadingColSpan} className="px-4 py-3 text-left">إجمالي الكشف التدقيقي:</td>
+              <td colSpan={leadingColSpan} className="px-4 py-3 text-left">
+                <span>إجمالي الكشف التدقيقي:</span>
+                {totalAccrual && totalAccrual > 0 ? (
+                  <span className="block text-[10px] text-amber-300 font-normal">
+                    (يشمل {formatKWD(totalCashExpense || 0)} د.ك نقدي مسدد + {formatKWD(totalAccrual)} د.ك التزامات آجلة)
+                  </span>
+                ) : null}
+              </td>
             )}
             {visibleColumns.income && (
-              <td className="px-4 py-3 font-mono text-emerald-400 font-extrabold text-sm">
-                {formatKWD(totalIncome)}
+              <td className="px-4 py-3 font-mono text-emerald-400 font-extrabold text-sm whitespace-nowrap">
+                +{formatKWD(totalIncome)}
               </td>
             )}
             {visibleColumns.expense && (
-              <td className="px-4 py-3 font-mono text-rose-400 font-extrabold text-sm">
-                {formatKWD(totalExpense)}
+              <td className="px-4 py-3 font-mono text-rose-400 font-extrabold text-sm whitespace-nowrap">
+                -{formatKWD(totalExpense)}
               </td>
             )}
             {trailingColSpan > 0 && (
-              <td colSpan={trailingColSpan} className="px-4 py-3 font-mono text-white font-black text-sm">
+              <td colSpan={trailingColSpan} className="px-4 py-3 font-mono text-white font-black text-sm whitespace-nowrap">
                 الرصيد: {formatKWD(finalBalance)}
               </td>
             )}

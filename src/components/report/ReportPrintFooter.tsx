@@ -2,12 +2,16 @@ import React from 'react';
 import { CompanyPrintProfile } from '../../utils/printConfig';
 import PrintSignatures from '../print/PrintSignatures';
 import { formatKWD, isTransferType, parseReportRow } from '../../utils/format';
+import { toFils, toKWD } from '../../utils/money';
 import { ComputedReportRow } from './ReportTable';
 
 interface ReportPrintFooterProps {
   rows?: any[][];
   computedRows?: ComputedReportRow[];
   finalBalance: number;
+  totalIncome?: number;
+  totalExpense?: number;
+  totalCashExpense?: number;
   companyProfile: CompanyPrintProfile;
   showSignatures: boolean;
   showStamp: boolean;
@@ -18,6 +22,9 @@ export default function ReportPrintFooter({
   rows = [],
   computedRows,
   finalBalance,
+  totalIncome,
+  totalExpense,
+  totalCashExpense,
   companyProfile,
   showSignatures,
   showStamp,
@@ -26,44 +33,41 @@ export default function ReportPrintFooter({
   // Use computedRows if provided, otherwise parse raw rows
   const activeRows = computedRows || rows.map(parseReportRow);
 
-  const totalIn = activeRows.reduce((acc, row) => {
-    if (isTransferType(row.type, row.category)) return acc;
-    return acc + (row.income || 0);
-  }, 0);
+  const totalIn = totalIncome !== undefined 
+    ? totalIncome 
+    : toKWD(activeRows.reduce((acc, row) => acc + toFils(row.income || 0), 0));
 
-  const totalOut = activeRows.reduce((acc, row) => {
-    if (isTransferType(row.type, row.category)) return acc;
-    return acc + (row.expense || 0);
-  }, 0);
+  const totalOut = totalExpense !== undefined 
+    ? totalExpense 
+    : toKWD(activeRows.reduce((acc, row) => acc + toFils(row.expense || 0), 0));
 
-  const totalTransfers = activeRows.reduce((acc, row) => {
+  const totalTransfers = toKWD(activeRows.reduce((acc, row) => {
     if (isTransferType(row.type, row.category)) {
-      return acc + ((row.income > 0 ? row.income : row.expense) || 0);
+      return acc + toFils((row.income > 0 ? row.income : row.expense) || 0);
     }
     return acc;
-  }, 0);
+  }, 0));
 
   const branchSummary = Object.entries(
     activeRows.reduce((acc: Record<string, number>, row) => {
       const branch = String(row.branch || 'عام');
-      if (isTransferType(row.type, row.category)) return acc;
-      const expense = row.expense || 0;
-      if (expense > 0) acc[branch] = (acc[branch] || 0) + expense;
+      const expFils = toFils(row.expense || 0);
+      if (expFils > 0) acc[branch] = (acc[branch] || 0) + expFils;
       return acc;
     }, {} as Record<string, number>)
-  ) as [string, number][];
+  ).map(([b, fils]) => [b, toKWD(fils)]) as [string, number][];
 
   const targetMonthSummary = (Object.entries(
     activeRows.reduce((acc: Record<string, number>, row) => {
       const targetMonth = row.targetMonth || '';
       if (!targetMonth) return acc;
-      const expense = row.expense || 0;
-      if (expense > 0 && !isTransferType(row.type, row.category)) {
-        acc[targetMonth] = (acc[targetMonth] || 0) + expense;
+      const expFils = toFils(row.expense || 0);
+      if (expFils > 0) {
+        acc[targetMonth] = (acc[targetMonth] || 0) + expFils;
       }
       return acc;
     }, {} as Record<string, number>)
-  ) as [string, number][]).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 4);
+  ).map(([m, fils]) => [m, toKWD(fils)]) as [string, number][]).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 4);
 
   return (
     <div className="p-4 print:p-3 hidden print:block border-t-2 border-slate-900 bg-white break-inside-avoid">

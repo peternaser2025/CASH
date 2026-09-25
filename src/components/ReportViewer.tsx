@@ -32,6 +32,7 @@ import {
   NormalizedReportRow,
   normalizeExcelDate
 } from '../utils/format';
+import { toFils, toKWD, addMoney, subMoney, sumMoney } from '../utils/money';
 
 import ReportTable, { ComputedReportRow } from './report/ReportTable';
 import ReportAnalytics from './report/ReportAnalytics';
@@ -344,51 +345,45 @@ export default function ReportViewer({ employees, balances = [], branches, categ
     return String(a.id || '').localeCompare(String(b.id || ''));
   });
 
-  const initialOpeningBalance = parseFloat(report?.openingBalance || '0') || 0;
-  let runningAcc = initialOpeningBalance;
+  const initialOpeningBalanceFils = toFils(report?.openingBalance || '0');
+  let runningAccFils = initialOpeningBalanceFils;
+
+  let totalDisplayIncomeFils = 0;
+  let totalDisplayCashExpenseFils = 0;
+  let totalDisplayAccrualFils = 0;
 
   const computedRows: ComputedReportRow[] = sortedFilteredRows.map(pRow => {
     const isAccrued = isAccrualType(pRow.type, pRow.category, pRow.description);
+    const incFils = toFils(pRow.income);
+    const expFils = toFils(pRow.expense);
+
+    totalDisplayIncomeFils += incFils;
+
     if (!isAccrued) {
-      if (isTransferType(pRow.type, pRow.category)) {
-        if (filters.employee && pRow.employee === filters.employee) {
-          runningAcc += pRow.income - pRow.expense;
-        }
-      } else {
-        runningAcc += pRow.income - pRow.expense;
-      }
+      runningAccFils += incFils - expFils;
+      totalDisplayCashExpenseFils += expFils;
+    } else {
+      totalDisplayAccrualFils += expFils;
     }
+
     const opType = getAccountingOperationType(pRow.type, pRow.category, pRow.description, pRow.income, pRow.expense);
     return {
       ...pRow,
       isAccrued,
-      computedBalance: runningAcc,
+      computedBalance: toKWD(runningAccFils),
       opType
     };
   });
 
-  const isUnpaidAccrualRow = (row: ComputedReportRow | NormalizedReportRow) => {
-    return isAccrualType(row.type, row.category, row.description);
-  };
+  const totalDisplayExpenseFils = totalDisplayCashExpenseFils + totalDisplayAccrualFils;
+  const cashEndingBalanceFils = initialOpeningBalanceFils + totalDisplayIncomeFils - totalDisplayCashExpenseFils;
 
-  const filteredIn = computedRows.reduce((acc, row) => {
-    if (isTransferType(row.type, row.category)) return acc;
-    return acc + row.income;
-  }, 0);
-
-  const filteredCashOut = computedRows.reduce((acc, row) => {
-    if (isTransferType(row.type, row.category)) return acc;
-    if (isUnpaidAccrualRow(row)) return acc;
-    return acc + row.expense;
-  }, 0);
-
-  const filteredUnpaidAccruals = computedRows.reduce((acc, row) => {
-    if (isTransferType(row.type, row.category)) return acc;
-    if (isUnpaidAccrualRow(row)) return acc + row.expense;
-    return acc;
-  }, 0);
-
-  const cashEndingBalance = initialOpeningBalance + filteredIn - filteredCashOut;
+  const initialOpeningBalance = toKWD(initialOpeningBalanceFils);
+  const filteredIn = toKWD(totalDisplayIncomeFils);
+  const filteredCashOut = toKWD(totalDisplayCashExpenseFils);
+  const filteredUnpaidAccruals = toKWD(totalDisplayAccrualFils);
+  const filteredTotalExpense = toKWD(totalDisplayExpenseFils);
+  const cashEndingBalance = toKWD(cashEndingBalanceFils);
 
   const handleExportExcel = () => {
     if (!report) return;
@@ -845,7 +840,9 @@ export default function ReportViewer({ employees, balances = [], branches, categ
                 openingBalance={initialOpeningBalance}
                 finalBalance={cashEndingBalance}
                 totalIncome={filteredIn}
-                totalExpense={filteredCashOut}
+                totalExpense={filteredTotalExpense}
+                totalCashExpense={filteredCashOut}
+                totalAccrual={filteredUnpaidAccruals}
                 visibleColumns={visibleColumns}
                 onPrintVoucher={handlePrintVoucher}
                 onEditTransaction={handleEditTransaction}
@@ -863,6 +860,9 @@ export default function ReportViewer({ employees, balances = [], branches, categ
                 rows={report.rows}
                 computedRows={computedRows}
                 finalBalance={cashEndingBalance}
+                totalIncome={filteredIn}
+                totalExpense={filteredTotalExpense}
+                totalCashExpense={filteredCashOut}
                 companyProfile={companyProfile}
                 showSignatures={printOptions.showSignatures}
                 showStamp={printOptions.showStamp}

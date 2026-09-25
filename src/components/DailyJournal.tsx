@@ -23,6 +23,7 @@ import {
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
 import { parseReportRow, formatKWD, matchBranch, isTransferType, isAccrualType, isArabicSearchMatch, normalizeExcelDate } from '../utils/format';
+import { toFils, toKWD, addMoney, subMoney } from '../utils/money';
 import { exportReportToExcel } from '../utils/excelExport';
 import { exportElementToPDF } from '../utils/pdfExport';
 import { 
@@ -261,9 +262,9 @@ export default function DailyJournal({
       // 1. Transaction occurred BEFORE selectedDate => contributes to openingBalance
       if (rowDate && targetDate && rowDate < targetDate) {
         if (isTransfer) {
-          rec.openingBalance += (row.income - row.expense);
+          rec.openingBalance = toKWD(toFils(rec.openingBalance) + toFils(row.income) - toFils(row.expense));
         } else if (!isAccrual) {
-          rec.openingBalance += (row.income - row.expense);
+          rec.openingBalance = toKWD(toFils(rec.openingBalance) + toFils(row.income) - toFils(row.expense));
         }
       } 
       // 2. Transaction occurred ON selectedDate => current day's activity
@@ -272,7 +273,7 @@ export default function DailyJournal({
 
         if (isTransfer) {
           if (row.income > 0) {
-            rec.todayIncome += row.income;
+            rec.todayIncome = toKWD(toFils(rec.todayIncome) + toFils(row.income));
             rec.incomeItems.push({
               id: row.id,
               date: row.date,
@@ -286,7 +287,7 @@ export default function DailyJournal({
             });
           }
           if (row.expense > 0) {
-            rec.todaySpent += row.expense;
+            rec.todaySpent = toKWD(toFils(rec.todaySpent) + toFils(row.expense));
             rec.spentCount += 1;
             rec.hasSpentToday = true;
             rec.spentItems.push({
@@ -302,11 +303,11 @@ export default function DailyJournal({
             });
           }
         } else if (isAccrual) {
-          rec.unpaidAccruals += row.expense;
+          rec.unpaidAccruals = toKWD(toFils(rec.unpaidAccruals) + toFils(row.expense));
         } else {
           // Cash income
           if (row.income > 0) {
-            rec.todayIncome += row.income;
+            rec.todayIncome = toKWD(toFils(rec.todayIncome) + toFils(row.income));
             rec.incomeItems.push({
               id: row.id,
               date: row.date,
@@ -321,7 +322,7 @@ export default function DailyJournal({
           }
           // Cash expense (صرف إيه!)
           if (row.expense > 0) {
-            rec.todaySpent += row.expense;
+            rec.todaySpent = toKWD(toFils(rec.todaySpent) + toFils(row.expense));
             rec.spentCount += 1;
             rec.hasSpentToday = true;
             rec.spentItems.push({
@@ -345,7 +346,7 @@ export default function DailyJournal({
     const list: FundDayRecord[] = [];
     recordsMap.forEach(rec => {
       // عليه إيه = رصيد أول اليوم + ما استلمه اليوم - ما صرفه اليوم
-      rec.closingBalance = rec.openingBalance + rec.todayIncome - rec.todaySpent;
+      rec.closingBalance = toKWD(toFils(rec.openingBalance) + toFils(rec.todayIncome) - toFils(rec.todaySpent));
       list.push(rec);
     });
 
