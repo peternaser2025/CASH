@@ -8,16 +8,19 @@ import {
   Search, 
   Loader2, 
   CheckCircle2, 
-  Layers 
+  Layers,
+  CalendarClock
 } from 'lucide-react';
 import { CITY_DEPARTMENTS } from '../../constants';
 import { ReportFilter } from '../../types';
+import { formatMonthLabelAr } from '../../utils/format';
 
 interface ReportFilterSectionProps {
   filters: ReportFilter;
   onChangeFilters: (filters: ReportFilter) => void;
   employees: string[];
   branches: string[];
+  availableTargetMonths?: string[];
   accrualFilter: 'All' | 'Due' | 'Paid';
   onChangeAccrualFilter: (status: 'All' | 'Due' | 'Paid') => void;
   onGenerate: () => void;
@@ -30,6 +33,7 @@ export default function ReportFilterSection({
   onChangeFilters,
   employees,
   branches,
+  availableTargetMonths = [],
   accrualFilter,
   onChangeAccrualFilter,
   onGenerate,
@@ -59,7 +63,7 @@ export default function ReportFilterSection({
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-slate-200/70 p-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-slate-200/70 p-2">
           {/* Employee */}
           <div className="p-4 space-y-2">
             <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
@@ -156,6 +160,24 @@ export default function ReportFilterSection({
               <option value="All">الكل (نقدي ومستحق)</option>
               <option value="Due">آجل / مستحق فقط</option>
               <option value="Paid">نقدي / مسدد فقط</option>
+            </select>
+          </div>
+
+          {/* Target Due Month Filter */}
+          <div className="p-4 space-y-2">
+            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+              <CalendarClock size={14} className="text-emerald-600" />
+              شهر الاستحقاق
+            </label>
+            <select
+              value={filters.targetMonth || ''}
+              onChange={(e) => onChangeFilters({ ...filters, targetMonth: e.target.value })}
+              className="w-full bg-slate-50 hover:bg-slate-100 font-bold text-xs text-slate-900 p-2.5 rounded-xl border border-slate-200 outline-none transition-colors cursor-pointer"
+            >
+              <option value="">كافة شهور الاستحقاق</option>
+              {availableTargetMonths.map(m => (
+                <option key={m} value={m}>{formatMonthLabelAr(m)}</option>
+              ))}
             </select>
           </div>
 

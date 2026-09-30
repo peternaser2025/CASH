@@ -1,7 +1,7 @@
 import React from 'react';
 import { CompanyPrintProfile } from '../../utils/printConfig';
 import PrintSignatures from '../print/PrintSignatures';
-import { formatKWD, isTransferType, parseReportRow } from '../../utils/format';
+import { formatKWD, isTransferType, parseReportRow, getEffectiveDueMonth } from '../../utils/format';
 import { toFils, toKWD } from '../../utils/money';
 import { ComputedReportRow } from './ReportTable';
 
@@ -59,15 +59,18 @@ export default function ReportPrintFooter({
 
   const targetMonthSummary = (Object.entries(
     activeRows.reduce((acc: Record<string, number>, row) => {
-      const targetMonth = row.targetMonth || '';
-      if (!targetMonth) return acc;
       const expFils = toFils(row.expense || 0);
       if (expFils > 0) {
-        acc[targetMonth] = (acc[targetMonth] || 0) + expFils;
+        const effectiveMonth = getEffectiveDueMonth(row);
+        acc[effectiveMonth] = (acc[effectiveMonth] || 0) + expFils;
       }
       return acc;
     }, {} as Record<string, number>)
-  ).map(([m, fils]) => [m, toKWD(fils)]) as [string, number][]).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 4);
+  ).map(([m, fils]) => [m, toKWD(fils)]) as [string, number][]).sort((a, b) => b[0].localeCompare(a[0]));
+
+  const totalDueMonthExpenses = toKWD(
+    targetMonthSummary.reduce((acc, [, val]) => acc + toFils(val), 0)
+  );
 
   return (
     <div className="p-4 print:p-3 hidden print:block border-t-2 border-slate-900 bg-white break-inside-avoid">
@@ -100,7 +103,7 @@ export default function ReportPrintFooter({
           {/* Column 2: Branches */}
           <div className="space-y-2 border-l border-slate-200 pl-3">
             <h3 className="text-[11px] font-black border-b border-slate-900 pb-1 text-slate-900">المصروفات حسب الفرع</h3>
-            <div className="space-y-1 max-h-28 overflow-hidden">
+            <div className="space-y-1">
               {branchSummary.map(([branch, total]) => (
                 <div key={branch} className="flex justify-between text-[9px] border-b border-slate-200/50 py-0.5">
                   <span className="font-bold text-slate-700">{branch}:</span>
@@ -110,10 +113,15 @@ export default function ReportPrintFooter({
             </div>
           </div>
 
-          {/* Column 3: Target Months */}
+          {/* Column 3: Target Months - Complete without omission or truncation */}
           <div className="space-y-2">
-            <h3 className="text-[11px] font-black border-b border-slate-900 pb-1 text-slate-900">شهور الاستحقاق</h3>
-            <div className="space-y-1 max-h-28 overflow-hidden">
+            <div className="flex justify-between items-center border-b border-slate-900 pb-1">
+              <h3 className="text-[11px] font-black text-slate-900">المصاريف حسب شهور الاستحقاق</h3>
+              <span className="text-[8px] font-bold px-1.5 py-0.2 bg-slate-200 text-slate-800 rounded">
+                شامل 100%
+              </span>
+            </div>
+            <div className="space-y-1">
               {targetMonthSummary.map(([month, total]) => (
                 <div key={month} className="flex justify-between text-[9px] border-b border-slate-200/50 py-0.5">
                   <span className="font-bold text-slate-700">{month}:</span>
@@ -121,7 +129,13 @@ export default function ReportPrintFooter({
                 </div>
               ))}
               {targetMonthSummary.length === 0 && (
-                <span className="text-[9px] text-slate-400">---</span>
+                <span className="text-[9px] text-slate-400">لا توجد مصروفات</span>
+              )}
+              {targetMonthSummary.length > 0 && (
+                <div className="pt-1 border-t border-slate-900 flex justify-between text-[9px] font-black text-slate-900">
+                  <span>إجمالي الشهور:</span>
+                  <span className="font-mono">{formatKWD(totalDueMonthExpenses)} د.ك</span>
+                </div>
               )}
             </div>
           </div>

@@ -27,6 +27,7 @@ export interface ReportFilter {
   department?: string;
   category?: string;
   type?: string;
+  targetMonth?: string;
   startDate?: string;
   endDate?: string;
 }

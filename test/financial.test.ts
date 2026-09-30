@@ -1,6 +1,7 @@
 import { toFils, toKWD, addMoney, subMoney, sumMoney, isMoneyEqual, normalizeEntityId } from '../src/utils/money';
 import { performReconciliation } from '../server/reconciliation';
 import { transactionSchema, orderSchema } from '../server/validation';
+import { normalizeMonthKey, extractTargetMonth, getEffectiveDueMonth, parseReportRow } from '../src/utils/format';
 
 console.log('----------------------------------------------------');
 console.log('🧪 RUNNING FINANCIAL & RECONCILIATION TEST SUITE');
@@ -196,6 +197,55 @@ assert(toKWD(sumColCashOutFils) === 42.000, 'Cash out column sum equals exactly 
 assert(toKWD(sumColAccrualFils) === 15.000, 'Accruals isolated as 15.000 KWD without deducting from cash');
 assert(calculatedEndingBalance === 130.000, 'Final balance = 100 + 72 - 42 = 130.000 KWD');
 assert(finalRowBalance === calculatedEndingBalance, 'Last row running balance strictly matches calculated ending balance');
+
+// 7. Due Months (شهور الاستحقاق) Mathematical and Parsing Integrity Tests
+console.log('\n[7] Testing Due Months (شهور الاستحقاق) Full Coverage Without Omission...');
+
+// Month key normalization
+assert(normalizeMonthKey('2026-05') === '2026-05', 'normalizeMonthKey: ISO format 2026-05');
+assert(normalizeMonthKey('2026/05') === '2026-05', 'normalizeMonthKey: Slash format 2026/05');
+assert(normalizeMonthKey('05/2026') === '2026-05', 'normalizeMonthKey: Month/Year 05/2026');
+assert(normalizeMonthKey('٢٠٢٦-٠٥') === '2026-05', 'normalizeMonthKey: Arabic digits ٢٠٢٦-٠٥');
+
+// Target month extraction from text & description
+assert(extractTargetMonth('', 'فاتورة كهرباء [تخص شهر 2026-04]') === '2026-04', 'extractTargetMonth: [تخص شهر 2026-04]');
+assert(extractTargetMonth('', 'إيجار فرع حولي تخص شهر 05/2026') === '2026-05', 'extractTargetMonth: تخص شهر 05/2026');
+assert(extractTargetMonth('', 'تاريخ الاستحقاق: 2026-07-15') === '2026-07', 'extractTargetMonth: تاريخ الاستحقاق: 2026-07-15');
+assert(extractTargetMonth('', 'دفعة مورد عن شهر مايو 2026') === '2026-05', 'extractTargetMonth: Arabic month name مايو 2026');
+
+// Effective Due Month allocation (Guarantees zero omission / دون حذف)
+const sampleExpenses = [
+  { date: '2026-05-02', expense: 100.250, description: 'مشتريات خامات عاجلة', targetMonth: '' },
+  { date: '2026-05-15', expense: 250.000, description: 'سداد إيجار متأخر [تخص شهر 2026-04]', targetMonth: '' },
+  { date: '2026-05-20', expense: 80.500, description: 'صيانة دورية للمعدات', targetMonth: '' },
+  { date: '2026-06-01', expense: 150.000, description: 'دفعة مقدمة [تخص شهر 2026-05]', targetMonth: '2026-05' },
+  { date: '2026-06-10', expense: 95.250, description: 'أدوات مكتبية', targetMonth: '' }
+];
+
+// Check due month assignments
+assert(getEffectiveDueMonth(sampleExpenses[0]) === '2026-05', 'Expense 1 allocated to occurrence month 2026-05');
+assert(getEffectiveDueMonth(sampleExpenses[1]) === '2026-04', 'Expense 2 extracted tag allocated to prior due month 2026-04');
+assert(getEffectiveDueMonth(sampleExpenses[2]) === '2026-05', 'Expense 3 allocated to occurrence month 2026-05');
+assert(getEffectiveDueMonth(sampleExpenses[3]) === '2026-05', 'Expense 4 allocated to explicit target month 2026-05');
+assert(getEffectiveDueMonth(sampleExpenses[4]) === '2026-06', 'Expense 5 allocated to occurrence month 2026-06');
+
+// Mathematical reconciliation of Due Months: Total sum must equal 100% of all expenses without omitting 1 fil
+const dueMonthTotals: Record<string, number> = {};
+let totalCalculatedExpensesFils = 0;
+
+sampleExpenses.forEach(exp => {
+  const m = getEffectiveDueMonth(exp);
+  const expFils = toFils(exp.expense);
+  totalCalculatedExpensesFils += expFils;
+  dueMonthTotals[m] = (dueMonthTotals[m] || 0) + expFils;
+});
+
+const sumOfAllDueMonthsFils = Object.values(dueMonthTotals).reduce((a, b) => a + b, 0);
+assert(sumOfAllDueMonthsFils === totalCalculatedExpensesFils, 'Sum of all due month expenses strictly equals total expenses (zero fil difference)');
+assert(toKWD(dueMonthTotals['2026-04']) === 250.000, 'Month 2026-04 total is exactly 250.000 KWD');
+assert(toKWD(dueMonthTotals['2026-05']) === 330.750, 'Month 2026-05 total is exactly 330.750 KWD (100.250 + 80.500 + 150.000)');
+assert(toKWD(dueMonthTotals['2026-06']) === 95.250, 'Month 2026-06 total is exactly 95.250 KWD');
+assert(toKWD(sumOfAllDueMonthsFils) === 676.000, 'Total distributed expenses = 676.000 KWD (100% complete without deletion or truncation)');
 
 console.log('----------------------------------------------------');
 console.log(`🎯 COMPLETED: ${passedTests}/${totalTests} TESTS PASSED`);

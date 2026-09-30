@@ -486,6 +486,173 @@ export const extractTransferParties = (
 };
 
 /**
+ * Normalizes any string representation of a month into standard YYYY-MM
+ */
+export const normalizeMonthKey = (val: any): string => {
+  if (!val) return '';
+  let str = String(val).trim();
+  if (!str || str === '-' || str === 'null' || str === 'undefined') return '';
+
+  // Arabic / Persian digits to 0-9
+  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+  for (let i = 0; i < 10; i++) {
+    str = str.replace(new RegExp(arabicDigits[i], 'g'), String(i));
+    str = str.replace(new RegExp(persianDigits[i], 'g'), String(i));
+  }
+  str = str.replace(/^["'\[\]]+|["'\[\]]+$/g, '').trim();
+
+  // YYYY-MM or YYYY/MM or YYYY.MM
+  let m = str.match(/^(\d{4})[-/.](\d{1,2})$/);
+  if (m) {
+    const y = m[1];
+    const mo = parseInt(m[2], 10);
+    if (mo >= 1 && mo <= 12) {
+      return `${y}-${String(mo).padStart(2, '0')}`;
+    }
+  }
+
+  // MM-YYYY or MM/YYYY or MM.YYYY
+  m = str.match(/^(\d{1,2})[-/.](\d{4})$/);
+  if (m) {
+    const y = m[2];
+    const mo = parseInt(m[1], 10);
+    if (mo >= 1 && mo <= 12) {
+      return `${y}-${String(mo).padStart(2, '0')}`;
+    }
+  }
+
+  // ISO date YYYY-MM-DD
+  m = str.match(/^(\d{4})[-/.](\d{1,2})[-/.]\d{1,2}/);
+  if (m) {
+    const y = m[1];
+    const mo = parseInt(m[2], 10);
+    if (mo >= 1 && mo <= 12) {
+      return `${y}-${String(mo).padStart(2, '0')}`;
+    }
+  }
+
+  // DD/MM/YYYY
+  m = str.match(/^\d{1,2}[-/.](\d{1,2})[-/.](\d{4})/);
+  if (m) {
+    const y = m[2];
+    const mo = parseInt(m[1], 10);
+    if (mo >= 1 && mo <= 12) {
+      return `${y}-${String(mo).padStart(2, '0')}`;
+    }
+  }
+
+  return '';
+};
+
+/**
+ * Extracts and standardizes target/due month from explicit values, transaction description,
+ * or category.
+ */
+export const extractTargetMonth = (
+  explicitVal?: any,
+  description?: string,
+  category?: string
+): string => {
+  // 1. Explicit targetMonth value
+  if (explicitVal) {
+    const norm = normalizeMonthKey(explicitVal);
+    if (norm) return norm;
+  }
+
+  const text = `${description || ''} ${category || ''}`.trim();
+  if (!text) return '';
+
+  // Arabic month names mapping
+  const arabicMonths: Record<string, string> = {
+    'يناير': '01',
+    'فبراير': '02',
+    'مارس': '03',
+    'أبريل': '04',
+    'ابريل': '04',
+    'مايو': '05',
+    'يونيو': '06',
+    'يوليو': '07',
+    'أغسطس': '08',
+    'اغسطس': '08',
+    'سبتمبر': '09',
+    'أكتوبر': '10',
+    'اكتوبر': '10',
+    'نوفمبر': '11',
+    'ديسمبر': '12'
+  };
+
+  // Pattern 1: [تخص شهر YYYY-MM] or تخص شهر YYYY-MM or يخص شهر ... or عن شهر ... or استحقاق شهر ...
+  const m1 = text.match(/(?:تخص|يخص|عن|استحقاق|تاريخ\s+الاستحقاق|سداد\s+مستحقات\/آجل\s+سابق\s*-\s*تخص)\s*(?:شهر)?\s*[:=\-]?\s*(\d{4}[-/.]\d{1,2})/i);
+  if (m1) {
+    const norm = normalizeMonthKey(m1[1]);
+    if (norm) return norm;
+  }
+
+  // Pattern 2: تخص شهر MM-YYYY or عن شهر MM/YYYY
+  const m2 = text.match(/(?:تخص|يخص|عن|استحقاق)\s*(?:شهر)?\s*[:=\-]?\s*(\d{1,2}[-/.]\d{4})/i);
+  if (m2) {
+    const norm = normalizeMonthKey(m2[1]);
+    if (norm) return norm;
+  }
+
+  // Pattern 3: تاريخ الاستحقاق: YYYY-MM-DD or DD-MM-YYYY
+  const m3 = text.match(/(?:تاريخ\s*الاستحقاق|الاستحقاق)\s*[:=\-]\s*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{4})/i);
+  if (m3) {
+    const norm = normalizeMonthKey(m3[1]);
+    if (norm) return norm;
+  }
+
+  // Pattern 4: Tag brackets [2026-05] or [2026/05]
+  const m4 = text.match(/\[(\d{4}[-/.]\d{1,2})\]/);
+  if (m4) {
+    const norm = normalizeMonthKey(m4[1]);
+    if (norm) return norm;
+  }
+
+  // Pattern 5: Arabic month name: e.g. "شهر مايو 2026" or "مايو 2026"
+  const m5 = text.match(/(?:شهر\s+)?(يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s*(?:لسنة\s*|\s*\/|\s+)?(\d{4})/i);
+  if (m5 && arabicMonths[m5[1]]) {
+    return `${m5[2]}-${arabicMonths[m5[1]]}`;
+  }
+
+  return '';
+};
+
+/**
+ * Returns the effective due month for a transaction (YYYY-MM).
+ * In accrual accounting:
+ * - If the transaction has an explicit targetMonth (e.g. rent of June paid in May), returns targetMonth.
+ * - Otherwise, returns the transaction's occurrence date month.
+ * This guarantees that NO expenses are ever dropped or omitted ("دون حذف").
+ */
+export const getEffectiveDueMonth = (row: { targetMonth?: string; date?: string; description?: string; category?: string }): string => {
+  const explicit = extractTargetMonth(row.targetMonth, row.description, row.category);
+  if (explicit) return explicit;
+  const normDate = normalizeExcelDate(row.date);
+  if (normDate && normDate.length >= 7) {
+    return normDate.slice(0, 7);
+  }
+  return 'غير محدد';
+};
+
+/**
+ * Formats a YYYY-MM string into an elegant Arabic title (e.g. 2026-05 -> "مايو 2026")
+ */
+export const formatMonthLabelAr = (monthStr: string): string => {
+  if (!monthStr || monthStr === 'غير محدد') return 'غير محدد';
+  const parts = monthStr.split('-');
+  if (parts.length < 2) return monthStr;
+  const monthNum = parseInt(parts[1], 10);
+  const arabicMonths = [
+    'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+  ];
+  const name = arabicMonths[monthNum - 1] || parts[1];
+  return `${name} ${parts[0]} (${monthStr})`;
+};
+
+/**
  * Universal, ultra-robust parser for any report row format (GAS Object or Array tuple)
  */
 export const parseReportRow = (row: any): NormalizedReportRow => {
@@ -529,6 +696,11 @@ export const parseReportRow = (row: any): NormalizedReportRow => {
 
     const finalAmount = rawAmt > 0 ? rawAmt : (inc > 0 ? inc : exp);
     const unifiedDate = normalizeExcelDate(row.date ?? row.Date ?? row['التاريخ'] ?? row['تاريخ'] ?? row.time ?? row.timestamp);
+    const targetMonthVal = extractTargetMonth(
+      row.targetMonth ?? row.month ?? row.target_month ?? row.dueMonth,
+      descStr,
+      catStr
+    );
 
     return {
       id: row.id ?? row.rowId ?? row.rowIndex ?? null,
@@ -542,7 +714,7 @@ export const parseReportRow = (row: any): NormalizedReportRow => {
       expense: exp,
       amount: finalAmount,
       description: descStr,
-      targetMonth: String(row.targetMonth || row.month || ''),
+      targetMonth: targetMonthVal,
       rawBalance: typeof row.balance === 'number' ? row.balance : (parseFloat(row.balance) || 0),
       raw: row
     };
@@ -550,18 +722,56 @@ export const parseReportRow = (row: any): NormalizedReportRow => {
 
   // 2. If it's an Array
   if (Array.isArray(row)) {
-    // Check if row[1] is a Date: Format [0:id, 1:date, 2:type, 3:category, 4:employee, 5:amount, 6:description, 7:branch]
-    const isMainSheetWithId = isValidDateLike(row[1]) && (row.length <= 9 || !isValidDateLike(row[0]));
+    // Check if row[1] is a Date: Format [0:id, 1:date, 2:type/branch, 3:category, 4:employee/description, 5:amount/income, 6:description/expense, ...]
+    const isMainSheetWithId = isValidDateLike(row[1]) && (row.length <= 10 || !isValidDateLike(row[0]));
 
     if (isMainSheetWithId) {
       const idVal = row[0];
       const dateVal = normalizeExcelDate(row[1]);
+      
+      // Could be Employee Sheet format: [id, date, branch, category, description, income, expense, balance, targetMonth, name]
+      // OR Main Sheet format: [id, date, type, category, employee, amount, description, branch]
+      const isEmployeeSheetFormat = (typeof row[5] === 'number' || !isNaN(parseFloat(row[5]))) &&
+                                    (typeof row[6] === 'number' || !isNaN(parseFloat(row[6]))) &&
+                                    row.length >= 7;
+
+      if (isEmployeeSheetFormat && row.length >= 8 && typeof row[2] === 'string' && typeof row[4] === 'string' && isNaN(parseFloat(row[2]))) {
+        const branchVal = String(row[2] || 'المركز الرئيسي').trim();
+        const catVal = String(row[3] || 'عام');
+        const descVal = String(row[4] || '-');
+        const inc = parseFloat(row[5]) || 0;
+        const exp = parseFloat(row[6]) || 0;
+        const bal = parseFloat(row[7]) || 0;
+        const possibleTargetMonth = row.length > 8 ? row[8] : '';
+        const empVal = row.length > 9 ? String(row[9] || 'عام').trim() : 'عام';
+        const typeVal = inc > 0 ? 'إيراد' : 'مصروف';
+        const amtVal = inc > 0 ? inc : exp;
+        const targetMonthVal = extractTargetMonth(possibleTargetMonth, descVal, catVal);
+
+        return {
+          id: idVal,
+          date: dateVal,
+          employee: empVal,
+          branch: branchVal,
+          type: typeVal,
+          category: catVal,
+          income: inc,
+          expense: exp,
+          amount: amtVal,
+          description: descVal,
+          targetMonth: targetMonthVal,
+          rawBalance: bal,
+          raw: row
+        };
+      }
+
       const typeVal = String(row[2] || '');
       const catVal = String(row[3] || 'عام');
       const empVal = String(row[4] || 'عام').trim();
       const amtVal = parseFloat(row[5]) || 0;
       const descVal = String(row[6] || '-');
       const branchVal = String(row[7] || 'المركز الرئيسي').trim();
+      const possibleTarget = row.length > 8 ? row[8] : '';
 
       let inc = 0;
       let exp = 0;
@@ -570,6 +780,8 @@ export const parseReportRow = (row: any): NormalizedReportRow => {
       } else {
         exp = amtVal;
       }
+
+      const targetMonthVal = extractTargetMonth(possibleTarget, descVal, catVal);
 
       return {
         id: idVal,
@@ -582,7 +794,7 @@ export const parseReportRow = (row: any): NormalizedReportRow => {
         expense: exp,
         amount: amtVal,
         description: descVal,
-        targetMonth: '',
+        targetMonth: targetMonthVal,
         rawBalance: 0,
         raw: row
       };
@@ -611,6 +823,8 @@ export const parseReportRow = (row: any): NormalizedReportRow => {
         exp = amtVal;
       }
 
+      const targetMonthVal = extractTargetMonth('', descVal, catVal);
+
       return {
         id: null,
         date: dateVal,
@@ -622,7 +836,7 @@ export const parseReportRow = (row: any): NormalizedReportRow => {
         expense: exp,
         amount: amtVal,
         description: descVal,
-        targetMonth: '',
+        targetMonth: targetMonthVal,
         rawBalance: 0,
         raw: row
       };
@@ -636,6 +850,8 @@ export const parseReportRow = (row: any): NormalizedReportRow => {
     const descVal = row.length > 8 && row[8] !== undefined ? String(row[8]) : (typeof row[7] === 'string' ? String(row[7]) : '-');
     const amt = inc > 0 ? inc : exp;
     const dateVal = normalizeExcelDate(row[0]);
+    const explicitTarget = row.length > 9 ? row[9] : '';
+    const targetMonthVal = extractTargetMonth(explicitTarget, descVal, catVal);
 
     return {
       id: row.length > 10 ? row[10] : (row[0] && typeof row[0] === 'number' && !isValidDateLike(row[0]) ? row[0] : null),
@@ -648,7 +864,7 @@ export const parseReportRow = (row: any): NormalizedReportRow => {
       expense: exp,
       amount: amt,
       description: descVal,
-      targetMonth: row.length > 9 ? String(row[9] || '') : '',
+      targetMonth: targetMonthVal,
       rawBalance: parseFloat(row[7]) || 0,
       raw: row
     };

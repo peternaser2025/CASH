@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   FileText, 
@@ -30,7 +30,9 @@ import {
   matchBranch,
   parseReportRow,
   NormalizedReportRow,
-  normalizeExcelDate
+  normalizeExcelDate,
+  getEffectiveDueMonth,
+  formatMonthLabelAr
 } from '../utils/format';
 import { toFils, toKWD, addMoney, subMoney, sumMoney } from '../utils/money';
 
@@ -310,6 +312,16 @@ export default function ReportViewer({ employees, balances = [], branches, categ
   // Parse raw rows
   const rawRows = report ? report.rows.map(parseReportRow) : [];
 
+  // Available unique due months across all raw rows for filter selector
+  const availableTargetMonths = useMemo(() => {
+    const monthsSet = new Set<string>();
+    rawRows.forEach(row => {
+      const m = getEffectiveDueMonth(row);
+      if (m && m !== 'غير محدد') monthsSet.add(m);
+    });
+    return Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
+  }, [rawRows]);
+
   // Filter rows
   const filteredRows = rawRows.filter(pRow => {
     if (filters.branch && filters.branch !== 'كافة الفروع' && filters.branch !== 'الكل') {
@@ -329,6 +341,11 @@ export default function ReportViewer({ employees, balances = [], branches, categ
       if (pRow.employee && pRow.employee !== 'عام' && pRow.employee.trim().toLowerCase() !== filters.employee.trim().toLowerCase()) {
         return false;
       }
+    }
+
+    if (filters.targetMonth && filters.targetMonth !== 'All' && filters.targetMonth !== 'الكل' && filters.targetMonth !== '') {
+      const rowDueMonth = getEffectiveDueMonth(pRow);
+      if (rowDueMonth !== filters.targetMonth) return false;
     }
 
     const isTransactionAccrued = isAccrualType(pRow.type, pRow.category, pRow.description);
@@ -626,6 +643,7 @@ export default function ReportViewer({ employees, balances = [], branches, categ
         onChangeFilters={setFilters}
         employees={employees}
         branches={branches}
+        availableTargetMonths={availableTargetMonths}
         accrualFilter={accrualFilter}
         onChangeAccrualFilter={setAccrualFilter}
         onGenerate={handleGenerate}
@@ -803,6 +821,11 @@ export default function ReportViewer({ employees, balances = [], branches, categ
                       <span className="px-2.5 py-0.5 bg-white/10 text-slate-300 text-xs font-bold rounded-md">
                         {filters.startDate} ↔ {filters.endDate}
                       </span>
+                      {filters.targetMonth && (
+                        <span className="px-2.5 py-0.5 bg-amber-400/20 text-amber-300 border border-amber-400/30 text-xs font-bold rounded-md">
+                          شهر الاستحقاق: {formatMonthLabelAr(filters.targetMonth)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
