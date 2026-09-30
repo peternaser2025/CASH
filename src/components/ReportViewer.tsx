@@ -96,6 +96,7 @@ export default function ReportViewer({ employees, balances = [], branches, categ
   const [activeVoucher, setActiveVoucher] = useState<VoucherData | null>(null);
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [activeReportSection, setActiveReportSection] = useState<'all' | 'table' | 'dueMonths' | 'charts'>('all');
 
   const showToast = (message: string, type: 'success' | 'warning' | 'info' | 'error' = 'success') => {
     setToast({ message, type });
@@ -971,29 +972,93 @@ export default function ReportViewer({ employees, balances = [], branches, categ
                 cashEndingBalance={cashEndingBalance}
               />
 
+              {/* Modern Structural Section Switcher (No Print) */}
+              <div className="no-print px-4 sm:px-6 py-3.5 bg-slate-100/90 border-b border-slate-200/90 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-black text-slate-800">طريقة العرض والتنقل:</span>
+                  <div className="inline-flex p-1 bg-white rounded-xl border border-slate-200 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setActiveReportSection('all')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                        activeReportSection === 'all'
+                          ? 'bg-slate-900 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      العرض الشامل الموحد
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveReportSection('table')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                        activeReportSection === 'table'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      كشف الحساب والعمليات ({computedRows.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveReportSection('dueMonths')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                        activeReportSection === 'dueMonths'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      المصاريف حسب شهور الاستحقاق
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveReportSection('charts')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                        activeReportSection === 'charts'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      الرسوم البيانية والتحليل
+                    </button>
+                  </div>
+                </div>
+
+                <div className="text-xs text-slate-500 font-bold hidden md:block">
+                  تطوير هيكلي تفاعلي مع حفظ كامل البيانات دون حذف أو اختصار
+                </div>
+              </div>
+
               {/* Modular Table Component */}
-              <ReportTable
-                computedRows={computedRows}
-                openingBalance={initialOpeningBalance}
-                finalBalance={cashEndingBalance}
-                totalIncome={filteredIn}
-                totalExpense={filteredTotalExpense}
-                totalCashExpense={filteredCashOut}
-                totalAccrual={filteredUnpaidAccruals}
-                visibleColumns={visibleColumns}
-                searchKeyword={filters.searchKeyword || ''}
-                onSearchChange={(val) => setFilters(prev => ({ ...prev, searchKeyword: val }))}
-                totalUnfilteredCount={rawRows.length}
-                onPrintVoucher={handlePrintVoucher}
-                onEditTransaction={handleEditTransaction}
-                onDeleteTransaction={handleDeleteTransaction}
-              />
+              <div className={`${activeReportSection === 'all' || activeReportSection === 'table' ? 'block' : 'hidden print:block'}`}>
+                <ReportTable
+                  computedRows={computedRows}
+                  openingBalance={initialOpeningBalance}
+                  finalBalance={cashEndingBalance}
+                  totalIncome={filteredIn}
+                  totalExpense={filteredTotalExpense}
+                  totalCashExpense={filteredCashOut}
+                  totalAccrual={filteredUnpaidAccruals}
+                  visibleColumns={visibleColumns}
+                  searchKeyword={filters.searchKeyword || ''}
+                  onSearchChange={(val) => setFilters(prev => ({ ...prev, searchKeyword: val }))}
+                  totalUnfilteredCount={rawRows.length}
+                  onPrintVoucher={handlePrintVoucher}
+                  onEditTransaction={handleEditTransaction}
+                  onDeleteTransaction={handleDeleteTransaction}
+                  onOpenColumnCustomization={() => setShowColumnModal(true)}
+                />
+              </div>
 
               {/* Modular Financial Analytics & Charts Component */}
-              <ReportAnalytics
-                rows={report.rows}
-                computedRows={computedRows}
-              />
+              <div className={`${activeReportSection === 'all' || activeReportSection === 'dueMonths' || activeReportSection === 'charts' ? 'block' : 'hidden print:block'}`}>
+                <ReportAnalytics
+                  rows={report.rows}
+                  computedRows={computedRows}
+                  onEditTransaction={handleEditTransaction}
+                  viewMode={activeReportSection === 'dueMonths' ? 'dueMonthsOnly' : activeReportSection === 'charts' ? 'chartsOnly' : 'all'}
+                />
+              </div>
 
               {/* Formal Bank Style Print Footer */}
               <ReportPrintFooter

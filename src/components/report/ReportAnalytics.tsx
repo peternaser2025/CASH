@@ -15,7 +15,8 @@ import {
   CreditCard,
   Layers,
   ArrowUpDown,
-  Tag
+  Tag,
+  Edit2
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -43,6 +44,8 @@ import { ComputedReportRow } from './ReportTable';
 interface ReportAnalyticsProps {
   rows?: any[][];
   computedRows: ComputedReportRow[];
+  onEditTransaction?: (row: ComputedReportRow, rowIndexInSheet: number) => void;
+  viewMode?: 'all' | 'dueMonthsOnly' | 'chartsOnly';
 }
 
 interface DueMonthGroup {
@@ -54,7 +57,11 @@ interface DueMonthGroup {
   rows: (ComputedReportRow & { effectiveDueMonth: string; hasExplicitTag: boolean })[];
 }
 
-export default function ReportAnalytics({ computedRows }: ReportAnalyticsProps) {
+export default function ReportAnalytics({ 
+  computedRows, 
+  onEditTransaction,
+  viewMode = 'all'
+}: ReportAnalyticsProps) {
   // State for detailed due month section
   const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -716,63 +723,90 @@ export default function ReportAnalytics({ computedRows }: ReportAnalyticsProps) 
                             <th className="py-3 px-4">الموظف المسؤول</th>
                             <th className="py-3 px-4">الفرع</th>
                             <th className="py-3 px-4">البند / التصنيف</th>
-                            <th className="py-3 px-4 min-w-[260px]">البيان والتفاصيل الشاملة</th>
+                            <th className="py-3 px-4 min-w-[240px]">البيان والتفاصيل الشاملة</th>
                             <th className="py-3 px-4 text-center">حالة الدفع</th>
                             <th className="py-3 px-4 text-left">المبلغ (د.ك)</th>
+                            <th className="py-3 px-4 text-center no-print">إجراء وتعديل</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-xs">
-                          {group.rows.map((row, idx) => (
-                            <tr key={idx} className="hover:bg-amber-50/30 transition-colors">
-                              <td className="py-3 px-4 font-mono text-slate-400 text-center font-bold">
-                                {idx + 1}
-                              </td>
-                              <td className="py-3 px-4 font-mono font-bold text-slate-700 whitespace-nowrap">
-                                {row.date}
-                              </td>
-                              <td className="py-3 px-4 font-bold text-slate-800">
-                                {row.employee || 'عام'}
-                              </td>
-                              <td className="py-3 px-4 font-bold text-slate-700">
-                                <div>{row.branch || 'المركز الرئيسي'}</div>
-                                {row.department && (
-                                  <span className="inline-block mt-0.5 px-1.5 py-0.2 bg-amber-100 text-amber-900 rounded text-[9px] font-black">
-                                    {row.department}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-3 px-4">
-                                <span className="px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-bold text-[11px]">
-                                  {row.category || 'عام'}
-                                </span>
-                              </td>
-                              <td className="py-3 px-4 font-medium text-slate-800">
-                                <div>{row.description}</div>
-                                {row.hasExplicitTag && (
-                                  <div className="mt-1">
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200/80 rounded text-[10px] font-black">
-                                      <Tag size={10} />
-                                      مخصص صراحة لشهر: {row.targetMonth}
+                          {group.rows.map((row, idx) => {
+                            const rIdx = (typeof row.raw === 'object' && row.raw?.rowIndex) ? row.raw.rowIndex : (idx + 2);
+                            return (
+                              <tr 
+                                key={idx} 
+                                onDoubleClick={() => onEditTransaction && onEditTransaction(row, rIdx)}
+                                className="hover:bg-blue-50/40 transition-colors group cursor-pointer"
+                                title="انقر نقراً مزدوجاً أو اضغط زر تعديل لتعديل هذه الحركة فوراً"
+                              >
+                                <td className="py-3 px-4 font-mono text-slate-400 text-center font-bold">
+                                  {idx + 1}
+                                </td>
+                                <td className="py-3 px-4 font-mono font-bold text-slate-700 whitespace-nowrap">
+                                  {row.date}
+                                </td>
+                                <td className="py-3 px-4 font-bold text-slate-800">
+                                  {row.employee || 'عام'}
+                                </td>
+                                <td className="py-3 px-4 font-bold text-slate-700">
+                                  <div>{row.branch || 'المركز الرئيسي'}</div>
+                                  {row.department && (
+                                    <span className="inline-block mt-0.5 px-1.5 py-0.2 bg-amber-100 text-amber-900 rounded text-[9px] font-black">
+                                      {row.department}
                                     </span>
-                                  </div>
-                                )}
-                              </td>
-                              <td className="py-3 px-4 text-center whitespace-nowrap">
-                                {row.isAccrued ? (
-                                  <span className="px-2.5 py-1 bg-amber-100 text-amber-950 border border-amber-300 rounded-lg text-[10px] font-black">
-                                    آجل / مستحق
+                                  )}
+                                </td>
+                                <td className="py-3 px-4">
+                                  <span className="px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-bold text-[11px]">
+                                    {row.category || 'عام'}
                                   </span>
-                                ) : (
-                                  <span className="px-2.5 py-1 bg-emerald-100 text-emerald-950 border border-emerald-300 rounded-lg text-[10px] font-black">
-                                    نقدي مباشر
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-3 px-4 text-left font-mono font-black text-rose-700 whitespace-nowrap">
-                                {formatKWD(row.expense)}
-                              </td>
-                            </tr>
-                          ))}
+                                </td>
+                                <td className="py-3 px-4 font-medium text-slate-800">
+                                  <div>{row.description}</div>
+                                  {row.hasExplicitTag && (
+                                    <div className="mt-1">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200/80 rounded text-[10px] font-black">
+                                        <Tag size={10} />
+                                        مخصص صراحة لشهر: {row.targetMonth}
+                                      </span>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 text-center whitespace-nowrap">
+                                  {row.isAccrued ? (
+                                    <span className="px-2.5 py-1 bg-amber-100 text-amber-950 border border-amber-300 rounded-lg text-[10px] font-black">
+                                      آجل / مستحق
+                                    </span>
+                                  ) : (
+                                    <span className="px-2.5 py-1 bg-emerald-100 text-emerald-950 border border-emerald-300 rounded-lg text-[10px] font-black">
+                                      نقدي مباشر
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 text-left font-mono font-black text-rose-700 whitespace-nowrap">
+                                  {formatKWD(row.expense)}
+                                </td>
+                                <td className="py-3 px-4 text-center whitespace-nowrap no-print">
+                                  {onEditTransaction ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onEditTransaction(row, rIdx);
+                                      }}
+                                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg text-xs font-black inline-flex items-center justify-center gap-1 shadow-xs transition-all cursor-pointer hover:scale-105"
+                                      title="تعديل هذه الحركة المالية فوراً"
+                                    >
+                                      <Edit2 size={13} className="stroke-[2.5]" />
+                                      <span>تعديل</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-[11px] text-slate-400">---</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                         <tfoot>
                           <tr className="bg-slate-50 text-xs font-black border-t-2 border-slate-900">
@@ -785,6 +819,7 @@ export default function ReportAnalytics({ computedRows }: ReportAnalyticsProps) 
                             <td className="py-3.5 px-4 text-left font-mono text-slate-950 text-sm">
                               {formatKWD(groupTotal)} د.ك
                             </td>
+                            <td className="no-print"></td>
                           </tr>
                         </tfoot>
                       </table>
