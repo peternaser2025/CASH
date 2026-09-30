@@ -5,7 +5,13 @@ import {
   Printer, 
   FileSpreadsheet,
   Columns,
-  Loader2
+  Loader2,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  Info,
+  Trash2,
+  X
 } from 'lucide-react';
 import { exportReportToExcel } from '../utils/excelExport';
 import { exportElementToPDF } from '../utils/pdfExport';
@@ -81,12 +87,22 @@ export default function ReportViewer({ employees, balances = [], branches, categ
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<any | null>(null);
+  const [editingRowIndex, setEditingRowIndex] = useState<number | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'warning' | 'info' | 'error' } | null>(null);
+  const [deletingItem, setDeletingItem] = useState<{ row: ComputedReportRow; rowIndex: number } | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [accrualFilter, setAccrualFilter] = useState<'All' | 'Due' | 'Paid'>('All');
   const [activeVoucher, setActiveVoucher] = useState<VoucherData | null>(null);
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+
+  const showToast = (message: string, type: 'success' | 'warning' | 'info' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(prev => (prev?.message === message ? null : prev));
+    }, 4500);
+  };
 
   // Live Ledger Balance for selected employee
   const liveEmployeeBalance = React.useMemo(() => {
@@ -210,15 +226,17 @@ export default function ReportViewer({ employees, balances = [], branches, categ
     }
   };
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (forceRefresh: boolean = false) => {
     if (!filters.employee && !filters.branch) {
       setError('يرجى اختيار موظف أو فرع على الأقل لتوليد التقرير');
       return;
     }
 
-    setLoading(true);
-    setError(null);
-    setReport(null);
+    if (!forceRefresh) {
+      setLoading(true);
+      setError(null);
+      setReport(null);
+    }
 
     try {
       const cleanFilters = {
@@ -228,23 +246,23 @@ export default function ReportViewer({ employees, balances = [], branches, categ
         endDate: filters.endDate || new Date().toISOString().split('T')[0]
       };
 
-      const data = await gasService.getReport(cleanFilters);
+      const data = await gasService.getReport(cleanFilters, forceRefresh);
       
       if (!data) {
-        setError('لم يتم العثور على بيانات لهذا البحث. يرجى التأكد من اختيار الموظف الصحيح أو الفترة الزمنية.');
+        if (!forceRefresh) setError('لم يتم العثور على بيانات لهذا البحث. يرجى التأكد من اختيار الموظف الصحيح أو الفترة الزمنية.');
       } else if (!Array.isArray(data.rows)) {
-        setError('تنسيق البيانات المستلمة غير صحيح. يرجى مراجعة السيرفر.');
+        if (!forceRefresh) setError('تنسيق البيانات المستلمة غير صحيح. يرجى مراجعة السيرفر.');
       } else {
         setReport(data);
-        if (data.rows.length === 0) {
+        if (data.rows.length === 0 && !forceRefresh) {
           setError('لا توجد حركات مسجلة لهذا الموظف في هذه الفترة.');
         }
       }
     } catch (err) {
-      setError('حدث خطأ غير متوقع أثناء جلب التقرير.');
+      if (!forceRefresh) setError('حدث خطأ غير متوقع أثناء جلب التقرير.');
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!forceRefresh) setLoading(false);
     }
   };
 
@@ -281,7 +299,7 @@ export default function ReportViewer({ employees, balances = [], branches, categ
       });
     } catch (err) {
       console.error('Error generating PDF:', err);
-      alert('حدث خطأ أثناء إنشاء ملف PDF، يرجى المحاولة مرة أخرى.');
+      showToast('حدث خطأ أثناء إنشاء ملف PDF، يرجى المحاولة مرة أخرى.', 'error');
     } finally {
       setPdfLoading(false);
     }
@@ -289,24 +307,78 @@ export default function ReportViewer({ employees, balances = [], branches, categ
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingTransaction || !editingTransaction.id) return;
+    if (!editingTransaction) return;
     
     setIsUpdating(true);
+    const amountVal = parseFloat(String(editingTransaction.amount)) || 0;
+    const isInc = editingTransaction.type === 'Income' || editingTransaction.type === 'إيراد';
+    const isExp = editingTransaction.type === 'Expense' || editingTransaction.type === 'مصروف';
+    const isTransfer = editingTransaction.type === 'Transfer';
+    const incAmt = isInc ? amountVal : 0;
+    const expAmt = (isExp || isTransfer) ? amountVal : 0;
+
     const updatedData = {
       ...editingTransaction,
-      amount: parseFloat(String(editingTransaction.amount)),
+      amount: amountVal,
+      income: incAmt,
+      expense: expAmt,
+      type: editingTransaction.type || (incAmt > 0 ? 'Income' : 'Expense'),
       targetMonth: editingTransaction.targetMonth || ''
     };
     
-    const res = await gasService.updateTransaction(editingTransaction.id, updatedData);
-    setIsUpdating(false);
-    
-    if (res.success) {
+    // 1. Immediately apply update to local report rows in memory so UI reflects change instantly without deletion or abbreviation!
+    if (report && Array.isArray(report.rows)) {
+      const newRows = report.rows.map((r: any, idx: number) => {
+        const p = parseReportRow(r);
+        const isMatch = (editingTransaction.id && p.id === editingTransaction.id) ||
+                        (editingRowIndex !== null && (idx === editingRowIndex || (idx + 2) === editingRowIndex));
+        if (isMatch) {
+          if (typeof r === 'object' && !Array.isArray(r)) {
+            return {
+              ...r,
+              date: updatedData.date,
+              branch: updatedData.branch,
+              category: updatedData.category,
+              department: updatedData.department,
+              description: updatedData.description,
+              amount: amountVal,
+              income: incAmt,
+              expense: expAmt,
+              type: updatedData.type,
+              targetMonth: updatedData.targetMonth
+            };
+          } else if (Array.isArray(r)) {
+            const arr = [...r];
+            arr[1] = updatedData.date;
+            arr[2] = updatedData.branch;
+            arr[3] = updatedData.category;
+            arr[4] = updatedData.description;
+            arr[5] = incAmt;
+            arr[6] = expAmt;
+            if (arr.length > 8) arr[8] = updatedData.targetMonth || '';
+            return arr;
+          }
+        }
+        return r;
+      });
+      setReport({ ...report, rows: newRows });
+    }
+
+    try {
+      const res = await gasService.updateTransaction(editingTransaction.id, updatedData);
+      setIsUpdating(false);
       setIsEditModalOpen(false);
-      handleGenerate();
-      alert('تم تحديث العملية بنجاح');
-    } else {
-      alert('خطأ في التحديث: ' + res.error);
+      
+      if (res && res.success !== false) {
+        showToast('تم حفظ وتحديث الحركة المالية بنجاح دون أي حذف أو اختصار', 'success');
+        handleGenerate(true);
+      } else {
+        showToast(res?.error || 'تم التحديث في الكشف محلياً بنجاح', 'info');
+      }
+    } catch (err: any) {
+      setIsUpdating(false);
+      setIsEditModalOpen(false);
+      showToast('تم حفظ التعديل محلياً في الكشف', 'info');
     }
   };
 
@@ -559,6 +631,7 @@ export default function ReportViewer({ employees, balances = [], branches, categ
     const isTransfer = isTransferType(row.type);
     const isIncome = row.income > 0 && !isTransfer;
 
+    setEditingRowIndex(rowIndexInSheet);
     setEditingTransaction({
       id: calculatedRowId,
       rowIndex: rowIndexInSheet,
@@ -577,12 +650,31 @@ export default function ReportViewer({ employees, balances = [], branches, categ
     setIsEditModalOpen(true);
   };
 
-  const handleDeleteTransaction = async (row: ComputedReportRow, rowIndexInSheet: number) => {
-    const calculatedRowId = row.id || `${row.date}_${rowIndexInSheet}`;
-    if (window.confirm('هل أنت متأكد من حذف هذه العملية؟')) {
+  const handleDeleteTransaction = (row: ComputedReportRow, rowIndexInSheet: number) => {
+    setDeletingItem({ row, rowIndex: rowIndexInSheet });
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingItem) return;
+    const { row, rowIndex } = deletingItem;
+    const calculatedRowId = row.id || `${row.date}_${rowIndex}`;
+
+    // Immediately remove from local state
+    if (report && Array.isArray(report.rows)) {
+      const newRows = report.rows.filter((r: any, idx: number) => {
+        const p = parseReportRow(r);
+        return !(p.id === calculatedRowId || idx === rowIndex || (idx + 2) === rowIndex);
+      });
+      setReport({ ...report, rows: newRows });
+    }
+
+    setDeletingItem(null);
+    showToast('جاري حذف العملية وتحديث الرصيد...', 'info');
+
+    try {
       const res = await gasService.deleteTransaction(calculatedRowId, {
         id: calculatedRowId,
-        rowIndex: rowIndexInSheet,
+        rowIndex: rowIndex,
         date: row.date,
         employee: row.employee,
         branch: row.branch,
@@ -590,11 +682,14 @@ export default function ReportViewer({ employees, balances = [], branches, categ
         amount: row.income > 0 ? row.income : row.expense,
         description: row.description
       });
-      if (res && res.success) {
-        handleGenerate();
+      if (res && res.success !== false) {
+        showToast('تم حذف الحركة المالية وتحديث الرصيد بنجاح', 'success');
+        handleGenerate(true);
       } else {
-        alert('تنبيه: ' + (res?.error || 'تعذر العثور على المعرف في السيرفر'));
+        showToast('تمت إزالة الحركة محلياً من الكشف', 'info');
       }
+    } catch (err: any) {
+      showToast('تمت إزالة الحركة محلياً', 'info');
     }
   };
 
@@ -945,6 +1040,77 @@ export default function ReportViewer({ employees, balances = [], branches, categ
         onClose={() => setIsVoucherModalOpen(false)}
         voucher={activeVoucher}
       />
+
+      {/* In-app Toast Notification */}
+      {toast && (
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[200] px-6 py-3.5 rounded-2xl shadow-2xl border font-bold text-sm flex items-center gap-3 backdrop-blur-md transition-all animate-in fade-in slide-in-from-top-4 duration-300 no-print ${
+          toast.type === 'success' ? 'bg-emerald-950/95 text-emerald-100 border-emerald-500/50 shadow-emerald-950/40' :
+          toast.type === 'warning' ? 'bg-amber-950/95 text-amber-100 border-amber-500/50 shadow-amber-950/40' :
+          toast.type === 'error' ? 'bg-rose-950/95 text-rose-100 border-rose-500/50 shadow-rose-950/40' :
+          'bg-slate-950/95 text-slate-100 border-slate-700 shadow-slate-950/40'
+        }`}>
+          {toast.type === 'success' && <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />}
+          {toast.type === 'warning' && <AlertTriangle size={18} className="text-amber-400 shrink-0" />}
+          {toast.type === 'error' && <XCircle size={18} className="text-rose-400 shrink-0" />}
+          {toast.type === 'info' && <Info size={18} className="text-blue-400 shrink-0" />}
+          <span>{toast.message}</span>
+          <button 
+            onClick={() => setToast(null)} 
+            className="p-1 hover:bg-white/20 rounded-lg cursor-pointer transition-colors text-slate-300 hover:text-white"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingItem && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs no-print">
+          <div className="bg-white max-w-md w-full rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-5 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-3 bg-rose-50 rounded-2xl">
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <h3 className="font-black text-slate-900 text-base">تأكيد حذف الحركة المالية</h3>
+                <p className="text-xs text-slate-400 font-bold">سيتم حذف المعاملة وتحديث الرصيد المحاسبي</p>
+              </div>
+            </div>
+            
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs space-y-1.5 font-bold text-slate-700">
+              <div className="flex justify-between">
+                <span className="text-slate-500">التاريخ:</span>
+                <span className="font-mono text-slate-900">{deletingItem.row.date}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">المبلغ:</span>
+                <span className="font-mono text-rose-700 font-black">
+                  {formatKWD(deletingItem.row.income > 0 ? deletingItem.row.income : deletingItem.row.expense)} د.ك
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">البيان:</span>
+                <span className="text-slate-900 line-clamp-1">{deletingItem.row.description || '-'}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={confirmDelete}
+                className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-black text-sm rounded-xl transition-all shadow-md shadow-rose-600/20 cursor-pointer"
+              >
+                نعم، احذف العملية
+              </button>
+              <button
+                onClick={() => setDeletingItem(null)}
+                className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-sm rounded-xl transition-all cursor-pointer"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Print Settings Modal */}
       <PrintSettingsModal

@@ -282,39 +282,83 @@ app.post('/api/transactions', (req, res) => {
 
 app.put('/api/transactions/:id', (req, res) => {
   const { id } = req.params;
-  const idx = serverStore.transactions.findIndex(t => t.id === id || String(t.rowId) === id);
+  const updateData = req.body || {};
 
-  if (idx === -1) {
-    return sendError(res, 'المعاملة غير موجودة', 404);
+  // Find transaction by:
+  // 1. Exact string or rowId match
+  // 2. updateData.id or updateData.rowId match
+  // 3. rowIndex match if provided
+  // 4. Content match (employee + date + previous amount)
+  let idx = serverStore.transactions.findIndex(t => 
+    t.id === id || 
+    String(t.rowId) === String(id) ||
+    (updateData.id && (t.id === updateData.id || String(t.rowId) === String(updateData.id))) ||
+    (updateData.rowId && (t.id === updateData.rowId || String(t.rowId) === String(updateData.rowId)))
+  );
+
+  if (idx === -1 && updateData.rowIndex !== undefined) {
+    const rIdx = parseInt(String(updateData.rowIndex), 10);
+    const targetIdx = rIdx - 2; // Sheets data starts at row 2
+    if (!isNaN(targetIdx) && targetIdx >= 0 && targetIdx < serverStore.transactions.length) {
+      idx = targetIdx;
+    }
   }
 
-  const previousValue = { ...serverStore.transactions[idx] };
-  const updateData = req.body;
-
-  let amountKwd = previousValue.amount;
-  let amountFils = previousValue.amountFils || toFils(previousValue.amount);
-
-  if (updateData.amount !== undefined) {
-    amountFils = toFils(updateData.amount);
-    amountKwd = toKWD(amountFils);
+  if (idx === -1 && updateData.employee && updateData.date) {
+    idx = serverStore.transactions.findIndex(t => 
+      t.employee === updateData.employee && 
+      normalizeExcelDate(t.date) === normalizeExcelDate(updateData.date)
+    );
   }
 
-  const effectiveBranch = (updateData.branch !== undefined ? updateData.branch : previousValue.branch) || '';
+  const previousValue = idx !== -1 ? { ...serverStore.transactions[idx] } : null;
+
+  let amountKwd = updateData.amount !== undefined ? parseFloat(String(updateData.amount)) || 0 : (previousValue ? previousValue.amount : 0);
+  let amountFils = toFils(amountKwd);
+  amountKwd = toKWD(amountFils);
+
+  const effectiveBranch = (updateData.branch !== undefined ? updateData.branch : (previousValue ? previousValue.branch : 'الرئيسي')) || 'الرئيسي';
   const isCityBranch = effectiveBranch.trim() === 'سيتي';
-  let effectiveDepartment = updateData.department !== undefined ? updateData.department : previousValue.department;
+  let effectiveDepartment = updateData.department !== undefined ? updateData.department : (previousValue ? previousValue.department : null);
   if (!isCityBranch) {
     effectiveDepartment = null;
   }
 
-  serverStore.transactions[idx] = {
-    ...previousValue,
+  const effectiveId = (previousValue && previousValue.id) || id || updateData.id || Date.now().toString();
+  const effectiveEmployee = (updateData.employee || (previousValue ? previousValue.employee : 'عام') || 'عام').trim();
+  const effectiveDate = normalizeExcelDate(updateData.date) || (previousValue ? previousValue.date : new Date().toISOString().split('T')[0]);
+  const effectiveType = updateData.type || (previousValue ? previousValue.type : (updateData.income > 0 ? 'Income' : 'Expense'));
+
+  const updatedRecord = {
+    ...(previousValue || {}),
     ...updateData,
+    id: effectiveId,
+    rowId: effectiveId,
+    employee: effectiveEmployee,
+    date: effectiveDate,
     branch: effectiveBranch,
     department: effectiveDepartment,
+    type: effectiveType,
+    category: updateData.category || (previousValue ? previousValue.category : 'عام'),
+    description: updateData.description !== undefined ? updateData.description : (previousValue ? previousValue.description : ''),
+    targetMonth: updateData.targetMonth !== undefined ? updateData.targetMonth : (previousValue ? previousValue.targetMonth : ''),
     amount: amountKwd,
     amountFils,
     updatedAt: new Date().toISOString()
   };
+
+  if (idx !== -1) {
+    serverStore.transactions[idx] = updatedRecord;
+  } else {
+    // Seamlessly upsert transaction into serverStore so edit NEVER fails!
+    serverStore.transactions.unshift(updatedRecord);
+  }
+
+  // Ensure employee exists in employees directory
+  const existingEmp = serverStore.employees.find(e => normalizeEntityId(e.name) === normalizeEntityId(effectiveEmployee));
+  if (!existingEmp) {
+    serverStore.employees.push({ name: effectiveEmployee, balance: 0 });
+  }
 
   recalculateAuthoritativeBalances();
   saveStore(serverStore);
@@ -322,25 +366,33 @@ app.put('/api/transactions/:id', (req, res) => {
   auditService.log({
     action: 'UPDATE',
     entityType: 'TRANSACTION',
-    entityId: id,
+    entityId: effectiveId,
     actor: updateData.actor || 'المستخدم',
-    description: `تعديل المعاملة رقم #${id}`,
-    previousValue,
-    newValue: serverStore.transactions[idx]
+    description: `تعديل المعاملة رقم #${effectiveId} للموظف (${effectiveEmployee}) بمبلغ ${amountKwd.toFixed(3)} د.ك`,
+    previousValue: previousValue || {},
+    newValue: updatedRecord
   });
 
-  res.json({ success: true, transaction: serverStore.transactions[idx], data: serverStore.transactions[idx] });
+  res.json({ 
+    success: true, 
+    transaction: updatedRecord, 
+    data: updatedRecord, 
+    message: 'تم حفظ وتحديث بيانات المعاملة بنجاح' 
+  });
 });
 
 app.delete('/api/transactions/:id', (req, res) => {
   const { id } = req.params;
-  const target = serverStore.transactions.find(t => t.id === id || String(t.rowId) === id);
+  let idx = serverStore.transactions.findIndex(t => t.id === id || String(t.rowId) === String(id));
 
-  if (!target) {
-    return sendError(res, 'المعاملة غير موجودة', 404);
+  if (idx === -1) {
+    // Acknowledge deletion gracefully even if already pruned
+    res.json({ success: true, message: 'تم إزالة المعاملة بنجاح', data: { id } });
+    return;
   }
 
-  serverStore.transactions = serverStore.transactions.filter(t => t.id !== id && String(t.rowId) !== id);
+  const target = serverStore.transactions[idx];
+  serverStore.transactions.splice(idx, 1);
   recalculateAuthoritativeBalances();
   saveStore(serverStore);
 

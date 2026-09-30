@@ -544,37 +544,87 @@ function updateEmployeeBalanceInSheet(ss, name, balance) {
 
 // دالة تعديل حركة مالية مسجلة مسبقاً
 function updateTransaction(ss, id, data) {
-  var name = String(data.employee).trim();
-  var sheet = ss.getSheetByName(name);
-  if (!sheet) return { success: false, error: "ورقة العمل غير موجودة" };
+  var targetId = String(id || (data && (data.id || data.rowId || data.rowIndex)) || "").trim();
+  var name = String((data && data.employee) || "").trim();
   
-  var rows = sheet.getDataRange().getValues();
-  var targetRow = -1;
-  for (var i = 1; i < rows.length; i++) {
-    if (String(rows[i][0]) === String(id)) {
-      targetRow = i + 1;
+  // البحث في ورقة الموظف إن وجدت أو في كافة أوراق العمل
+  var targetSheets = [];
+  if (name) {
+    var s = ss.getSheetByName(name);
+    if (s) targetSheets.push(s);
+  }
+  if (targetSheets.length === 0) {
+    var all = ss.getSheets();
+    for (var k = 0; k < all.length; k++) {
+      var n = all[k].getName();
+      if (["Users", "Balances", "Settings", "Dashboard"].indexOf(n) === -1) {
+        targetSheets.push(all[k]);
+      }
+    }
+  }
+
+  var found = false;
+  var updatedSheetName = "";
+
+  for (var sIdx = 0; sIdx < targetSheets.length; sIdx++) {
+    var curSheet = targetSheets[sIdx];
+    var rows = curSheet.getDataRange().getValues();
+    var targetRow = -1;
+
+    // 1. المطابقة برقم المعرف في العمود الأول
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]).trim() === targetId) {
+        targetRow = i + 1;
+        break;
+      }
+    }
+
+    // 2. المطابقة برقم السطر rowIndex إن تم تمريره
+    if (targetRow === -1 && data.rowIndex) {
+      var rIdx = parseInt(data.rowIndex);
+      if (!isNaN(rIdx) && rIdx >= 2 && rIdx <= rows.length) {
+        targetRow = rIdx;
+      }
+    }
+
+    // 3. المطابقة بالتاريخ والمبلغ
+    if (targetRow === -1 && data.date && data.amount !== undefined) {
+      for (var i = 1; i < rows.length; i++) {
+        var rDate = Utilities.formatDate(new Date(rows[i][1]), Session.getScriptTimeZone(), "yyyy-MM-dd");
+        var rAmt = (parseFloat(rows[i][5]) || 0) + (parseFloat(rows[i][6]) || 0);
+        if (rDate === String(data.date).split('T')[0] && Math.abs(rAmt - parseFloat(data.amount)) < 0.001) {
+          targetRow = i + 1;
+          break;
+        }
+      }
+    }
+
+    if (targetRow !== -1) {
+      var type = data.type || "Expense";
+      var amount = parseFloat(data.amount) || 0;
+      var income = (type === "Income" || type === "إيراد") ? amount : 0;
+      var expense = (type === "Expense" || type === "مصروف" || type === "Transfer") ? amount : 0;
+
+      if (data.date) curSheet.getRange(targetRow, 2).setValue(data.date);
+      if (data.branch) curSheet.getRange(targetRow, 3).setValue(data.branch);
+      if (data.category) curSheet.getRange(targetRow, 4).setValue(data.category);
+      if (data.description !== undefined) curSheet.getRange(targetRow, 5).setValue(data.description);
+      curSheet.getRange(targetRow, 6).setValue(income);
+      curSheet.getRange(targetRow, 7).setValue(expense);
+      curSheet.getRange(targetRow, 9).setValue(data.targetMonth || "");
+
+      updatedSheetName = curSheet.getName();
+      recalculateSheetBalances(ss, updatedSheetName);
+      found = true;
       break;
     }
   }
-  
-  if (targetRow === -1) return { success: false, error: "لم يتم العثور على العملية للتحديث" };
-  
-  var type = data.type || "Expense";
-  var amount = parseFloat(data.amount) || 0;
-  var income = (type === "Income") ? amount : 0;
-  var expense = (type === "Expense") ? amount : 0;
-  
-  sheet.getRange(targetRow, 2).setValue(data.date);
-  sheet.getRange(targetRow, 3).setValue(data.branch);
-  sheet.getRange(targetRow, 4).setValue(data.category);
-  sheet.getRange(targetRow, 5).setValue(data.description);
-  sheet.getRange(targetRow, 6).setValue(income);
-  sheet.getRange(targetRow, 7).setValue(expense);
-  sheet.getRange(targetRow, 9).setValue(data.targetMonth || "");
-  
-  recalculateSheetBalances(ss, name);
-  
-  return { success: true };
+
+  if (found) {
+    return { success: true, message: "تم تحديث الحركة بنجاح في الشيت" };
+  }
+
+  return { success: false, error: "لم يتم العثور على العملية للتحديث" };
 }
 
 // دالة حذف حركة مالية

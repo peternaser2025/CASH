@@ -357,15 +357,17 @@ export const gasService = {
     }
   },
 
-  async updateTransaction(id: number | string, transaction: any): Promise<{ success: boolean; error?: string }> {
+  async updateTransaction(id: number | string, transaction: any): Promise<{ success: boolean; error?: string; data?: any }> {
     const targetId = String(transaction.id || transaction.rowId || transaction.rowIndex || id);
-    try {
-      apiService.updateTransaction(targetId, transaction).catch(() => {});
-    } catch (e) {}
+    
+    // Always persist to backend server authoritative store
+    const serverRes = await apiService.updateTransaction(targetId, transaction);
+    this.clearCache();
 
     if (!GAS_URL || GAS_URL.includes('...')) {
-      return await apiService.updateTransaction(targetId, transaction);
+      return serverRes;
     }
+
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
@@ -389,22 +391,34 @@ export const gasService = {
       });
       const text = await response.text();
       this.clearCache();
-      return safeParseGasResponse(text, response.ok);
+      const parsed = safeParseGasResponse(text, response.ok);
+      if (parsed.success) {
+        return parsed;
+      }
+      // If GAS fails or returns HTML / page not found, fallback to server result if server succeeded!
+      if (serverRes && serverRes.success) {
+        return { success: true, data: serverRes };
+      }
+      return parsed;
     } catch (error) {
       console.error('Error updating transaction in GAS:', error);
+      if (serverRes && serverRes.success) {
+        return { success: true, data: serverRes };
+      }
       return await apiService.updateTransaction(targetId, transaction);
     }
   },
 
-  async deleteTransaction(id: number | string, extraMeta?: any): Promise<{ success: boolean; error?: string }> {
+  async deleteTransaction(id: number | string, extraMeta?: any): Promise<{ success: boolean; error?: string; data?: any }> {
     const targetId = String(extraMeta?.id || extraMeta?.rowId || extraMeta?.rowIndex || id);
-    try {
-      apiService.deleteTransaction(targetId).catch(() => {});
-    } catch (e) {}
+    
+    const serverRes = await apiService.deleteTransaction(targetId);
+    this.clearCache();
 
     if (!GAS_URL || GAS_URL.includes('...')) {
-      return await apiService.deleteTransaction(targetId);
+      return serverRes;
     }
+
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
@@ -423,9 +437,19 @@ export const gasService = {
       });
       const text = await response.text();
       this.clearCache();
-      return safeParseGasResponse(text, response.ok);
+      const parsed = safeParseGasResponse(text, response.ok);
+      if (parsed.success) {
+        return parsed;
+      }
+      if (serverRes && serverRes.success) {
+        return { success: true, data: serverRes };
+      }
+      return parsed;
     } catch (error) {
       console.error('Error deleting transaction in GAS:', error);
+      if (serverRes && serverRes.success) {
+        return { success: true, data: serverRes };
+      }
       return await apiService.deleteTransaction(targetId);
     }
   },

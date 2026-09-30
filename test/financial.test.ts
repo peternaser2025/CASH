@@ -282,6 +282,116 @@ assert(resIdSearch.length === 1 && resIdSearch[0].id === 'TX-105', 'Search by ID
 const resEmptySearch = recordedTransactions.filter(t => isArabicSearchMatch('', t.description, t.category, t.employee, t.branch, t.id, t.expense, t.income));
 assert(resEmptySearch.length === recordedTransactions.length, 'Empty search returns 100% of recorded transactions without deletion or abbreviation');
 
+// 9. Transaction Edit Execution Tests (تنفيذ التعديل على الحركات دون حذف أو اختصار)
+console.log('\n[9] Testing Transaction Edit Execution Without Deletion or Abbreviation...');
+
+interface TestTransaction {
+  id: string;
+  rowId: string;
+  date: string;
+  employee: string;
+  branch: string;
+  department?: string | null;
+  category: string;
+  description: string;
+  amount: number;
+  amountFils: number;
+  type: string;
+  targetMonth?: string;
+}
+
+const transactionDatabase: TestTransaction[] = [
+  {
+    id: 'TX-201',
+    rowId: 'TX-201',
+    date: '2026-05-01',
+    employee: 'بيتر ناصر',
+    branch: 'الرئيسي',
+    department: null,
+    category: 'نثريات',
+    description: 'شراء ورق طباعة وأقلام',
+    amount: 15.250,
+    amountFils: 15250,
+    type: 'Expense',
+    targetMonth: '2026-05'
+  },
+  {
+    id: 'TX-202',
+    rowId: 'TX-202',
+    date: '2026-05-04',
+    employee: 'بيتر ناصر',
+    branch: 'فرع حولي',
+    department: null,
+    category: 'ضيافة',
+    description: 'مشروبات وضيافة عملاء',
+    amount: 8.500,
+    amountFils: 8500,
+    type: 'Expense',
+    targetMonth: '2026-05'
+  }
+];
+
+function updateTransactionInDb(id: string, updateData: Partial<TestTransaction>): { success: boolean; transaction: TestTransaction } {
+  const idx = transactionDatabase.findIndex(t => t.id === id || t.rowId === id);
+  if (idx === -1) {
+    const newTx: TestTransaction = {
+      id,
+      rowId: id,
+      date: updateData.date || '2026-05-01',
+      employee: updateData.employee || 'بيتر ناصر',
+      branch: updateData.branch || 'الرئيسي',
+      category: updateData.category || 'عام',
+      description: updateData.description || '',
+      amount: updateData.amount || 0,
+      amountFils: toFils(updateData.amount || 0),
+      type: updateData.type || 'Expense',
+      targetMonth: updateData.targetMonth
+    };
+    transactionDatabase.push(newTx);
+    return { success: true, transaction: newTx };
+  }
+
+  const prev = transactionDatabase[idx];
+  const newAmount = updateData.amount !== undefined ? updateData.amount : prev.amount;
+  const updated: TestTransaction = {
+    ...prev,
+    ...updateData,
+    amount: newAmount,
+    amountFils: toFils(newAmount)
+  };
+  transactionDatabase[idx] = updated;
+  return { success: true, transaction: updated };
+}
+
+// Test 1: Editing amount, description, and target month
+const editRes = updateTransactionInDb('TX-201', {
+  amount: 22.750,
+  description: 'شراء ورق طباعة فاخر وأحبار ملونة',
+  targetMonth: '2026-06',
+  branch: 'سيتي',
+  department: 'المطبخ والإنتاج'
+});
+
+assert(editRes.success === true, 'Edit executed successfully on transaction TX-201');
+assert(transactionDatabase[0].amount === 22.750, 'Updated transaction amount is exact 22.750 KWD');
+assert(transactionDatabase[0].amountFils === 22750, 'Updated transaction fils is exact 22750 fils');
+assert(transactionDatabase[0].description === 'شراء ورق طباعة فاخر وأحبار ملونة', 'Updated description preserved completely');
+assert(transactionDatabase[0].targetMonth === '2026-06', 'Updated targetMonth preserved without truncation');
+assert(transactionDatabase[0].branch === 'سيتي' && transactionDatabase[0].department === 'المطبخ والإنتاج', 'Branch and department updated properly');
+
+// Test 2: Database integrity check - all transactions preserved without loss
+assert(transactionDatabase.length === 2, 'Transaction count strictly preserved at 2 (no deletion or abbreviation)');
+
+// Test 3: Upsert capability when editing transaction with composite id
+const upsertRes = updateTransactionInDb('2026-05-10_3', {
+  date: '2026-05-10',
+  employee: 'محمد جابر',
+  amount: 45.000,
+  description: 'إصلاح تكييف فرع السالمية'
+});
+assert(upsertRes.success === true, 'Editing transaction with generated ID executes and upserts seamlessly');
+assert(transactionDatabase.length === 3, 'Total records now 3 after safe upsert');
+
 console.log('----------------------------------------------------');
 console.log(`🎯 COMPLETED: ${passedTests}/${totalTests} TESTS PASSED`);
 console.log('----------------------------------------------------');

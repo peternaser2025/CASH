@@ -60,6 +60,28 @@ export default function EditTransactionModal({
         <form onSubmit={onSubmit} className="p-8 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
+              <label className="text-[10px] font-black text-gray-400 uppercase">نوع الحركة المالية</label>
+              <select
+                value={transaction.type || 'Expense'}
+                onChange={(e) => onChangeTransaction({ ...transaction, type: e.target.value })}
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-800"
+              >
+                <option value="Expense">مصروف (صادر / مدين)</option>
+                <option value="Income">إيراد / توريد عهدة (وارد / دائن)</option>
+                <option value="Transfer">تحويل عهدة نقدية بين الموظفين</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-gray-400 uppercase">الموظف / العهدة</label>
+              <input
+                type="text"
+                readOnly
+                value={transaction.employee || 'عام'}
+                className="w-full px-4 py-3 bg-slate-100 border border-slate-200 rounded-xl font-bold text-slate-600 cursor-not-allowed"
+                title="اسم الموظف أو العهدة"
+              />
+            </div>
+            <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase">التاريخ</label>
               <input
                 type="date"
@@ -123,16 +145,17 @@ export default function EditTransactionModal({
             )}
             
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-400 uppercase">شهر الاستحقاق (اختياري)</label>
+              <label className="text-[10px] font-black text-gray-400 uppercase">شهر الاستحقاق (يخص شهر)</label>
               <input
                 type="month"
                 value={transaction.targetMonth || ''}
                 onChange={(e) => onChangeTransaction({ ...transaction, targetMonth: e.target.value })}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
+                placeholder="YYYY-MM"
               />
             </div>
             <div className="md:col-span-2 space-y-2">
-              <label className="text-[10px] font-black text-gray-400 uppercase">البيان</label>
+              <label className="text-[10px] font-black text-gray-400 uppercase">البيان والتفاصيل</label>
               <textarea
                 required
                 rows={3}
