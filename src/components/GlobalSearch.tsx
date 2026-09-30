@@ -122,7 +122,7 @@ export default function GlobalSearch({ branches, categories, employees }: Global
       if (minAmount && parseFloat(minAmount) > 0 && val < parseFloat(minAmount)) return false;
       if (maxAmount && parseFloat(maxAmount) > 0 && val > parseFloat(maxAmount)) return false;
 
-      // 6. Smooth Arabic multi-token search
+      // 6. Smooth Arabic multi-token search across ALL fields without omission
       if (searchTerm.trim() !== '') {
         const matches = isArabicSearchMatch(
           searchTerm,
@@ -132,6 +132,9 @@ export default function GlobalSearch({ branches, categories, employees }: Global
           row.branch,
           row.date,
           row.type,
+          row.rawRow?.id,
+          row.rawRow?.targetMonth,
+          row.rawRow?.department,
           val,
           row.index
         );

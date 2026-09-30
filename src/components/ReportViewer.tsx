@@ -32,7 +32,8 @@ import {
   NormalizedReportRow,
   normalizeExcelDate,
   getEffectiveDueMonth,
-  formatMonthLabelAr
+  formatMonthLabelAr,
+  isArabicSearchMatch
 } from '../utils/format';
 import { toFils, toKWD, addMoney, subMoney, sumMoney } from '../utils/money';
 
@@ -346,6 +347,24 @@ export default function ReportViewer({ employees, balances = [], branches, categ
     if (filters.targetMonth && filters.targetMonth !== 'All' && filters.targetMonth !== 'الكل' && filters.targetMonth !== '') {
       const rowDueMonth = getEffectiveDueMonth(pRow);
       if (rowDueMonth !== filters.targetMonth) return false;
+    }
+
+    if (filters.searchKeyword && filters.searchKeyword.trim() !== '') {
+      const matchesSearch = isArabicSearchMatch(
+        filters.searchKeyword,
+        pRow.description,
+        pRow.category,
+        pRow.employee,
+        pRow.branch,
+        pRow.department,
+        pRow.id,
+        pRow.type,
+        pRow.targetMonth,
+        pRow.income > 0 ? pRow.income : '',
+        pRow.expense > 0 ? pRow.expense : '',
+        pRow.amount
+      );
+      if (!matchesSearch) return false;
     }
 
     const isTransactionAccrued = isAccrualType(pRow.type, pRow.category, pRow.description);
@@ -867,6 +886,9 @@ export default function ReportViewer({ employees, balances = [], branches, categ
                 totalCashExpense={filteredCashOut}
                 totalAccrual={filteredUnpaidAccruals}
                 visibleColumns={visibleColumns}
+                searchKeyword={filters.searchKeyword || ''}
+                onSearchChange={(val) => setFilters(prev => ({ ...prev, searchKeyword: val }))}
+                totalUnfilteredCount={rawRows.length}
                 onPrintVoucher={handlePrintVoucher}
                 onEditTransaction={handleEditTransaction}
                 onDeleteTransaction={handleDeleteTransaction}

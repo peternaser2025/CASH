@@ -375,10 +375,13 @@ export default function DailyJournal({
       if (statusFilter === 'owing' && rec.closingBalance <= 0) return false;
       if (statusFilter === 'inactive' && rec.hasActivityToday) return false;
 
-      // Search query (matches fund name, branch, or spent item descriptions/categories)
+      // Search query (matches fund name, branch, or spent/income item descriptions/categories/amounts)
       if (searchQuery.trim()) {
-        const spentTexts = rec.spentItems.map(i => `${i.category} ${i.description} ${i.amount}`).join(' ');
-        if (!isArabicSearchMatch(searchQuery, rec.employee, rec.branch, spentTexts)) {
+        const activityTexts = [
+          ...rec.spentItems.map(i => `${i.category} ${i.description} ${i.amount} ${i.branch || ''}`),
+          ...rec.incomeItems.map(i => `${i.category} ${i.description} ${i.amount} ${i.branch || ''}`)
+        ].join(' ');
+        if (!isArabicSearchMatch(searchQuery, rec.employee, rec.branch, activityTexts)) {
           return false;
         }
       }

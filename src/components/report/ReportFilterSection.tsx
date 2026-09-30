@@ -9,7 +9,8 @@ import {
   Loader2, 
   CheckCircle2, 
   Layers,
-  CalendarClock
+  CalendarClock,
+  X
 } from 'lucide-react';
 import { CITY_DEPARTMENTS } from '../../constants';
 import { ReportFilter } from '../../types';
@@ -59,6 +60,42 @@ export default function ReportFilterSection({
             <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-lg border border-emerald-200/60 flex items-center gap-1.5">
               <CheckCircle2 size={14} />
               تم استخراج {totalRecordsCount} حركة مالية
+            </span>
+          )}
+        </div>
+
+        {/* Real-time Search Any Word in Recorded Transactions */}
+        <div className="p-3.5 bg-slate-50 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3">
+          <div className="relative flex-1 min-w-[280px]">
+            <Search size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={filters.searchKeyword || ''}
+              onChange={(e) => onChangeFilters({ ...filters, searchKeyword: e.target.value })}
+              placeholder="البحث الفوري عن أي كلمة في الحركات المسجلة (البيان، التصنيف، الموظف، الفرع، رقم الحركة، أو المبلغ)..."
+              className="w-full pl-9 pr-10 py-2.5 bg-white border border-slate-300 hover:border-slate-400 focus:border-slate-900 rounded-xl font-bold text-xs text-slate-900 placeholder:text-slate-400 outline-none shadow-2xs transition-colors"
+            />
+            {filters.searchKeyword && (
+              <button
+                type="button"
+                onClick={() => onChangeFilters({ ...filters, searchKeyword: '' })}
+                className="absolute left-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 rounded-md transition-colors cursor-pointer"
+                title="مسح البحث"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          {filters.searchKeyword && (
+            <span className="px-3 py-1.5 bg-amber-50 text-amber-900 border border-amber-300 rounded-xl text-xs font-black flex items-center gap-2 shrink-0 shadow-2xs">
+              <span>تصفية بالكلمة: "{filters.searchKeyword}"</span>
+              <button
+                type="button"
+                onClick={() => onChangeFilters({ ...filters, searchKeyword: '' })}
+                className="text-amber-700 hover:text-amber-950 font-black cursor-pointer"
+              >
+                ×
+              </button>
             </span>
           )}
         </div>

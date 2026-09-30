@@ -28,6 +28,7 @@ export interface ReportFilter {
   category?: string;
   type?: string;
   targetMonth?: string;
+  searchKeyword?: string;
   startDate?: string;
   endDate?: string;
 }

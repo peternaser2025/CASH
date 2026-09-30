@@ -1,7 +1,7 @@
 import { toFils, toKWD, addMoney, subMoney, sumMoney, isMoneyEqual, normalizeEntityId } from '../src/utils/money';
 import { performReconciliation } from '../server/reconciliation';
 import { transactionSchema, orderSchema } from '../server/validation';
-import { normalizeMonthKey, extractTargetMonth, getEffectiveDueMonth, parseReportRow } from '../src/utils/format';
+import { normalizeMonthKey, extractTargetMonth, getEffectiveDueMonth, parseReportRow, isArabicSearchMatch } from '../src/utils/format';
 
 console.log('----------------------------------------------------');
 console.log('🧪 RUNNING FINANCIAL & RECONCILIATION TEST SUITE');
@@ -246,6 +246,41 @@ assert(toKWD(dueMonthTotals['2026-04']) === 250.000, 'Month 2026-04 total is exa
 assert(toKWD(dueMonthTotals['2026-05']) === 330.750, 'Month 2026-05 total is exactly 330.750 KWD (100.250 + 80.500 + 150.000)');
 assert(toKWD(dueMonthTotals['2026-06']) === 95.250, 'Month 2026-06 total is exactly 95.250 KWD');
 assert(toKWD(sumOfAllDueMonthsFils) === 676.000, 'Total distributed expenses = 676.000 KWD (100% complete without deletion or truncation)');
+
+// 8. Search Any Word Across Recorded Transactions Tests (دون حذف أو اختصار)
+console.log('\n[8] Testing Search on Any Word in Recorded Transactions...');
+
+const recordedTransactions = [
+  { id: 'TX-101', date: '2026-05-02', employee: 'محمد الأحمد', branch: 'فرع حولي', category: 'إيجارات', description: 'سداد إيجار المعرض عن شهر مايو', expense: 450.000, income: 0 },
+  { id: 'TX-102', date: '2026-05-05', employee: 'خالد الدوسري', branch: 'فرع السالمية', category: 'كهرباء ومياه', description: 'فاتورة وزارة الكهرباء والماء الدورية', expense: 85.500, income: 0 },
+  { id: 'TX-103', date: '2026-05-10', employee: 'علي القحطاني', branch: 'المركز الرئيسي', category: 'صيانة ونظافة', description: 'شراء أدوات نظافة ومطهرات للمقر', expense: 32.250, income: 0 },
+  { id: 'TX-104', date: '2026-05-12', employee: 'محمد الأحمد', branch: 'فرع حولي', category: 'مبيعات نقدية', description: 'توريد إيرادات مبيعات نقدية للخزينة', expense: 0, income: 620.000 },
+  { id: 'TX-105', date: '2026-05-15', employee: 'سالم الشمري', branch: 'فرع الشويخ', category: 'بضائع ومشتريات', description: 'شراء قطع غيار ومستلزمات صيانة للمستودع', expense: 190.000, income: 0 }
+];
+
+// Single word search across descriptions
+const resElectricity = recordedTransactions.filter(t => isArabicSearchMatch('كهرباء', t.description, t.category, t.employee, t.branch, t.id, t.expense, t.income));
+assert(resElectricity.length === 1 && resElectricity[0].id === 'TX-102', 'Search "كهرباء" matches TX-102');
+
+// Multi-word search in any order
+const resRentHawally = recordedTransactions.filter(t => isArabicSearchMatch('حولي إيجار', t.description, t.category, t.employee, t.branch, t.id, t.expense, t.income));
+assert(resRentHawally.length === 1 && resRentHawally[0].id === 'TX-101', 'Multi-token search "حولي إيجار" matches TX-101 regardless of token order');
+
+// Normalization: Alef with Hamza / without Hamza
+const resAhmadWithoutHamza = recordedTransactions.filter(t => isArabicSearchMatch('احمد', t.description, t.category, t.employee, t.branch, t.id, t.expense, t.income));
+assert(resAhmadWithoutHamza.length === 2, 'Search "احمد" (without hamza) matches both transactions of "الأحمد"');
+
+// Search by amount / number
+const resAmountSearch = recordedTransactions.filter(t => isArabicSearchMatch('450', t.description, t.category, t.employee, t.branch, t.id, t.expense, t.income));
+assert(resAmountSearch.length === 1 && resAmountSearch[0].id === 'TX-101', 'Search by amount "450" matches TX-101');
+
+// Search by Transaction ID / Code
+const resIdSearch = recordedTransactions.filter(t => isArabicSearchMatch('TX-105', t.description, t.category, t.employee, t.branch, t.id, t.expense, t.income));
+assert(resIdSearch.length === 1 && resIdSearch[0].id === 'TX-105', 'Search by ID "TX-105" matches TX-105');
+
+// Verification of "دون حذف أو اختصار": When search query is empty, 100% of recorded transactions are preserved
+const resEmptySearch = recordedTransactions.filter(t => isArabicSearchMatch('', t.description, t.category, t.employee, t.branch, t.id, t.expense, t.income));
+assert(resEmptySearch.length === recordedTransactions.length, 'Empty search returns 100% of recorded transactions without deletion or abbreviation');
 
 console.log('----------------------------------------------------');
 console.log(`🎯 COMPLETED: ${passedTests}/${totalTests} TESTS PASSED`);
