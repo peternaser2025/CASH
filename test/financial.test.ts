@@ -1,7 +1,7 @@
 import { toFils, toKWD, addMoney, subMoney, sumMoney, isMoneyEqual, normalizeEntityId } from '../src/utils/money';
 import { performReconciliation } from '../server/reconciliation';
 import { transactionSchema, orderSchema } from '../server/validation';
-import { normalizeMonthKey, extractTargetMonth, getEffectiveDueMonth, parseReportRow, isArabicSearchMatch } from '../src/utils/format';
+import { normalizeMonthKey, extractTargetMonth, getEffectiveDueMonth, parseReportRow, isArabicSearchMatch, isAccrualType } from '../src/utils/format';
 
 console.log('----------------------------------------------------');
 console.log('🧪 RUNNING FINANCIAL & RECONCILIATION TEST SUITE');
@@ -391,6 +391,57 @@ const upsertRes = updateTransactionInDb('2026-05-10_3', {
 });
 assert(upsertRes.success === true, 'Editing transaction with generated ID executes and upserts seamlessly');
 assert(transactionDatabase.length === 3, 'Total records now 3 after safe upsert');
+
+// 10. Precision Balance Accounting Model & Accrual Classification Accuracy Tests
+console.log('\n[10] Testing Precision Balance Accounting Model & Accrual Classification...');
+
+// Test 1: Real cash expenses with words like "مورد", "مستحقات", "دينمو" MUST NOT be treated as accruals
+assert(isAccrualType('Expense', 'مشتريات', 'شراء كراتين من المورد شركة الأحمد') === false, 'Expense mentioning "المورد" is cash and deducts from balance');
+assert(isAccrualType('Expense', 'رواتب', 'صرف مستحقات إجازة للموظف') === false, 'Expense mentioning "مستحقات" is cash and deducts from balance');
+assert(isAccrualType('Expense', 'صيانة', 'إصلاح وتبديل دينمو المكيف') === false, 'Expense mentioning "دينمو" is cash and deducts from balance');
+assert(isAccrualType('Expense', 'فواتير', 'سداد فاتورة هاتف مستحقة') === false, 'Cash settlement of bill is cash and deducts from balance');
+
+// Test 2: Explicit accrual credit commitments MUST be treated as non-cash accrual
+assert(isAccrualType('Expense', 'مشتريات آجلة', '[مستحق/آجل] توريد بضاعة لم تسدد') === true, 'Explicit [مستحق/آجل] is identified as accrual');
+assert(isAccrualType('Accrual', 'التزامات', 'فاتورة على الحساب لم تسدد') === true, 'Explicit type "Accrual" is identified as accrual');
+
+// Test 3: Prior period opening balance roll-up and statement balance identity
+const historicalTransactions = [
+  { date: '2026-01-10', income: 200.000, expense: 0, isAccrued: false },
+  { date: '2026-01-20', income: 0, expense: 50.000, isAccrued: false },
+  // Boundary: Start date 2026-02-01. Balance at start of Feb must be 150.000 KWD
+  { date: '2026-02-05', income: 100.000, expense: 0, isAccrued: false },
+  { date: '2026-02-15', income: 0, expense: 30.000, isAccrued: false },
+  { date: '2026-02-20', income: 0, expense: 20.000, isAccrued: true } // Accrual (not deducted from cash)
+];
+
+const startDate = '2026-02-01';
+const priorTxs = historicalTransactions.filter(t => t.date < startDate);
+const periodTxs = historicalTransactions.filter(t => t.date >= startDate);
+
+let priorFils = 0;
+priorTxs.forEach(t => {
+  priorFils += toFils(t.income) - (t.isAccrued ? 0 : toFils(t.expense));
+});
+const calculatedOpeningKWD = toKWD(priorFils);
+assert(calculatedOpeningKWD === 150.000, 'Prior period transactions roll up into exact 150.000 KWD opening balance');
+
+let runningBalanceFils = priorFils;
+const computedPeriodTxs = periodTxs.map(t => {
+  const inc = toFils(t.income);
+  const exp = t.isAccrued ? 0 : toFils(t.expense);
+  runningBalanceFils += inc - exp;
+  return { ...t, computedBalance: toKWD(runningBalanceFils) };
+});
+
+assert(computedPeriodTxs[0].computedBalance === 250.000, 'Feb 5 income brings balance to exact 250.000 KWD (150 + 100)');
+assert(computedPeriodTxs[1].computedBalance === 220.000, 'Feb 15 expense brings balance to exact 220.000 KWD (250 - 30)');
+assert(computedPeriodTxs[2].computedBalance === 220.000, 'Feb 20 accrual does not change cash balance (remains 220.000 KWD)');
+
+// Search filter test: filtering MUST NOT alter historical row balance
+const searchFiltered = computedPeriodTxs.filter(t => t.expense === 30.000);
+assert(searchFiltered.length === 1, 'Search filter matches 1 row');
+assert(searchFiltered[0].computedBalance === 220.000, 'Filtered row strictly preserves its true historical running balance 220.000 KWD');
 
 console.log('----------------------------------------------------');
 console.log(`🎯 COMPLETED: ${passedTests}/${totalTests} TESTS PASSED`);

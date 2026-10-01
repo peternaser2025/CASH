@@ -1,5 +1,7 @@
 import { ReportFilter, EmployeeBalance, ReportData } from '../types';
 import { apiService } from './apiService';
+import { isAccrualType } from '../utils/format';
+import { toFils, toKWD } from '../utils/money';
 
 // Standard Vite env variable access
 const VITE_GAS_URL = (import.meta as any).env.VITE_GAS_URL;
@@ -142,13 +144,14 @@ export const gasService = {
                 const exp = parseFloat(String(row.expense !== undefined ? row.expense : (row[6] || 0))) || 0;
                 const category = String(row.category || row[3] || '');
                 const description = String(row.description || row[4] || '');
+                const rowType = String(row.type || '');
                 
-                const isSettlement = /سداد|تسوية/i.test(category + " " + description);
-                const isAccrual = isSettlement ? false : /آجل|اجل|مستحق|مستحقة|مستحقه|رواتب مستحقة|دين|دائن|مورد|مؤجل|غير مسدد|لم يسدد|deferred|accrual|credit|due/i.test(category + " " + description);
+                const isAccrual = isAccrualType(rowType, category, description);
                 const cashExp = isAccrual ? 0 : exp;
                 
-                const currentBal = balancesMap.get(emp) || 0;
-                balancesMap.set(emp, currentBal + inc - cashExp);
+                const currentFils = toFils(balancesMap.get(emp) || 0);
+                const newFils = currentFils + toFils(inc) - toFils(cashExp);
+                balancesMap.set(emp, toKWD(newFils));
               }
             });
           }

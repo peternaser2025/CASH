@@ -396,8 +396,8 @@ export default function ReportViewer({ employees, balances = [], branches, categ
     return Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
   }, [rawRows]);
 
-  // Filter rows
-  const filteredRows = rawRows.filter(pRow => {
+  // Scope rows by entity (Employee, Branch, Department)
+  const scopeRows = rawRows.filter(pRow => {
     if (filters.branch && filters.branch !== 'كافة الفروع' && filters.branch !== 'الكل') {
       if (!matchBranch(pRow.branch, filters.branch)) return false;
     }
@@ -417,6 +417,97 @@ export default function ReportViewer({ employees, balances = [], branches, categ
       }
     }
 
+    return true;
+  });
+
+  // Chronological sort of the full entity history
+  const sortedScopeRows = [...scopeRows].sort((a, b) => {
+    const timeA = new Date(normalizeExcelDate(a.date)).getTime() || 0;
+    const timeB = new Date(normalizeExcelDate(b.date)).getTime() || 0;
+    if (timeA !== timeB) return timeA - timeB;
+    return String(a.id || '').localeCompare(String(b.id || ''));
+  });
+
+  // Date boundaries
+  const normStartDate = filters.startDate ? normalizeExcelDate(filters.startDate) : '';
+  const normEndDate = filters.endDate ? normalizeExcelDate(filters.endDate) : '';
+
+  // Transactions occurring strictly before the period start date (accumulate into opening balance)
+  const priorRows = normStartDate 
+    ? sortedScopeRows.filter(r => {
+        const d = normalizeExcelDate(r.date);
+        return d && d < normStartDate;
+      })
+    : [];
+
+  // Transactions occurring strictly within the statement period
+  const periodScopeRows = sortedScopeRows.filter(r => {
+    const d = normalizeExcelDate(r.date);
+    if (normStartDate && d && d < normStartDate) return false;
+    if (normEndDate && d && d > normEndDate) return false;
+    return true;
+  });
+
+  // Determine base opening balance
+  let baseOpeningFils = toFils(report?.openingBalance || '0');
+  
+  // Calculate exact prior net accumulation if prior transactions exist
+  let priorNetFils = 0;
+  priorRows.forEach(r => {
+    const isAccrued = isAccrualType(r.type, r.category, r.description);
+    const incFils = toFils(r.income);
+    const expFils = toFils(r.expense);
+    const cashExpFils = isAccrued ? 0 : expFils;
+    priorNetFils += incFils - cashExpFils;
+  });
+
+  // If first period row has a valid rawBalance from Google Sheets, align opening balance with it
+  let initialOpeningBalanceFils = baseOpeningFils + priorNetFils;
+  if (periodScopeRows.length > 0) {
+    const firstRow = periodScopeRows[0];
+    if (firstRow.rawBalance && typeof firstRow.rawBalance === 'number' && firstRow.rawBalance !== 0) {
+      const firstRowAccrued = isAccrualType(firstRow.type, firstRow.category, firstRow.description);
+      const firstCashExp = firstRowAccrued ? 0 : toFils(firstRow.expense);
+      const firstInc = toFils(firstRow.income);
+      // Opening balance right before this first transaction
+      initialOpeningBalanceFils = toFils(firstRow.rawBalance) - firstInc + firstCashExp;
+    }
+  }
+
+  // Calculate sequential historical running balance for all period transactions
+  let runningAccFils = initialOpeningBalanceFils;
+  const allPeriodComputedRows = periodScopeRows.map(pRow => {
+    const isAccrued = isAccrualType(pRow.type, pRow.category, pRow.description);
+    const incFils = toFils(pRow.income);
+    const expFils = toFils(pRow.expense);
+    const cashExpFils = isAccrued ? 0 : expFils;
+
+    if (!isAccrued) {
+      runningAccFils += incFils - cashExpFils;
+    } else {
+      runningAccFils += incFils;
+    }
+
+    // Align with Google Sheets raw balance if non-zero
+    let finalRowBalKWD = toKWD(runningAccFils);
+    if (pRow.rawBalance && typeof pRow.rawBalance === 'number' && pRow.rawBalance !== 0) {
+      finalRowBalKWD = pRow.rawBalance;
+      runningAccFils = toFils(pRow.rawBalance);
+    }
+
+    const opType = getAccountingOperationType(pRow.type, pRow.category, pRow.description, pRow.income, pRow.expense);
+
+    return {
+      ...pRow,
+      isAccrued,
+      computedBalance: finalRowBalKWD,
+      opType
+    };
+  });
+
+  // Filter for display based on searchKeyword, targetMonth, and accrualFilter
+  // CRITICAL: Every displayed row preserves its true historical computedBalance!
+  const computedRows: ComputedReportRow[] = allPeriodComputedRows.filter(pRow => {
     if (filters.targetMonth && filters.targetMonth !== 'All' && filters.targetMonth !== 'الكل' && filters.targetMonth !== '') {
       const rowDueMonth = getEffectiveDueMonth(pRow);
       if (rowDueMonth !== filters.targetMonth) return false;
@@ -440,52 +531,37 @@ export default function ReportViewer({ employees, balances = [], branches, categ
       if (!matchesSearch) return false;
     }
 
-    const isTransactionAccrued = isAccrualType(pRow.type, pRow.category, pRow.description);
-    if (accrualFilter === 'Due') return isTransactionAccrued;
-    if (accrualFilter === 'Paid') return !isTransactionAccrued;
+    if (accrualFilter === 'Due') return pRow.isAccrued;
+    if (accrualFilter === 'Paid') return !pRow.isAccrued;
     return true;
   });
 
-  // Chronological sort
-  const sortedFilteredRows = [...filteredRows].sort((a, b) => {
-    const timeA = new Date(normalizeExcelDate(a.date)).getTime() || 0;
-    const timeB = new Date(normalizeExcelDate(b.date)).getTime() || 0;
-    if (timeA !== timeB) return timeA - timeB;
-    return String(a.id || '').localeCompare(String(b.id || ''));
-  });
-
-  const initialOpeningBalanceFils = toFils(report?.openingBalance || '0');
-  let runningAccFils = initialOpeningBalanceFils;
-
+  // Financial Summary Totals
   let totalDisplayIncomeFils = 0;
   let totalDisplayCashExpenseFils = 0;
   let totalDisplayAccrualFils = 0;
 
-  const computedRows: ComputedReportRow[] = sortedFilteredRows.map(pRow => {
-    const isAccrued = isAccrualType(pRow.type, pRow.category, pRow.description);
-    const incFils = toFils(pRow.income);
-    const expFils = toFils(pRow.expense);
-
+  computedRows.forEach(r => {
+    const incFils = toFils(r.income);
+    const expFils = toFils(r.expense);
     totalDisplayIncomeFils += incFils;
-
-    if (!isAccrued) {
-      runningAccFils += incFils - expFils;
+    if (!r.isAccrued) {
       totalDisplayCashExpenseFils += expFils;
     } else {
       totalDisplayAccrualFils += expFils;
     }
-
-    const opType = getAccountingOperationType(pRow.type, pRow.category, pRow.description, pRow.income, pRow.expense);
-    return {
-      ...pRow,
-      isAccrued,
-      computedBalance: toKWD(runningAccFils),
-      opType
-    };
   });
 
   const totalDisplayExpenseFils = totalDisplayCashExpenseFils + totalDisplayAccrualFils;
-  const cashEndingBalanceFils = initialOpeningBalanceFils + totalDisplayIncomeFils - totalDisplayCashExpenseFils;
+
+  const isSearchActive = !!(filters.searchKeyword && filters.searchKeyword.trim() !== '') || 
+                         !!(filters.targetMonth && filters.targetMonth !== 'All' && filters.targetMonth !== 'الكل' && filters.targetMonth !== '') ||
+                         accrualFilter !== 'All';
+
+  // Ending balance strictly satisfies: Opening + Inflow - Cash Outflow
+  const cashEndingBalanceFils = isSearchActive
+    ? (initialOpeningBalanceFils + totalDisplayIncomeFils - totalDisplayCashExpenseFils)
+    : runningAccFils;
 
   const initialOpeningBalance = toKWD(initialOpeningBalanceFils);
   const filteredIn = toKWD(totalDisplayIncomeFils);
@@ -593,7 +669,7 @@ export default function ReportViewer({ employees, balances = [], branches, categ
           rows: categoryBreakdownRows,
           totalsRow: [
             'المجموع الكلي للبنود',
-            filteredRows.length,
+            computedRows.length,
             filteredIn,
             filteredCashOut,
             '100%'
