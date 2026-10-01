@@ -39,7 +39,8 @@ import {
   normalizeExcelDate,
   getEffectiveDueMonth,
   formatMonthLabelAr,
-  isArabicSearchMatch
+  isArabicSearchMatch,
+  calculateRowCashFlow
 } from '../utils/format';
 import { toFils, toKWD, addMoney, subMoney, sumMoney } from '../utils/money';
 
@@ -79,8 +80,8 @@ export default function ReportViewer({ employees, balances = [], branches, categ
     branch: '',
     department: '',
     type: 'All',
-    startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0]
+    startDate: '',
+    endDate: ''
   });
 
   const [report, setReport] = useState<ReportData | null>(null);
@@ -137,14 +138,19 @@ export default function ReportViewer({ employees, balances = [], branches, categ
   // Auto-generate report when initialEmployee is passed from parent (e.g., from Balance cards or Journal)
   useEffect(() => {
     if (initialEmployee) {
-      setFilters(prev => ({ ...prev, employee: initialEmployee }));
+      setFilters(prev => ({ 
+        ...prev, 
+        employee: initialEmployee,
+        startDate: '',
+        endDate: ''
+      }));
       const cleanFilters = {
         employee: initialEmployee,
         branch: '',
         department: '',
         type: '',
-        startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-        endDate: new Date().toISOString().split('T')[0]
+        startDate: '',
+        endDate: ''
       };
       setLoading(true);
       setError(null);
@@ -243,8 +249,8 @@ export default function ReportViewer({ employees, balances = [], branches, categ
       const cleanFilters = {
         ...filters,
         type: filters.type === 'All' ? '' : filters.type,
-        startDate: filters.startDate || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-        endDate: filters.endDate || new Date().toISOString().split('T')[0]
+        startDate: filters.startDate || '',
+        endDate: filters.endDate || ''
       };
 
       const data = await gasService.getReport(cleanFilters, forceRefresh);
@@ -448,59 +454,72 @@ export default function ReportViewer({ employees, balances = [], branches, categ
     return true;
   });
 
-  // Determine base opening balance
-  let baseOpeningFils = toFils(report?.openingBalance || '0');
-  
-  // Calculate exact prior net accumulation if prior transactions exist
+  // Subsequent transactions occurring strictly after the statement period
+  const subsequentRows = normEndDate
+    ? sortedScopeRows.filter(r => {
+        const d = normalizeExcelDate(r.date);
+        return d && d > normEndDate;
+      })
+    : [];
+
+  // 1. Calculate prior net cash accumulation from known priorRows in data
   let priorNetFils = 0;
   priorRows.forEach(r => {
-    const isAccrued = isAccrualType(r.type, r.category, r.description);
-    const incFils = toFils(r.income);
-    const expFils = toFils(r.expense);
-    const cashExpFils = isAccrued ? 0 : expFils;
-    priorNetFils += incFils - cashExpFils;
+    const flow = calculateRowCashFlow(r);
+    priorNetFils += flow.netCashFils;
   });
 
-  // If first period row has a valid rawBalance from Google Sheets, align opening balance with it
-  let initialOpeningBalanceFils = baseOpeningFils + priorNetFils;
-  if (periodScopeRows.length > 0) {
-    const firstRow = periodScopeRows[0];
-    if (firstRow.rawBalance && typeof firstRow.rawBalance === 'number' && firstRow.rawBalance !== 0) {
-      const firstRowAccrued = isAccrualType(firstRow.type, firstRow.category, firstRow.description);
-      const firstCashExp = firstRowAccrued ? 0 : toFils(firstRow.expense);
-      const firstInc = toFils(firstRow.income);
-      // Opening balance right before this first transaction
-      initialOpeningBalanceFils = toFils(firstRow.rawBalance) - firstInc + firstCashExp;
+  // 2. Period net cash accumulation
+  let periodNetCashFils = 0;
+  periodScopeRows.forEach(r => {
+    const flow = calculateRowCashFlow(r);
+    periodNetCashFils += flow.netCashFils;
+  });
+
+  // 3. Subsequent net cash accumulation
+  let subsequentNetCashFils = 0;
+  subsequentRows.forEach(r => {
+    const flow = calculateRowCashFlow(r);
+    subsequentNetCashFils += flow.netCashFils;
+  });
+
+  // 4. Base opening balance from server/GAS if prior rows were pruned upstream
+  const serverOpeningFils = toFils(report?.openingBalance || '0');
+
+  // Determine initial opening balance:
+  let initialOpeningBalanceFils = 0;
+  if (priorRows.length > 0) {
+    // If prior rows are present in the dataset, their sum is the true prior opening balance
+    initialOpeningBalanceFils = priorNetFils;
+  } else if (normStartDate) {
+    // If prior rows were filtered out upstream, use server opening balance
+    initialOpeningBalanceFils = serverOpeningFils;
+  }
+
+  // 5. Mathematical Live Reconciliation for Employee Statement:
+  // When an employee is specifically selected, compare with their live balance in the authoritative ledger
+  const liveBalFils = liveEmployeeBalance !== null ? toFils(liveEmployeeBalance) : null;
+  if (filters.employee && liveBalFils !== null) {
+    // If opening balance was 0 or unpopulated from server/GAS, but live balance exists and dates are set:
+    // Identity: LiveBalance = OpeningBalance + PeriodNetCash + SubsequentNetCash
+    // OpeningBalance = LiveBalance - PeriodNetCash - SubsequentNetCash
+    if (initialOpeningBalanceFils === 0 && priorRows.length === 0 && normStartDate) {
+      initialOpeningBalanceFils = liveBalFils - periodNetCashFils - subsequentNetCashFils;
     }
   }
 
   // Calculate sequential historical running balance for all period transactions
   let runningAccFils = initialOpeningBalanceFils;
   const allPeriodComputedRows = periodScopeRows.map(pRow => {
-    const isAccrued = isAccrualType(pRow.type, pRow.category, pRow.description);
-    const incFils = toFils(pRow.income);
-    const expFils = toFils(pRow.expense);
-    const cashExpFils = isAccrued ? 0 : expFils;
+    const flow = calculateRowCashFlow(pRow);
+    runningAccFils += flow.netCashFils;
 
-    if (!isAccrued) {
-      runningAccFils += incFils - cashExpFils;
-    } else {
-      runningAccFils += incFils;
-    }
-
-    // Align with Google Sheets raw balance if non-zero
-    let finalRowBalKWD = toKWD(runningAccFils);
-    if (pRow.rawBalance && typeof pRow.rawBalance === 'number' && pRow.rawBalance !== 0) {
-      finalRowBalKWD = pRow.rawBalance;
-      runningAccFils = toFils(pRow.rawBalance);
-    }
-
-    const opType = getAccountingOperationType(pRow.type, pRow.category, pRow.description, pRow.income, pRow.expense);
+    const opType = flow.opType || getAccountingOperationType(pRow.type, pRow.category, pRow.description, pRow.income, pRow.expense);
 
     return {
       ...pRow,
-      isAccrued,
-      computedBalance: finalRowBalKWD,
+      isAccrued: flow.isAccrual,
+      computedBalance: toKWD(runningAccFils),
       opType
     };
   });
@@ -844,25 +863,61 @@ export default function ReportViewer({ employees, balances = [], branches, categ
 
       {/* Live Custody Ledger Summary Card */}
       {filters.employee && liveEmployeeBalance !== null && (
-        <div className="no-print p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-2xs">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-base shadow-xs">
+        <div className="no-print p-4 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-2xs">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-base shadow-xs">
               {filters.employee.charAt(0)}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-black text-slate-900">{filters.employee}</span>
-                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-black">
+                <span className="text-base font-black text-slate-900">{filters.employee}</span>
+                <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-xs font-black">
                   رصيد الخزينة الحي
                 </span>
+                {report && Math.abs(cashEndingBalance - liveEmployeeBalance) < 0.001 ? (
+                  <span className="px-2.5 py-0.5 bg-emerald-600 text-white rounded-full text-[11px] font-black flex items-center gap-1 shadow-2xs">
+                    <CheckCircle2 size={12} />
+                    مطابق 100% مع كشف الحساب
+                  </span>
+                ) : report ? (
+                  <span className="px-2.5 py-0.5 bg-blue-100 text-blue-900 rounded-full text-[11px] font-black">
+                    كشف حساب لفترة محددة
+                  </span>
+                ) : null}
               </div>
-              <p className="text-xs text-slate-500 font-medium">الرصيد الفعلي المعتمد في السجلات المركزية للعهدة</p>
+              <p className="text-xs text-slate-600 font-medium">الرصيد الفعلي المعتمد في السجلات المركزية للعهدة</p>
             </div>
           </div>
-          <div className="text-left font-mono">
-            <span className={`text-xl font-black ${liveEmployeeBalance < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
-              {formatKWD(liveEmployeeBalance)} د.ك
-            </span>
+          
+          <div className="flex items-center gap-6">
+            {report && (
+              <div className="text-right pl-4 border-l border-emerald-200/80">
+                <span className="text-[11px] font-bold text-slate-500 block">رصيد نهاية الكشف</span>
+                <span className="text-lg font-black font-mono text-slate-900">
+                  {formatKWD(cashEndingBalance)} د.ك
+                </span>
+              </div>
+            )}
+            <div className="text-left font-mono">
+              <span className="text-[11px] font-bold text-slate-500 block text-right">الرصيد الحي المعتمد</span>
+              <span className={`text-2xl font-black ${liveEmployeeBalance < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                {formatKWD(liveEmployeeBalance)} د.ك
+              </span>
+            </div>
+            {report && Math.abs(cashEndingBalance - liveEmployeeBalance) >= 0.001 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFilters(prev => ({ ...prev, startDate: '', endDate: '' }));
+                  gasService.getReport({ ...filters, startDate: '', endDate: '' }, true)
+                    .then(data => data && setReport(data));
+                }}
+                className="px-3 py-1.5 bg-white hover:bg-emerald-100 text-emerald-900 rounded-xl text-xs font-black border border-emerald-300 transition-all cursor-pointer shadow-2xs"
+                title="عرض كشف الحساب الشامل من البداية حتى الآن للمطابقة التامة"
+              >
+                عرض السجل الكامل للمطابقة
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -1046,6 +1101,7 @@ export default function ReportViewer({ employees, balances = [], branches, categ
                 filteredCashOut={filteredCashOut}
                 filteredUnpaidAccruals={filteredUnpaidAccruals}
                 cashEndingBalance={cashEndingBalance}
+                liveEmployeeBalance={liveEmployeeBalance}
               />
 
               {/* Modern Structural Section Switcher (No Print) */}

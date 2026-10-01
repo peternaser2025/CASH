@@ -7,7 +7,7 @@ import { transactionSchema, employeeSchema, orderSchema } from './server/validat
 import { auditService } from './server/audit';
 import { performReconciliation } from './server/reconciliation';
 import { toFils, toKWD, normalizeEntityId } from './src/utils/money';
-import { normalizeExcelDate } from './src/utils/format';
+import { normalizeExcelDate, calculateRowCashFlow, isAccrualType } from './src/utils/format';
 import { getSupabaseServerClient } from './server/supabase';
 
 const app = express();
@@ -111,23 +111,36 @@ function recalculateAuthoritativeBalances() {
 
   // Ensure all known employees have a starting entry
   serverStore.employees.forEach(e => {
-    balancesFilsMap.set(e.name, 0);
+    balancesFilsMap.set(e.name.trim(), 0);
   });
 
-  serverStore.transactions.forEach(t => {
-    const emp = t.employee;
-    if (!emp) return;
-    const currentFils = balancesFilsMap.get(emp) || 0;
-    const tFils = t.amountFils !== undefined ? t.amountFils : toFils(t.amount);
-    const isInc = t.type === 'Income' || t.type === 'Transfer-In' || t.type === 'إيراد' || t.type === 'تغذية عهدة';
-    const isExp = t.type === 'Expense' || t.type === 'Transfer-Out' || t.type === 'مصروف';
+  // Chronological sort
+  const sortedTx = [...serverStore.transactions].sort((a, b) => {
+    const tA = new Date(normalizeExcelDate(a.date)).getTime() || 0;
+    const tB = new Date(normalizeExcelDate(b.date)).getTime() || 0;
+    if (tA !== tB) return tA - tB;
+    return String(a.id || '').localeCompare(String(b.id || ''));
+  });
 
-    if (isInc) balancesFilsMap.set(emp, currentFils + tFils);
-    else if (isExp) balancesFilsMap.set(emp, currentFils - tFils);
+  sortedTx.forEach(t => {
+    const emp = (t.employee || '').trim();
+    if (!emp) return;
+
+    let targetKey = emp;
+    for (const key of balancesFilsMap.keys()) {
+      if (key.toLowerCase() === emp.toLowerCase()) {
+        targetKey = key;
+        break;
+      }
+    }
+
+    const currentFils = balancesFilsMap.get(targetKey) || 0;
+    const flow = calculateRowCashFlow(t);
+    balancesFilsMap.set(targetKey, currentFils + flow.netCashFils);
   });
 
   serverStore.employees.forEach(e => {
-    const fils = balancesFilsMap.get(e.name) || 0;
+    const fils = balancesFilsMap.get(e.name.trim()) || 0;
     e.balance = fils / 1000;
   });
 }
@@ -192,7 +205,8 @@ app.get('/api/transactions', (req, res) => {
     list = list.filter(t => t.branch === branch);
   }
   if (!isAll(employee)) {
-    list = list.filter(t => t.employee === employee);
+    const empQuery = String(employee).trim().toLowerCase();
+    list = list.filter(t => (t.employee || '').trim().toLowerCase() === empQuery);
   }
   if (!isAll(category)) {
     list = list.filter(t => t.category === category);
@@ -217,10 +231,37 @@ app.get('/api/transactions', (req, res) => {
     }
   }
 
+  // Sort chronologically
+  list.sort((a, b) => {
+    const tA = new Date(normalizeExcelDate(a.date)).getTime() || 0;
+    const tB = new Date(normalizeExcelDate(b.date)).getTime() || 0;
+    if (tA !== tB) return tA - tB;
+    return String(a.id || '').localeCompare(String(b.id || ''));
+  });
+
+  let openingFils = 0;
+  if (startDate) {
+    const normStart = normalizeExcelDate(startDate);
+    if (normStart) {
+      let priorList = [...serverStore.transactions];
+      if (!isAll(branch)) priorList = priorList.filter(t => t.branch === branch);
+      if (!isAll(employee)) {
+        const empQuery = String(employee).trim().toLowerCase();
+        priorList = priorList.filter(t => (t.employee || '').trim().toLowerCase() === empQuery);
+      }
+      priorList = priorList.filter(t => normalizeExcelDate(t.date) < normStart);
+      priorList.forEach(t => {
+        const flow = calculateRowCashFlow(t);
+        openingFils += flow.netCashFils;
+      });
+    }
+  }
+
   res.json({
     success: true,
     total: list.length,
-    rows: list
+    rows: list,
+    openingBalance: toKWD(openingFils)
   });
 });
 

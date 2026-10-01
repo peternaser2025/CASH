@@ -509,8 +509,8 @@ function addTransaction(ss, data) {
   var expense = (type === "Expense") ? amount : 0;
   
   // فحص ما إذا كانت العملية آجلة / غير مسددة (لا تخصم نقدية من رصيد عهدة الموظف)
-  var isSettlement = /سداد|تسوية/i.test(category + " " + description);
-  var isAccrual = isSettlement ? false : /آجل|اجل|مستحق|مستحقة|مستحقه|رواتب مستحقة|دين|دائن|مورد|مؤجل|غير مسدد|لم يسدد|deferred|accrual|credit|due/i.test(category + " " + description);
+  var isSettlement = /سداد|تسوية|دفع كاش|دفع نقد|دفعة نقدية|صرف كاش/i.test(category + " " + description);
+  var isAccrual = isSettlement ? false : (/\[(مستحق\/آجل|آجل|اجل|التزام آجل|فاتورة آجلة|غير مدفوع|غير مسدد|شراء آجل)\]|^accrual$|^آجل$|^اجل$|مشتريات آجلة|مصاريف آجلة|\(آجل\/مستحق\)|\(آجل\)|\(غير مسدد\)/i.test(category + " " + description) || /(\bعلى الحساب\b|\bبالأجل\b|\bبالاجل\b).*(لم يسدد|غير مدفوع|غير مسدد)/i.test(description));
   
   var currentBalance = 0;
   var lastRow = sheet.getLastRow();
@@ -679,8 +679,8 @@ function recalculateSheetBalances(ss, name) {
     var inc = parseFloat(values[i][5]) || 0;
     var exp = parseFloat(values[i][6]) || 0;
     
-    var isSettlement = /سداد|تسوية/i.test(category + " " + description);
-    var isAccrual = isSettlement ? false : /آجل|اجل|مستحق|مستحقة|مستحقه|رواتب مستحقة|دين|دائن|مورد|مؤجل|غير مسدد|لم يسدد|deferred|accrual|credit|due/i.test(category + " " + description);
+    var isSettlement = /سداد|تسوية|دفع كاش|دفع نقد|دفعة نقدية|صرف كاش/i.test(category + " " + description);
+    var isAccrual = isSettlement ? false : (/\[(مستحق\/آجل|آجل|اجل|التزام آجل|فاتورة آجلة|غير مدفوع|غير مسدد|شراء آجل)\]|^accrual$|^آجل$|^اجل$|مشتريات آجلة|مصاريف آجلة|\(آجل\/مستحق\)|\(آجل\)|\(غير مسدد\)/i.test(category + " " + description) || /(\bعلى الحساب\b|\bبالأجل\b|\bبالاجل\b).*(لم يسدد|غير مدفوع|غير مسدد)/i.test(description));
 
     var cashExp = isAccrual ? 0 : exp;
     balance = balance + inc - cashExp;
@@ -698,6 +698,7 @@ function generateReport(ss, filters) {
   var rowsList = [];
   var totalIncome = 0;
   var totalExpense = 0;
+  var priorOpeningBalance = 0;
   
   var targetSheets = [];
   if (name) {
@@ -736,8 +737,17 @@ function generateReport(ss, filters) {
       
       var rowDate = new Date(rowDateStr);
       
-      // تطبيق الفلاتر
-      if (filterStart && rowDate < filterStart) continue;
+      var isSet = /سداد|تسوية|دفع كاش|دفع نقد|دفعة نقدية|صرف كاش/i.test(rowCategory + " " + rowDesc);
+      var isAcc = isSet ? false : (/\[(مستحق\/آجل|آجل|اجل|التزام آجل|فاتورة آجلة|غير مدفوع|غير مسدد|شراء آجل)\]|^accrual$|^آجل$|^اجل$|مشتريات آجلة|مصاريف آجلة|\(آجل\/مستحق\)|\(آجل\)|\(غير مسدد\)/i.test(rowCategory + " " + rowDesc) || /(\bعلى الحساب\b|\bبالأجل\b|\bبالاجل\b).*(لم يسدد|غير مدفوع|غير مسدد)/i.test(rowDesc));
+      var cashExp = isAcc ? 0 : rowExp;
+
+      // إذا كان التاريخ قبل بداية الفترة، نضيفه للرصيد الافتتاحي بدقة
+      if (filterStart && rowDate < filterStart) {
+        if (!branch || rowBranch.toLowerCase() === branch.toLowerCase()) {
+          priorOpeningBalance += (rowInc - cashExp);
+        }
+        continue;
+      }
       if (filterEnd && rowDate > filterEnd) continue;
       if (branch && rowBranch.toLowerCase() !== branch.toLowerCase()) continue;
       if (filters.type === "Income" && rowInc === 0) continue;
@@ -768,6 +778,7 @@ function generateReport(ss, filters) {
   
   return {
     rows: rowsList,
+    openingBalance: priorOpeningBalance,
     summary: {
       totalIncome: totalIncome,
       totalExpense: totalExpense,

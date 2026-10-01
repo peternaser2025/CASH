@@ -2,6 +2,8 @@
  * Financial formatting and accounting utilities for KWD (Kuwaiti Dinar)
  */
 
+import { toFils, toKWD } from './money';
+
 /**
  * Unifies, sanitizes, and standardizes any date value coming from Excel (.xlsx, .xls),
  * Google Sheets (GAS API, getValues), or CSV imports into the standard ISO format: YYYY-MM-DD
@@ -445,6 +447,64 @@ export interface NormalizedReportRow {
   rawBalance: number;
   raw: any;
 }
+
+export interface RowCashFlow {
+  incomeFils: number;
+  expenseFils: number;
+  cashExpenseFils: number;
+  unpaidAccrualFils: number;
+  netCashFils: number;
+  isAccrual: boolean;
+  opType: string;
+}
+
+/**
+ * Universally calculates exact cash flow impact for any transaction row
+ * Single Source of Truth for cash balances across Server, Client, and Reports
+ */
+export const calculateRowCashFlow = (row: {
+  type?: string;
+  category?: string;
+  description?: string;
+  income?: number | string;
+  expense?: number | string;
+  amount?: number | string;
+  amountFils?: number;
+}): RowCashFlow => {
+  const typeStr = String(row.type || '');
+  const catStr = String(row.category || '');
+  const descStr = String(row.description || '');
+
+  let rawInc = parseFloat(String(row.income || 0)) || 0;
+  let rawExp = parseFloat(String(row.expense || 0)) || 0;
+  const rawAmt = parseFloat(String(row.amount || 0)) || 0;
+
+  if (rawInc === 0 && rawExp === 0 && rawAmt > 0) {
+    if (isIncomeType(typeStr, catStr, descStr) || typeStr === 'Income' || typeStr === 'Transfer-In' || typeStr === 'إيراد' || typeStr === 'تغذية عهدة') {
+      rawInc = rawAmt;
+    } else {
+      rawExp = rawAmt;
+    }
+  }
+
+  const incomeFils = toFils(rawInc);
+  const expenseFils = toFils(rawExp);
+  const isAccrual = isAccrualType(typeStr, catStr, descStr);
+  const cashExpenseFils = isAccrual ? 0 : expenseFils;
+  const unpaidAccrualFils = isAccrual ? expenseFils : 0;
+  const netCashFils = incomeFils - cashExpenseFils;
+  const opType = getAccountingOperationType(typeStr, catStr, descStr, rawInc, rawExp);
+
+  return {
+    incomeFils,
+    expenseFils,
+    cashExpenseFils,
+    unpaidAccrualFils,
+    netCashFils,
+    isAccrual,
+    opType
+  };
+};
 
 /**
  * Accurately extracts From/To party names for cash transfers & feedings

@@ -443,6 +443,65 @@ const searchFiltered = computedPeriodTxs.filter(t => t.expense === 30.000);
 assert(searchFiltered.length === 1, 'Search filter matches 1 row');
 assert(searchFiltered[0].computedBalance === 220.000, 'Filtered row strictly preserves its true historical running balance 220.000 KWD');
 
+// 11. Employee Account Statement (كشف حساب موظف) Final Balance vs Live Balance Exact Equality Test
+console.log('\n[11] Testing Employee Account Statement Final Balance vs Live Balance Exact Equality...');
+
+// Full lifetime movements for employee "بيتر ناصر"
+const peterTransactions = [
+  { id: '1', date: '2026-08-15', employee: 'بيتر ناصر', type: 'Income', amount: 300.000, category: 'تغذية عهدة', description: 'تغذية نقدية' },
+  { id: '2', date: '2026-08-25', employee: 'بيتر ناصر', type: 'Expense', amount: 80.000, category: 'مشتريات', description: 'شراء مواد تغليف' },
+  { id: '3', date: '2026-09-05', employee: 'بيتر ناصر', type: 'Income', amount: 150.250, category: 'إيراد', description: 'مبيعات نقدية' },
+  { id: '4', date: '2026-09-18', employee: 'بيتر ناصر', type: 'Expense', amount: 25.250, category: 'نثريات', description: 'مصاريف نقل' },
+  { id: '5', date: '2026-09-22', employee: 'بيتر ناصر', type: 'Expense', amount: 45.000, category: 'مشتريات آجلة', description: '[مستحق/آجل] فاتورة لم تسدد' },
+  { id: '6', date: '2026-10-01', employee: 'بيتر ناصر', type: 'Expense', amount: 15.000, category: 'ضيافة', description: 'بوفيه وضيافة' }
+];
+
+// Live balance calculation (Single Source of Truth)
+let peterLiveBalanceFils = 0;
+peterTransactions.forEach(t => {
+  const isAcc = isAccrualType(t.type, t.category, t.description);
+  const flow = isAcc ? 0 : (t.type === 'Income' ? toFils(t.amount) : -toFils(t.amount));
+  peterLiveBalanceFils += flow;
+});
+const peterLiveBalance = toKWD(peterLiveBalanceFils); // 300 - 80 + 150.25 - 25.25 - 0 - 15 = 330.000 KWD
+assert(peterLiveBalance === 330.000, 'Peter Nasser live custody balance is exactly 330.000 KWD');
+
+// Test Case A: Statement for Full History (شامل كافة الحركات)
+let runningAllFils = 0;
+peterTransactions.forEach(t => {
+  const isAcc = isAccrualType(t.type, t.category, t.description);
+  const inc = t.type === 'Income' ? toFils(t.amount) : 0;
+  const exp = isAcc ? 0 : (t.type === 'Expense' ? toFils(t.amount) : 0);
+  runningAllFils += inc - exp;
+});
+const statementAllFinalBalance = toKWD(runningAllFils);
+assert(statementAllFinalBalance === peterLiveBalance, 'Full History Statement final balance strictly equals Live Balance (330.000 === 330.000)');
+
+// Test Case B: Statement for Date Range (2026-09-01 to 2026-10-01)
+const stmtStart = '2026-09-01';
+const stmtEnd = '2026-10-01';
+const priorRowsTest = peterTransactions.filter(t => t.date < stmtStart);
+const periodRowsTest = peterTransactions.filter(t => t.date >= stmtStart && t.date <= stmtEnd);
+
+let stmtOpeningFils = 0;
+priorRowsTest.forEach(t => {
+  const isAcc = isAccrualType(t.type, t.category, t.description);
+  stmtOpeningFils += t.type === 'Income' ? toFils(t.amount) : (isAcc ? 0 : -toFils(t.amount));
+});
+const stmtOpeningBalance = toKWD(stmtOpeningFils); // 300 - 80 = 220.000 KWD
+assert(stmtOpeningBalance === 220.000, 'Statement opening balance before Sept 1 is exact 220.000 KWD');
+
+let stmtRunningFils = stmtOpeningFils;
+periodRowsTest.forEach(t => {
+  const isAcc = isAccrualType(t.type, t.category, t.description);
+  const inc = t.type === 'Income' ? toFils(t.amount) : 0;
+  const exp = isAcc ? 0 : (t.type === 'Expense' ? toFils(t.amount) : 0);
+  stmtRunningFils += inc - exp;
+});
+const stmtPeriodFinalBalance = toKWD(stmtRunningFils);
+assert(stmtPeriodFinalBalance === peterLiveBalance, 'Date-filtered statement ending today strictly equals Live Balance (330.000 === 330.000)');
+assert(Math.abs(stmtPeriodFinalBalance - peterLiveBalance) === 0, 'Reconciliation discrepancy is exactly 0.000 KWD');
+
 console.log('----------------------------------------------------');
 console.log(`🎯 COMPLETED: ${passedTests}/${totalTests} TESTS PASSED`);
 console.log('----------------------------------------------------');

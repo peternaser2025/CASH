@@ -100,6 +100,71 @@ export default function ReportFilterSection({
           )}
         </div>
 
+        {/* Quick Period Presets for Exact Account Statements */}
+        <div className="px-4 py-2.5 bg-slate-100/70 border-b border-slate-200/90 flex flex-wrap items-center justify-between gap-2 text-xs font-bold">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-slate-500 font-bold ml-1">فترة كشف الحساب:</span>
+            <button
+              type="button"
+              onClick={() => {
+                onChangeFilters({ ...filters, startDate: '', endDate: '' });
+              }}
+              className={`px-3 py-1 rounded-xl transition-all cursor-pointer font-extrabold ${
+                !filters.startDate && !filters.endDate 
+                  ? 'bg-slate-900 text-white shadow-xs' 
+                  : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
+              }`}
+            >
+              شامل كافة الحركات (السجل الكامل)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const now = new Date();
+                const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                const end = now.toISOString().split('T')[0];
+                onChangeFilters({ ...filters, startDate: start, endDate: end });
+              }}
+              className={`px-3 py-1 rounded-xl transition-all cursor-pointer font-extrabold ${
+                filters.startDate === new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
+                  ? 'bg-slate-900 text-white shadow-xs' 
+                  : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
+              }`}
+            >
+              الشهر الحالي
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const now = new Date();
+                const start = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
+                const end = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+                onChangeFilters({ ...filters, startDate: start, endDate: end });
+              }}
+              className="px-3 py-1 bg-white hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-200 transition-all cursor-pointer font-extrabold"
+            >
+              الشهر السابق
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const now = new Date();
+                const start = `${now.getFullYear()}-01-01`;
+                const end = now.toISOString().split('T')[0];
+                onChangeFilters({ ...filters, startDate: start, endDate: end });
+              }}
+              className="px-3 py-1 bg-white hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-200 transition-all cursor-pointer font-extrabold"
+            >
+              السنة الحالية ({new Date().getFullYear()})
+            </button>
+          </div>
+          {(!filters.startDate && !filters.endDate) && (
+            <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200/60">
+              مطابقة شاملة ومباشرة مع الرصيد الحي
+            </span>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-slate-200/70 p-2">
           {/* Employee */}
           <div className="p-4 space-y-2">

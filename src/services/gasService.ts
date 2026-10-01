@@ -1,6 +1,6 @@
 import { ReportFilter, EmployeeBalance, ReportData } from '../types';
 import { apiService } from './apiService';
-import { isAccrualType } from '../utils/format';
+import { isAccrualType, calculateRowCashFlow } from '../utils/format';
 import { toFils, toKWD } from '../utils/money';
 
 // Standard Vite env variable access
@@ -138,20 +138,11 @@ export const gasService = {
           const report = await this.getReport({}, forceRefresh);
           if (report && Array.isArray(report.rows) && report.rows.length > 0) {
             report.rows.forEach((row: any) => {
-              const emp = String(row.employee || row[9] || '').trim();
+              const emp = String(row.employee || row[9] || row[1] || '').trim();
               if (emp && !ignoreSheets.includes(emp)) {
-                const inc = parseFloat(String(row.income !== undefined ? row.income : (row[5] || 0))) || 0;
-                const exp = parseFloat(String(row.expense !== undefined ? row.expense : (row[6] || 0))) || 0;
-                const category = String(row.category || row[3] || '');
-                const description = String(row.description || row[4] || '');
-                const rowType = String(row.type || '');
-                
-                const isAccrual = isAccrualType(rowType, category, description);
-                const cashExp = isAccrual ? 0 : exp;
-                
+                const flow = calculateRowCashFlow(row);
                 const currentFils = toFils(balancesMap.get(emp) || 0);
-                const newFils = currentFils + toFils(inc) - toFils(cashExp);
-                balancesMap.set(emp, toKWD(newFils));
+                balancesMap.set(emp, toKWD(currentFils + flow.netCashFils));
               }
             });
           }
@@ -186,6 +177,7 @@ export const gasService = {
   },
 
   async addTransaction(transaction: any): Promise<{ success: boolean; id?: number | string; error?: string }> {
+    this.clearCache();
     // 1. Also save in Express Server Store
     try {
       apiService.addTransaction(transaction).catch(err => console.warn('Server sync transaction warning:', err));
@@ -193,6 +185,7 @@ export const gasService = {
 
     if (!GAS_URL || GAS_URL.includes('...')) {
       const serverRes = await apiService.addTransaction(transaction);
+      this.clearCache();
       return serverRes;
     }
 

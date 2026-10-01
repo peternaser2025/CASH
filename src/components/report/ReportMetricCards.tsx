@@ -14,6 +14,7 @@ interface ReportMetricCardsProps {
   filteredCashOut: number;
   filteredUnpaidAccruals: number;
   cashEndingBalance: number;
+  liveEmployeeBalance?: number | null;
 }
 
 export default function ReportMetricCards({
@@ -21,8 +22,11 @@ export default function ReportMetricCards({
   filteredIn,
   filteredCashOut,
   filteredUnpaidAccruals,
-  cashEndingBalance
+  cashEndingBalance,
+  liveEmployeeBalance
 }: ReportMetricCardsProps) {
+  const isReconciled = liveEmployeeBalance !== null && liveEmployeeBalance !== undefined && Math.abs(cashEndingBalance - liveEmployeeBalance) < 0.001;
+
   const cards = [
     { label: 'الرصيد الافتتاحي', value: openingBalance, icon: Wallet, color: 'slate' },
     { 
@@ -52,7 +56,9 @@ export default function ReportMetricCards({
       icon: CheckCircle2, 
       color: cashEndingBalance >= 0 ? 'emerald' : 'rose', 
       highlight: true,
-      sub: 'الصافي في الصندوق'
+      sub: liveEmployeeBalance !== null && liveEmployeeBalance !== undefined
+        ? (isReconciled ? '✓ مطابق 100% للرصيد الحي' : `الرصيد الحي: ${formatKWD(liveEmployeeBalance)} د.ك`)
+        : 'الصافي في الصندوق'
     }
   ];
 
