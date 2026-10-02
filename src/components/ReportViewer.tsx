@@ -312,32 +312,33 @@ export default function ReportViewer({ employees, balances = [], branches, categ
     }
   };
 
-  const handleUpdate = async (e: React.FormEvent) => {
+  const handleUpdate = async (e: React.FormEvent, customUpdatedData?: any) => {
     e.preventDefault();
-    if (!editingTransaction) return;
+    const sourceData = customUpdatedData || editingTransaction;
+    if (!sourceData) return;
     
     setIsUpdating(true);
-    const amountVal = parseFloat(String(editingTransaction.amount)) || 0;
-    const isInc = editingTransaction.type === 'Income' || editingTransaction.type === 'إيراد';
-    const isExp = editingTransaction.type === 'Expense' || editingTransaction.type === 'مصروف';
-    const isTransfer = editingTransaction.type === 'Transfer';
+    const amountVal = parseFloat(String(sourceData.amount).replace(/,/g, '').trim()) || 0;
+    const isInc = sourceData.type === 'Income' || sourceData.type === 'إيراد';
+    const isExp = sourceData.type === 'Expense' || sourceData.type === 'مصروف';
+    const isTransfer = sourceData.type === 'Transfer';
     const incAmt = isInc ? amountVal : 0;
     const expAmt = (isExp || isTransfer) ? amountVal : 0;
 
     const updatedData = {
-      ...editingTransaction,
+      ...sourceData,
       amount: amountVal,
       income: incAmt,
       expense: expAmt,
-      type: editingTransaction.type || (incAmt > 0 ? 'Income' : 'Expense'),
-      targetMonth: editingTransaction.targetMonth || ''
+      type: sourceData.type || (incAmt > 0 ? 'Income' : 'Expense'),
+      targetMonth: sourceData.targetMonth || ''
     };
     
     // 1. Immediately apply update to local report rows in memory so UI reflects change instantly without deletion or abbreviation!
     if (report && Array.isArray(report.rows)) {
       const newRows = report.rows.map((r: any, idx: number) => {
         const p = parseReportRow(r);
-        const isMatch = (editingTransaction.id && p.id === editingTransaction.id) ||
+        const isMatch = (sourceData.id && p.id === sourceData.id) ||
                         (editingRowIndex !== null && (idx === editingRowIndex || (idx + 2) === editingRowIndex));
         if (isMatch) {
           if (typeof r === 'object' && !Array.isArray(r)) {
@@ -352,7 +353,8 @@ export default function ReportViewer({ employees, balances = [], branches, categ
               income: incAmt,
               expense: expAmt,
               type: updatedData.type,
-              targetMonth: updatedData.targetMonth
+              targetMonth: updatedData.targetMonth,
+              employee: updatedData.employee
             };
           } else if (Array.isArray(r)) {
             const arr = [...r];
@@ -363,6 +365,7 @@ export default function ReportViewer({ employees, balances = [], branches, categ
             arr[5] = incAmt;
             arr[6] = expAmt;
             if (arr.length > 8) arr[8] = updatedData.targetMonth || '';
+            if (arr.length > 9) arr[9] = updatedData.employee || arr[9];
             return arr;
           }
         }
@@ -372,12 +375,12 @@ export default function ReportViewer({ employees, balances = [], branches, categ
     }
 
     try {
-      const res = await gasService.updateTransaction(editingTransaction.id, updatedData);
+      const res = await gasService.updateTransaction(sourceData.id, updatedData);
       setIsUpdating(false);
       setIsEditModalOpen(false);
       
       if (res && res.success !== false) {
-        showToast('تم حفظ وتحديث الحركة المالية بنجاح دون أي حذف أو اختصار', 'success');
+        showToast('تم حفظ وتحديث الحركة المالية بنجاح وبنفس واجهة الإدخال المعتمدة', 'success');
         handleGenerate(true);
       } else {
         showToast(res?.error || 'تم التحديث في الكشف محلياً بنجاح', 'info');
@@ -724,8 +727,28 @@ export default function ReportViewer({ employees, balances = [], branches, categ
 
   const handleEditTransaction = (row: ComputedReportRow, rowIndexInSheet: number) => {
     const calculatedRowId = row.id || `${row.date}_${rowIndexInSheet}`;
-    const isTransfer = isTransferType(row.type);
+    const isTransfer = isTransferType(row.type, row.category, row.description);
     const isIncome = row.income > 0 && !isTransfer;
+
+    const isAccrued = row.isAccrued || isAccrualType(row.type, row.category, row.description);
+    const desc = row.description || '';
+    const vendorMatch = desc.match(/(?:-?\s*المورد:\s*|المورد\s*:\s*)([^-\]]+)/);
+    const vendorName = vendorMatch ? vendorMatch[1].trim() : '';
+
+    let sender = isTransfer ? row.employee : '';
+    let receiver = '';
+    const transferMatch = desc.match(/من\s+([^\s]+(?:\s+[^\s]+)?)\s+إلى\s+([^\s]+(?:\s+[^\s]+)?)/);
+    if (transferMatch) {
+      sender = transferMatch[1].trim();
+      receiver = transferMatch[2].trim();
+    } else if (row.category.includes('صادر إلى')) {
+      const matchTo = row.category.match(/صادر إلى\s+([^)]+)/);
+      if (matchTo) receiver = matchTo[1].trim();
+    } else if (row.category.includes('وارد من')) {
+      const matchFrom = row.category.match(/وارد من\s+([^)]+)/);
+      if (matchFrom) sender = matchFrom[1].trim();
+      receiver = row.employee;
+    }
 
     setEditingRowIndex(rowIndexInSheet);
     setEditingTransaction({
@@ -738,10 +761,13 @@ export default function ReportViewer({ employees, balances = [], branches, categ
       description: row.description,
       amount: row.income > 0 ? row.income : row.expense,
       type: isTransfer ? 'Transfer' : (isIncome ? 'Income' : 'Expense'),
-      targetMonth: row.targetMonth,
+      targetMonth: row.targetMonth || '',
+      hasTargetMonth: !!(row.targetMonth && row.targetMonth.trim() !== ''),
       employee: row.employee,
-      sender: isTransfer ? row.employee : '',
-      receiver: '' 
+      sender: sender || row.employee,
+      receiver: receiver || '',
+      isAccrual: isAccrued,
+      vendorName: vendorName
     });
     setIsEditModalOpen(true);
   };
@@ -1217,6 +1243,7 @@ export default function ReportViewer({ employees, balances = [], branches, categ
         transaction={editingTransaction}
         onChangeTransaction={setEditingTransaction}
         onSubmit={handleUpdate}
+        employees={employees}
         branches={branches}
         categories={categories}
         isUpdating={isUpdating}
