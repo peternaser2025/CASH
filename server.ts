@@ -280,6 +280,76 @@ app.post('/api/transactions', (req, res) => {
   const isCityBranch = (data.branch || '').trim() === 'سيتي';
   const assignedDepartment = isCityBranch && data.department ? data.department.trim() : null;
 
+  // Check for custody transfer between two employees
+  if (data.type === 'Transfer' && data.sender && data.receiver && data.sender.trim() !== data.receiver.trim()) {
+    const senderName = data.sender.trim();
+    const receiverName = data.receiver.trim();
+
+    // 1. Transaction for sender (Outflow / -)
+    const senderTx = {
+      id: newId,
+      rowId: newId,
+      date: normalizeExcelDate(data.date) || new Date().toISOString().split('T')[0],
+      employee: senderName,
+      branch: data.branch || 'الرئيسي',
+      department: assignedDepartment,
+      category: `تحويل عهدة (صادر إلى ${receiverName})`,
+      description: data.description || `تحويل عهدة نقدية من ${senderName} إلى ${receiverName}`,
+      amount: amountKwd,
+      amountFils,
+      type: 'Transfer-Out',
+      sender: senderName,
+      receiver: receiverName,
+      targetMonth: data.targetMonth,
+      createdAt: new Date().toISOString()
+    };
+
+    // 2. Transaction for receiver (Inflow / +)
+    const receiverId = (Date.now() + 1).toString();
+    const receiverTx = {
+      id: receiverId,
+      rowId: receiverId,
+      date: normalizeExcelDate(data.date) || new Date().toISOString().split('T')[0],
+      employee: receiverName,
+      branch: data.branch || 'الرئيسي',
+      department: assignedDepartment,
+      category: `تحويل عهدة (وارد من ${senderName})`,
+      description: data.description || `تحويل عهدة نقدية من ${senderName} إلى ${receiverName}`,
+      amount: amountKwd,
+      amountFils,
+      type: 'Transfer-In',
+      sender: senderName,
+      receiver: receiverName,
+      targetMonth: data.targetMonth,
+      createdAt: new Date().toISOString()
+    };
+
+    // Ensure both employees exist
+    [senderName, receiverName].forEach(empName => {
+      const empExists = serverStore.employees.find(e => normalizeEntityId(e.name) === normalizeEntityId(empName));
+      if (!empExists) {
+        serverStore.employees.push({ name: empName, balance: 0 });
+      }
+    });
+
+    serverStore.transactions.unshift(senderTx);
+    serverStore.transactions.unshift(receiverTx);
+
+    recalculateAuthoritativeBalances();
+    saveStore(serverStore);
+
+    auditService.log({
+      action: 'CREATE',
+      entityType: 'TRANSACTION',
+      entityId: newId,
+      actor: (req.body && req.body.actor) || 'المستخدم',
+      description: `تحويل عهدة نقدية بمبلغ ${amountKwd.toFixed(3)} د.ك من (${senderName}) إلى (${receiverName})`,
+      newValue: { senderTx, receiverTx }
+    });
+
+    return res.json({ success: true, id: newId, transaction: senderTx, data: senderTx });
+  }
+
   const tx = {
     id: newId,
     rowId: newId,

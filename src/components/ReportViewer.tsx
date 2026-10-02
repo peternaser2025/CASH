@@ -418,7 +418,9 @@ export default function ReportViewer({ employees, balances = [], branches, categ
     }
 
     if (filters.employee && filters.employee !== 'كافة الموظفين' && filters.employee !== 'الكل') {
-      if (pRow.employee && pRow.employee !== 'عام' && pRow.employee.trim().toLowerCase() !== filters.employee.trim().toLowerCase()) {
+      const selectedEmp = filters.employee.trim().toLowerCase();
+      const rowEmp = (pRow.employee || '').trim().toLowerCase();
+      if (rowEmp !== selectedEmp) {
         return false;
       }
     }
@@ -497,15 +499,13 @@ export default function ReportViewer({ employees, balances = [], branches, categ
   }
 
   // 5. Mathematical Live Reconciliation for Employee Statement:
-  // When an employee is specifically selected, compare with their live balance in the authoritative ledger
+  // When an employee is specifically selected, reconcile with their live balance in the authoritative ledger:
+  // Mathematical Identity: LiveBalance = OpeningBalance + PeriodNetCash + SubsequentNetCash
+  // Therefore: OpeningBalance = LiveBalance - PeriodNetCash - SubsequentNetCash
+  // This guarantees that EndingBalance = LiveBalance - SubsequentNetCash (and equals LiveBalance when statement is to-date)
   const liveBalFils = liveEmployeeBalance !== null ? toFils(liveEmployeeBalance) : null;
   if (filters.employee && liveBalFils !== null) {
-    // If opening balance was 0 or unpopulated from server/GAS, but live balance exists and dates are set:
-    // Identity: LiveBalance = OpeningBalance + PeriodNetCash + SubsequentNetCash
-    // OpeningBalance = LiveBalance - PeriodNetCash - SubsequentNetCash
-    if (initialOpeningBalanceFils === 0 && priorRows.length === 0 && normStartDate) {
-      initialOpeningBalanceFils = liveBalFils - periodNetCashFils - subsequentNetCashFils;
-    }
+    initialOpeningBalanceFils = liveBalFils - periodNetCashFils - subsequentNetCashFils;
   }
 
   // Calculate sequential historical running balance for all period transactions

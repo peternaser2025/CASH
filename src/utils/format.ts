@@ -480,7 +480,16 @@ export const calculateRowCashFlow = (row: {
   const rawAmt = parseFloat(String(row.amount || 0)) || 0;
 
   if (rawInc === 0 && rawExp === 0 && rawAmt > 0) {
-    if (isIncomeType(typeStr, catStr, descStr) || typeStr === 'Income' || typeStr === 'Transfer-In' || typeStr === 'إيراد' || typeStr === 'تغذية عهدة') {
+    const isIncoming = 
+      isIncomeType(typeStr, catStr, descStr) || 
+      typeStr === 'Income' || 
+      typeStr === 'Transfer-In' || 
+      typeStr === 'إيراد' || 
+      typeStr === 'تغذية عهدة' ||
+      typeStr === 'رصيد إفتتاحي' ||
+      /وارد من|استلام عهدة|تغذية عهدة|قبض|إيداع|ايداع|توريد نقدي|مقبوضات/i.test(catStr + ' ' + descStr);
+
+    if (isIncoming) {
       rawInc = rawAmt;
     } else {
       rawExp = rawAmt;

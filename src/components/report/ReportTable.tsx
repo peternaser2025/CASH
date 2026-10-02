@@ -528,14 +528,19 @@ export default function ReportTable({
                 </td>
                 {leadingColSpan > 1 && (
                   <td colSpan={leadingColSpan - 1} className="px-3.5 py-3.5 text-right">
-                    <span className="font-black text-slate-200">
-                      {searchKeyword ? `إجمالي الحركات المطابقة للبحث (${computedRows.length} حركة):` : 'إجمالي الكشف التدقيقي الكامل:'}
-                    </span>
-                    {totalAccrual && totalAccrual > 0 ? (
-                      <span className="block text-[10px] text-amber-300 font-normal">
-                        (يشمل {formatKWD(totalCashExpense || 0)} د.ك نقدي + {formatKWD(totalAccrual)} د.ك التزامات آجلة)
+                    <div className="flex flex-col gap-1">
+                      <span className="font-black text-slate-200">
+                        {searchKeyword ? `إجمالي الحركات المطابقة للبحث (${computedRows.length} حركة):` : 'معادلة المطابقة المحاسبية لكشف الحساب:'}
                       </span>
-                    ) : null}
+                      <span className="text-[11px] font-mono text-emerald-300 font-bold">
+                        افتتاحي ({formatKWD(openingBalance)}) + وارد ({formatKWD(totalIncome)}) - صادر نقدي ({formatKWD(totalCashExpense !== undefined ? totalCashExpense : totalExpense)}) = رصيد ({formatKWD(finalBalance)}) د.ك
+                      </span>
+                      {totalAccrual && totalAccrual > 0 ? (
+                        <span className="text-[10px] text-amber-300 font-normal">
+                          (يوجد {formatKWD(totalAccrual)} د.ك التزامات مشتريات آجلة مثبتة دفترياً ولم تخصم من السيولة النقدية)
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                 )}
                 {visibleColumns.income && (
@@ -545,7 +550,10 @@ export default function ReportTable({
                 )}
                 {visibleColumns.expense && (
                   <td className="px-3.5 py-3.5 font-mono text-rose-400 font-black text-sm text-left whitespace-nowrap">
-                    -{formatKWD(totalExpense)}
+                    <div>-{formatKWD(totalCashExpense !== undefined ? totalCashExpense : totalExpense)}</div>
+                    {totalAccrual && totalAccrual > 0 ? (
+                      <div className="text-[9px] text-amber-300 font-normal">(+{formatKWD(totalAccrual)} آجل)</div>
+                    ) : null}
                   </td>
                 )}
                 {trailingColSpan > 0 && (
