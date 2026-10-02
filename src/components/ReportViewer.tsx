@@ -72,9 +72,17 @@ interface ReportViewerProps {
   branches: string[];
   categories: string[];
   initialEmployee?: string;
+  onRefreshBalances?: () => void;
 }
 
-export default function ReportViewer({ employees, balances = [], branches, categories, initialEmployee }: ReportViewerProps) {
+export default function ReportViewer({ 
+  employees, 
+  balances = [], 
+  branches, 
+  categories, 
+  initialEmployee,
+  onRefreshBalances
+}: ReportViewerProps) {
   const [filters, setFilters] = useState<ReportFilter>({
     employee: initialEmployee || '',
     branch: '',
@@ -83,6 +91,25 @@ export default function ReportViewer({ employees, balances = [], branches, categ
     startDate: '',
     endDate: ''
   });
+
+  const [currentBalances, setCurrentBalances] = useState<EmployeeBalance[]>(balances);
+  useEffect(() => {
+    setCurrentBalances(balances);
+  }, [balances]);
+
+  const refreshLiveBalances = async () => {
+    try {
+      const fresh = await gasService.getBalances(true);
+      if (Array.isArray(fresh) && fresh.length > 0) {
+        setCurrentBalances(fresh);
+      }
+      if (onRefreshBalances) {
+        onRefreshBalances();
+      }
+    } catch (e) {
+      console.warn('Error refreshing live balances:', e);
+    }
+  };
 
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -108,10 +135,11 @@ export default function ReportViewer({ employees, balances = [], branches, categ
 
   // Live Ledger Balance for selected employee
   const liveEmployeeBalance = React.useMemo(() => {
-    if (!filters.employee || !balances.length) return null;
-    const found = balances.find(b => b.name.trim() === filters.employee.trim());
+    if (!filters.employee || !currentBalances.length) return null;
+    const cleanEmp = filters.employee.trim().toLowerCase();
+    const found = currentBalances.find(b => (b.name || '').trim().toLowerCase() === cleanEmp);
     return found ? found.balance : null;
-  }, [filters.employee, balances]);
+  }, [filters.employee, currentBalances]);
 
   // Column Customization State
   const [visibleColumns, setVisibleColumns] = useState<Record<ReportColumnId, boolean>>({
@@ -388,20 +416,34 @@ export default function ReportViewer({ employees, balances = [], branches, categ
       setIsEditModalOpen(false);
       
       if (res && res.success !== false) {
-        showToast('تم حفظ وتحديث الحركة المالية بنجاح وبنفس واجهة الإدخال المعتمدة', 'success');
+        showToast('تم حفظ وتحديث الحركة المالية وتحديث الرصيد فورياً', 'success');
+        await refreshLiveBalances();
         handleGenerate(true);
       } else {
         showToast(res?.error || 'تم التحديث في الكشف محلياً بنجاح', 'info');
+        await refreshLiveBalances();
       }
     } catch (err: any) {
       setIsUpdating(false);
       setIsEditModalOpen(false);
       showToast('تم حفظ التعديل محلياً في الكشف', 'info');
+      await refreshLiveBalances();
     }
   };
 
-  // Parse raw rows
-  const rawRows = report ? report.rows.map(parseReportRow) : [];
+  // Parse raw rows preserving original indices and unique IDs
+  const rawRows = useMemo(() => {
+    if (!report || !Array.isArray(report.rows)) return [];
+    return report.rows.map((row: any, originalIndex: number) => {
+      const p = parseReportRow(row);
+      const rowId = p.id || (typeof row === 'object' && (row.id || row.rowId)) || `row_${originalIndex}`;
+      return {
+        ...p,
+        id: rowId,
+        originalRowIndex: originalIndex
+      };
+    });
+  }, [report]);
 
   // Available unique due months across all raw rows for filter selector
   const availableTargetMonths = useMemo(() => {
@@ -734,7 +776,8 @@ export default function ReportViewer({ employees, balances = [], branches, categ
   };
 
   const handleEditTransaction = (row: ComputedReportRow, rowIndexInSheet: number) => {
-    const calculatedRowId = row.id || `${row.date}_${rowIndexInSheet}`;
+    const rawIdx = (row as any).originalRowIndex !== undefined ? (row as any).originalRowIndex : rowIndexInSheet;
+    const calculatedRowId = row.id || `row_${rawIdx}`;
     const isTransfer = isTransferType(row.type, row.category, row.description);
     const isIncome = row.income > 0 && !isTransfer;
 
@@ -758,10 +801,13 @@ export default function ReportViewer({ employees, balances = [], branches, categ
       receiver = row.employee;
     }
 
-    setEditingRowIndex(rowIndexInSheet);
+    setEditingRowIndex(rawIdx);
     setEditingTransaction({
       id: calculatedRowId,
-      rowIndex: rowIndexInSheet,
+      rowIndex: rawIdx,
+      previousEmployee: row.employee,
+      previousDate: row.date,
+      previousAmount: row.income > 0 ? row.income : row.expense,
       date: row.date,
       branch: row.branch,
       category: row.category,
@@ -781,19 +827,22 @@ export default function ReportViewer({ employees, balances = [], branches, categ
   };
 
   const handleDeleteTransaction = (row: ComputedReportRow, rowIndexInSheet: number) => {
-    setDeletingItem({ row, rowIndex: rowIndexInSheet });
+    const rawIdx = (row as any).originalRowIndex !== undefined ? (row as any).originalRowIndex : rowIndexInSheet;
+    setDeletingItem({ row, rowIndex: rawIdx });
   };
 
   const confirmDelete = async () => {
     if (!deletingItem) return;
     const { row, rowIndex } = deletingItem;
-    const calculatedRowId = row.id || `${row.date}_${rowIndex}`;
+    const rawIdx = (row as any).originalRowIndex !== undefined ? (row as any).originalRowIndex : rowIndex;
+    const calculatedRowId = row.id || `row_${rawIdx}`;
 
     // Immediately remove from local state
     if (report && Array.isArray(report.rows)) {
       const newRows = report.rows.filter((r: any, idx: number) => {
         const p = parseReportRow(r);
-        return !(p.id === calculatedRowId || idx === rowIndex || (idx + 2) === rowIndex);
+        const rId = (typeof r === 'object' && r !== null ? (r.id || r.rowId) : null) || p.id;
+        return !(rId === calculatedRowId || idx === rawIdx);
       });
       setReport({ ...report, rows: newRows });
     }
@@ -804,7 +853,7 @@ export default function ReportViewer({ employees, balances = [], branches, categ
     try {
       const res = await gasService.deleteTransaction(calculatedRowId, {
         id: calculatedRowId,
-        rowIndex: rowIndex,
+        rowIndex: rawIdx,
         date: row.date,
         employee: row.employee,
         branch: row.branch,
@@ -814,12 +863,15 @@ export default function ReportViewer({ employees, balances = [], branches, categ
       });
       if (res && res.success !== false) {
         showToast('تم حذف الحركة المالية وتحديث الرصيد بنجاح', 'success');
+        await refreshLiveBalances();
         handleGenerate(true);
       } else {
         showToast('تمت إزالة الحركة محلياً من الكشف', 'info');
+        await refreshLiveBalances();
       }
     } catch (err: any) {
       showToast('تمت إزالة الحركة محلياً', 'info');
+      await refreshLiveBalances();
     }
   };
 

@@ -396,10 +396,7 @@ app.put('/api/transactions/:id', (req, res) => {
   const updateData = req.body || {};
 
   // Find transaction by:
-  // 1. Exact string or rowId match
-  // 2. updateData.id or updateData.rowId match
-  // 3. rowIndex match if provided
-  // 4. Content match (employee + date + previous amount)
+  // 1. Direct ID or rowId match
   let idx = serverStore.transactions.findIndex(t => 
     t.id === id || 
     String(t.rowId) === String(id) ||
@@ -407,19 +404,56 @@ app.put('/api/transactions/:id', (req, res) => {
     (updateData.rowId && (t.id === updateData.rowId || String(t.rowId) === String(updateData.rowId)))
   );
 
-  if (idx === -1 && updateData.rowIndex !== undefined) {
-    const rIdx = parseInt(String(updateData.rowIndex), 10);
-    const targetIdx = rIdx - 2; // Sheets data starts at row 2
-    if (!isNaN(targetIdx) && targetIdx >= 0 && targetIdx < serverStore.transactions.length) {
-      idx = targetIdx;
+  // 2. Index pattern in ID (e.g. row_0 or 2026-09-05_0)
+  if (idx === -1) {
+    const rowMatch = String(id).match(/(?:row_|_)?(\d+)$/);
+    if (rowMatch) {
+      const parsedIdx = parseInt(rowMatch[1], 10);
+      if (parsedIdx >= 0 && parsedIdx < serverStore.transactions.length) {
+        idx = parsedIdx;
+      }
     }
   }
 
+  // 3. updateData.rowIndex match if provided
+  if (idx === -1 && updateData.rowIndex !== undefined) {
+    const rIdx = parseInt(String(updateData.rowIndex), 10);
+    if (rIdx >= 0 && rIdx < serverStore.transactions.length) {
+      idx = rIdx;
+    } else if (rIdx >= 2 && (rIdx - 2) < serverStore.transactions.length) {
+      idx = rIdx - 2;
+    }
+  }
+
+  // 4. Content match using previous values if employee/date/amount changed
+  if (idx === -1) {
+    const prevEmp = (updateData.previousEmployee || '').trim().toLowerCase();
+    const prevDate = normalizeExcelDate(updateData.previousDate);
+    const prevAmt = updateData.previousAmount !== undefined ? parseFloat(String(updateData.previousAmount)) : undefined;
+
+    if (prevEmp && prevDate) {
+      idx = serverStore.transactions.findIndex(t => {
+        const empMatch = (t.employee || '').trim().toLowerCase() === prevEmp;
+        const dateMatch = normalizeExcelDate(t.date) === prevDate;
+        const amtMatch = prevAmt !== undefined ? Math.abs((parseFloat(t.amount) || 0) - prevAmt) < 0.001 : true;
+        return empMatch && dateMatch && amtMatch;
+      });
+    }
+  }
+
+  // 5. Content match using current values
   if (idx === -1 && updateData.employee && updateData.date) {
+    const curEmp = (updateData.employee || '').trim().toLowerCase();
+    const curDate = normalizeExcelDate(updateData.date);
     idx = serverStore.transactions.findIndex(t => 
-      t.employee === updateData.employee && 
-      normalizeExcelDate(t.date) === normalizeExcelDate(updateData.date)
+      (t.employee || '').trim().toLowerCase() === curEmp && 
+      normalizeExcelDate(t.date) === curDate
     );
+  }
+
+  // 6. If only 1 transaction exists in store and an update was requested
+  if (idx === -1 && serverStore.transactions.length === 1) {
+    idx = 0;
   }
 
   const previousValue = idx !== -1 ? { ...serverStore.transactions[idx] } : null;
@@ -461,8 +495,34 @@ app.put('/api/transactions/:id', (req, res) => {
   if (idx !== -1) {
     serverStore.transactions[idx] = updatedRecord;
   } else {
-    // Seamlessly upsert transaction into serverStore so edit NEVER fails!
     serverStore.transactions.unshift(updatedRecord);
+  }
+
+  // If this was part of a paired Transfer, update the other leg as well
+  if ((updatedRecord.type === 'Transfer' || updatedRecord.type === 'Transfer-Out' || updatedRecord.type === 'Transfer-In') && (updateData.sender || previousValue?.sender) && (updateData.receiver || previousValue?.receiver)) {
+    const senderName = (updateData.sender || previousValue?.sender || '').trim();
+    const receiverName = (updateData.receiver || previousValue?.receiver || '').trim();
+    const pairIdx = serverStore.transactions.findIndex((t, i) => 
+      i !== idx && 
+      (t.type === 'Transfer-In' || t.type === 'Transfer-Out' || t.type === 'Transfer') &&
+      ((t.sender === senderName && t.receiver === receiverName) || (t.employee === receiverName && senderName)) &&
+      normalizeExcelDate(t.date) === normalizeExcelDate(previousValue ? previousValue.date : effectiveDate)
+    );
+    if (pairIdx !== -1) {
+      const isSender = updatedRecord.employee === senderName;
+      serverStore.transactions[pairIdx] = {
+        ...serverStore.transactions[pairIdx],
+        date: effectiveDate,
+        branch: effectiveBranch,
+        amount: amountKwd,
+        amountFils,
+        sender: senderName,
+        receiver: receiverName,
+        targetMonth: updatedRecord.targetMonth,
+        description: isSender ? `استلام عهدة نقدية محولة من ${senderName}` : `تحويل عهدة نقدية من ${senderName} إلى ${receiverName}`,
+        updatedAt: new Date().toISOString()
+      };
+    }
   }
 
   // Ensure employee exists in employees directory
@@ -484,17 +544,36 @@ app.put('/api/transactions/:id', (req, res) => {
     newValue: updatedRecord
   });
 
+  const updatedBalances = serverStore.employees.map(e => ({
+    name: e.name,
+    balance: e.balance,
+    balanceFils: toFils(e.balance),
+    formatted: `${Number(e.balance).toFixed(3)} د.ك`
+  }));
+
   res.json({ 
     success: true, 
+    id: effectiveId,
     transaction: updatedRecord, 
     data: updatedRecord, 
-    message: 'تم حفظ وتحديث بيانات المعاملة بنجاح' 
+    balances: updatedBalances,
+    message: 'تم حفظ وتحديث بيانات المعاملة والرصيد بنجاح' 
   });
 });
 
 app.delete('/api/transactions/:id', (req, res) => {
   const { id } = req.params;
   let idx = serverStore.transactions.findIndex(t => t.id === id || String(t.rowId) === String(id));
+
+  if (idx === -1) {
+    const rowMatch = String(id).match(/(?:row_|_)?(\d+)$/);
+    if (rowMatch) {
+      const parsedIdx = parseInt(rowMatch[1], 10);
+      if (parsedIdx >= 0 && parsedIdx < serverStore.transactions.length) {
+        idx = parsedIdx;
+      }
+    }
+  }
 
   if (idx === -1) {
     // Acknowledge deletion gracefully even if already pruned
@@ -504,6 +583,21 @@ app.delete('/api/transactions/:id', (req, res) => {
 
   const target = serverStore.transactions[idx];
   serverStore.transactions.splice(idx, 1);
+
+  // If target was part of a paired transfer, remove the paired transfer as well
+  if ((target.type === 'Transfer-In' || target.type === 'Transfer-Out' || target.type === 'Transfer') && target.sender && target.receiver) {
+    const pairIdx = serverStore.transactions.findIndex(t => 
+      (t.type === 'Transfer-In' || t.type === 'Transfer-Out' || t.type === 'Transfer') &&
+      t.sender === target.sender &&
+      t.receiver === target.receiver &&
+      normalizeExcelDate(t.date) === normalizeExcelDate(target.date) &&
+      toFils(t.amount) === toFils(target.amount)
+    );
+    if (pairIdx !== -1) {
+      serverStore.transactions.splice(pairIdx, 1);
+    }
+  }
+
   recalculateAuthoritativeBalances();
   saveStore(serverStore);
 
@@ -516,7 +610,19 @@ app.delete('/api/transactions/:id', (req, res) => {
     previousValue: target
   });
 
-  res.json({ success: true, message: 'تم حذف المعاملة وتحديث الرصيد بنجاح', data: { id } });
+  const updatedBalances = serverStore.employees.map(e => ({
+    name: e.name,
+    balance: e.balance,
+    balanceFils: toFils(e.balance),
+    formatted: `${Number(e.balance).toFixed(3)} د.ك`
+  }));
+
+  res.json({ 
+    success: true, 
+    message: 'تم حذف المعاملة وتحديث الرصيد بنجاح', 
+    data: { id },
+    balances: updatedBalances
+  });
 });
 
 // 4. Balances Endpoint (Single Source of Truth, computed via exact integer fils)

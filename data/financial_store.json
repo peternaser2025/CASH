@@ -7,11 +7,13 @@
       "employee": "بيتر ناصر",
       "branch": "الرئيسي",
       "category": "عهدة",
-      "description": "تغذية عهدة أول المدة",
+      "description": "رصيد افتتاحي عهدة الموظف",
       "amount": 150.25,
       "amountFils": 150250,
       "type": "Income",
-      "createdAt": "2026-09-05T09:23:19.587Z"
+      "createdAt": "2026-09-05T09:23:19.587Z",
+      "department": null,
+      "updatedAt": "2026-10-02T12:45:49.964Z"
     }
   ],
   "orders": [],
@@ -53,5 +55,5 @@
     "تحويل عهدة نقدية",
     "خدمات حكومية"
   ],
-  "lastSync": "2026-10-02T12:28:02.789Z"
+  "lastSync": "2026-10-02T12:45:53.467Z"
 }

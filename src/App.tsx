@@ -516,6 +516,7 @@ export default function App() {
                   branches={branches} 
                   categories={categories} 
                   initialEmployee={prefilledEmployee}
+                  onRefreshBalances={() => fetchData(true)}
                 />
               )}
               {activeTab === 'settlements' && (
