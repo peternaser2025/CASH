@@ -331,7 +331,11 @@ export default function ReportViewer({ employees, balances = [], branches, categ
       income: incAmt,
       expense: expAmt,
       type: sourceData.type || (incAmt > 0 ? 'Income' : 'Expense'),
-      targetMonth: sourceData.targetMonth || ''
+      targetMonth: sourceData.targetMonth || '',
+      isAccrual: sourceData.isAccrual,
+      vendorName: sourceData.vendorName,
+      sender: sourceData.sender,
+      receiver: sourceData.receiver
     };
     
     // 1. Immediately apply update to local report rows in memory so UI reflects change instantly without deletion or abbreviation!
@@ -354,7 +358,11 @@ export default function ReportViewer({ employees, balances = [], branches, categ
               expense: expAmt,
               type: updatedData.type,
               targetMonth: updatedData.targetMonth,
-              employee: updatedData.employee
+              employee: updatedData.employee,
+              isAccrual: updatedData.isAccrual,
+              vendorName: updatedData.vendorName,
+              sender: updatedData.sender,
+              receiver: updatedData.receiver
             };
           } else if (Array.isArray(r)) {
             const arr = [...r];

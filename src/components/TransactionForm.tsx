@@ -1,21 +1,108 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Save, ArrowRightLeft, TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Calendar, Building2, User, Tag, Info, Coins, CalendarClock, Layers } from 'lucide-react';
+import { 
+  Save, 
+  ArrowRightLeft, 
+  TrendingUp, 
+  TrendingDown, 
+  AlertCircle, 
+  CheckCircle2, 
+  Calendar, 
+  Building2, 
+  User, 
+  Tag, 
+  Info, 
+  Coins, 
+  CalendarClock, 
+  Layers, 
+  Loader2,
+  FileEdit,
+  X
+} from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { TransactionType } from '../types';
 import { CITY_DEPARTMENTS } from '../constants';
+import { 
+  isTransferType, 
+  isIncomeType, 
+  isAccrualType, 
+  normalizeExcelDate 
+} from '../utils/format';
 
-interface TransactionFormProps {
-  onComplete: () => void;
+export interface TransactionFormProps {
+  mode?: 'create' | 'edit';
+  transaction?: any;
+  onComplete: (data?: any) => void;
+  onCancel?: () => void;
   employees: string[];
   branches: string[];
   categories: string[];
   initialEmployee?: string;
   initialType?: TransactionType;
+  isUpdating?: boolean;
 }
 
-export default function TransactionForm({ onComplete, employees, branches, categories, initialEmployee, initialType }: TransactionFormProps) {
-  const [type, setType] = useState<TransactionType>(initialType || 'Expense');
+function cleanDescriptionText(raw: string): string {
+  if (!raw) return '';
+  return String(raw)
+    .replace(/\[(?:مستحق\/آجل|آجل|اجل|التزام آجل|فاتورة آجلة|غير مدفوع|غير مسدد|شراء آجل)\]/gi, '')
+    .replace(/\[تخص شهر\s*[^\]]+\]/gi, '')
+    .replace(/(?:-?\s*المورد:\s*|المورد\s*:\s*)([^-\]]+)/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractVendorName(rawDesc: string, vendorNameProp?: string): string {
+  if (vendorNameProp && vendorNameProp.trim()) return vendorNameProp.trim();
+  const match = (rawDesc || '').match(/(?:-?\s*المورد:\s*|المورد\s*:\s*)([^-\]]+)/i);
+  return match ? match[1].trim() : '';
+}
+
+function extractTargetMonthVal(rawDesc: string, targetMonthProp?: string): string {
+  if (targetMonthProp && targetMonthProp.trim()) return targetMonthProp.trim();
+  const match = (rawDesc || '').match(/\[تخص شهر\s*([^\]]+)\]/i);
+  return match ? match[1].trim() : '';
+}
+
+function resolveType(tx: any, initialType?: TransactionType): TransactionType {
+  if (!tx) return initialType || 'Expense';
+  const typeStr = String(tx.type || '');
+  const catStr = String(tx.category || '');
+  const descStr = String(tx.description || '');
+
+  if (
+    typeStr === 'Transfer' || 
+    typeStr === 'Transfer-In' || 
+    typeStr === 'Transfer-Out' || 
+    isTransferType(typeStr, catStr, descStr)
+  ) {
+    return 'Transfer';
+  }
+  if (
+    typeStr === 'Income' || 
+    typeStr === 'إيراد' || 
+    (Number(tx.income) > 0 && !Number(tx.expense)) || 
+    isIncomeType(typeStr, catStr, descStr)
+  ) {
+    return 'Income';
+  }
+  return 'Expense';
+}
+
+export default function TransactionForm({
+  mode = 'create',
+  transaction,
+  onComplete,
+  onCancel,
+  employees,
+  branches,
+  categories,
+  initialEmployee,
+  initialType,
+  isUpdating = false
+}: TransactionFormProps) {
+  const isEditMode = mode === 'edit';
+  const [type, setType] = useState<TransactionType>(() => resolveType(transaction, initialType));
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
@@ -35,30 +122,115 @@ export default function TransactionForm({ onComplete, employees, branches, categ
     vendorName: ''
   });
 
+  // Synchronize state when editing or switching modes
+  useEffect(() => {
+    if (isEditMode && transaction) {
+      const txType = resolveType(transaction, initialType);
+      setType(txType);
+      setStatus(null);
+
+      const rawDesc = String(transaction.description || '');
+      const rawCat = String(transaction.category || '');
+      const cleanDesc = cleanDescriptionText(rawDesc);
+      const vendorNameVal = extractVendorName(rawDesc, transaction.vendorName);
+      const targetMonthVal = extractTargetMonthVal(rawDesc, transaction.targetMonth);
+      const isAccrualVal = Boolean(
+        transaction.isAccrual || 
+        transaction.isAccrued || 
+        isAccrualType(transaction.type, rawCat, rawDesc)
+      );
+
+      let sender = transaction.sender || '';
+      let receiver = transaction.receiver || '';
+
+      if (txType === 'Transfer') {
+        const transferMatch = rawDesc.match(/من\s+([^\s]+(?:\s+[^\s]+)?)\s+إلى\s+([^\s]+(?:\s+[^\s]+)?)/);
+        if (transferMatch) {
+          sender = sender || transferMatch[1].trim();
+          receiver = receiver || transferMatch[2].trim();
+        } else if (rawCat.includes('صادر إلى')) {
+          const matchTo = rawCat.match(/صادر إلى\s+([^)]+)/);
+          if (matchTo) receiver = receiver || matchTo[1].trim();
+          sender = sender || transaction.employee;
+        } else if (rawCat.includes('وارد من')) {
+          const matchFrom = rawCat.match(/وارد من\s+([^)]+)/);
+          if (matchFrom) sender = sender || matchFrom[1].trim();
+          receiver = receiver || transaction.employee;
+        } else {
+          sender = sender || transaction.employee || '';
+        }
+      }
+
+      let amountVal = '';
+      if (transaction.amount !== undefined && transaction.amount !== null && transaction.amount !== '') {
+        amountVal = String(transaction.amount);
+      } else if (Number(transaction.income) > 0) {
+        amountVal = String(transaction.income);
+      } else if (Number(transaction.expense) > 0) {
+        amountVal = String(transaction.expense);
+      }
+
+      setFormData({
+        date: normalizeExcelDate(transaction.date) || new Date().toISOString().split('T')[0],
+        employee: transaction.employee || '',
+        branch: transaction.branch || '',
+        department: transaction.department || '',
+        category: transaction.category || '',
+        amount: amountVal,
+        description: cleanDesc,
+        sender: sender || transaction.employee || '',
+        receiver: receiver || '',
+        hasTargetMonth: Boolean(targetMonthVal),
+        targetMonth: targetMonthVal || new Date().toISOString().slice(0, 7),
+        isAccrual: isAccrualVal,
+        vendorName: vendorNameVal
+      });
+    } else if (!isEditMode && initialEmployee) {
+      setFormData(prev => ({
+        ...prev,
+        employee: initialEmployee,
+        receiver: initialEmployee,
+        description: `تغذية وتزويد عهدة الموظف ${initialEmployee}`
+      }));
+    }
+  }, [transaction, isEditMode, initialEmployee, initialType]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setStatus(null);
 
-    let finalCategory = formData.category;
-    let finalDescription = formData.description;
-    let finalEmployee = formData.employee;
+    const parsedAmount = parseFloat(String(formData.amount).replace(/,/g, '').trim());
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      setStatus({ type: 'error', message: 'يرجى إدخال مبلغ مالي صحيح أكبر من الصفر' });
+      return;
+    }
+
+    let finalCategory = formData.category.trim();
+    let finalDescription = formData.description.trim();
+    let finalEmployee = formData.employee.trim();
 
     if (type === 'Transfer') {
       if (!formData.sender || !formData.receiver) {
         setStatus({ type: 'error', message: 'يرجى اختيار الموظف المرسل والموظف المستلم لعملية التحويل' });
-        setLoading(false);
         return;
       }
-      if (formData.sender === formData.receiver) {
+      if (formData.sender.trim() === formData.receiver.trim()) {
         setStatus({ type: 'error', message: 'لا يمكن تحويل العهدة لنفس الموظف' });
-        setLoading(false);
         return;
       }
       finalCategory = 'تحويل عهدة نقدية';
-      finalEmployee = formData.sender;
-      if (!finalDescription) {
-        finalDescription = `تحويل عهدة نقدية من ${formData.sender} إلى ${formData.receiver}`;
+      finalEmployee = formData.sender.trim();
+      if (!finalDescription || finalDescription.startsWith('تحويل عهدة نقدية')) {
+        finalDescription = `تحويل عهدة نقدية من ${formData.sender.trim()} إلى ${formData.receiver.trim()}`;
+      }
+    } else {
+      if (!finalEmployee) {
+        setStatus({ type: 'error', message: 'يرجى اختيار الموظف المسؤول عن العملية' });
+        return;
+      }
+      if (!finalCategory) {
+        setStatus({ type: 'error', message: 'يرجى اختيار تصنيف العملية' });
+        return;
       }
     }
 
@@ -66,58 +238,136 @@ export default function TransactionForm({ onComplete, employees, branches, categ
       if (!finalCategory.includes('آجل') && !finalCategory.includes('مستحق')) {
         finalCategory = `${finalCategory} (آجل/مستحق)`;
       }
-      finalDescription = `[مستحق/آجل] ${finalDescription} ${formData.vendorName ? '- المورد: ' + formData.vendorName : ''}`;
+      const vendorTag = formData.vendorName.trim() ? `- المورد: ${formData.vendorName.trim()}` : '';
+      if (!finalDescription.includes('[مستحق/آجل]')) {
+        finalDescription = `[مستحق/آجل] ${finalDescription} ${vendorTag}`.trim();
+      }
+    } else {
+      finalCategory = finalCategory.replace(/\s*\(آجل\/مستحق\)|\s*\(آجل\)|\s*\(مستحق\)/g, '').trim();
+      finalDescription = finalDescription.replace(/\[(?:مستحق\/آجل|آجل|اجل|التزام آجل)\]\s*/gi, '').trim();
     }
 
     if (formData.hasTargetMonth && formData.targetMonth) {
       const targetTag = `[تخص شهر ${formData.targetMonth}]`;
-      if (!finalDescription.includes(targetTag) && !finalDescription.includes(`تخص شهر ${formData.targetMonth}`)) {
-        finalDescription = `${targetTag} ${finalDescription}`;
+      if (!finalDescription.includes(targetTag)) {
+        finalDescription = `${targetTag} ${finalDescription}`.trim();
       }
+    } else {
+      finalDescription = finalDescription.replace(/\[تخص شهر\s*[^\]]+\]\s*/gi, '').trim();
     }
 
     const isCity = formData.branch.trim() === 'سيتي';
-    const finalDepartment = isCity && formData.department ? formData.department.trim() : undefined;
+    const finalDepartment = isCity && formData.department ? formData.department.trim() : null;
 
-    const data = {
-      ...formData,
+    setLoading(true);
+
+    const payload = {
+      ...(transaction || {}),
+      id: transaction?.id,
+      rowId: transaction?.id,
+      rowIndex: transaction?.rowIndex,
+      date: formData.date,
+      branch: formData.branch || 'الرئيسي',
       department: finalDepartment,
       employee: finalEmployee,
       category: finalCategory,
       description: finalDescription,
       type,
-      amount: parseFloat(formData.amount),
-      targetMonth: formData.hasTargetMonth ? formData.targetMonth : undefined
+      amount: parsedAmount,
+      sender: formData.sender,
+      receiver: formData.receiver,
+      targetMonth: formData.hasTargetMonth ? formData.targetMonth : '',
+      isAccrual: formData.isAccrual,
+      vendorName: formData.vendorName.trim()
     };
 
-    const result = await gasService.addTransaction(data);
-
-    if (result.success) {
-      setStatus({ type: 'success', message: `تم تسجيل العملية بنجاح برقم: ${result.id}` });
-      setTimeout(() => onComplete(), 800);
+    if (isEditMode) {
+      try {
+        if (onComplete) {
+          await onComplete(payload);
+          setStatus({ type: 'success', message: 'تم حفظ وتحديث العملية بنجاح' });
+        } else {
+          const res = await gasService.updateTransaction(transaction.id, payload);
+          if (res.success) {
+            setStatus({ type: 'success', message: 'تم حفظ وتحديث العملية بنجاح' });
+            setTimeout(() => onCancel && onCancel(), 600);
+          } else {
+            setStatus({ type: 'error', message: res.error || 'حدث خطأ أثناء تعديل العملية' });
+          }
+        }
+      } catch (err: any) {
+        setStatus({ type: 'error', message: err.message || 'حدث خطأ غير متوقع' });
+      } finally {
+        setLoading(false);
+      }
     } else {
-      setStatus({ type: 'error', message: result.error || 'حدث خطأ أثناء التسجيل' });
-      setLoading(false);
+      try {
+        const result = await gasService.addTransaction(payload);
+        if (result.success) {
+          setStatus({ type: 'success', message: `تم تسجيل العملية بنجاح برقم: ${result.id}` });
+          setTimeout(() => onComplete(result), 800);
+        } else {
+          setStatus({ type: 'error', message: result.error || 'حدث خطأ أثناء التسجيل' });
+        }
+      } catch (err: any) {
+        setStatus({ type: 'error', message: err.message || 'حدث خطأ غير متوقع' });
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
-  return (
-    <div className="max-w-3xl mx-auto pb-12">
-      <div className="mb-10 text-center">
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="inline-block p-3 bg-emerald-50 text-emerald-600 rounded-2xl mb-4"
-        >
-          <Coins size={32} />
-        </motion.div>
-        <h2 className="text-4xl font-black text-gray-900 tracking-tight">تسجيل عملية مالية</h2>
-        <p className="text-gray-500 mt-2 font-medium">أدخل بيانات العملية بدقة لضمان توازن الميزانية والتقارير</p>
-      </div>
+  const isBusy = loading || isUpdating;
 
-      <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl shadow-gray-200/50 overflow-hidden">
-        {/* Type Selector - Professional Hero Style */}
-        <div className="flex p-2 bg-gray-50/50 border-b border-gray-100">
+  return (
+    <div className={isEditMode ? "w-full bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-200" : "max-w-3xl mx-auto pb-12"}>
+      {/* Header Area */}
+      {isEditMode ? (
+        <div className="p-6 sm:p-8 bg-slate-50/90 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-3.5">
+            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl shadow-xs">
+              <FileEdit size={26} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">تعديل الحركة المالية</h3>
+                <span className="px-2.5 py-0.5 bg-slate-200 text-slate-800 rounded-lg text-xs font-mono font-black">
+                  #{transaction?.id || transaction?.rowIndex || 'سجل'}
+                </span>
+              </div>
+              <p className="text-xs font-medium text-slate-500 mt-0.5">
+                تعديل بنود الحركة المالية بنفس واجهة الإدخال المعتمدة لضمان الدقة المحاسبية
+              </p>
+            </div>
+          </div>
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="p-2.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-full transition-colors cursor-pointer"
+              title="إغلاق النافذة"
+            >
+              <X size={20} />
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="mb-10 text-center">
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="inline-block p-3 bg-emerald-50 text-emerald-600 rounded-2xl mb-4"
+          >
+            <Coins size={32} />
+          </motion.div>
+          <h2 className="text-4xl font-black text-gray-900 tracking-tight">تسجيل عملية مالية</h2>
+          <p className="text-gray-500 mt-2 font-medium">أدخل بيانات العملية بدقة لضمان توازن الميزانية والتقارير</p>
+        </div>
+      )}
+
+      <div className={isEditMode ? "" : "bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl shadow-gray-200/50 overflow-hidden"}>
+        {/* Type Selector - Unified Across Add and Edit */}
+        <div className="flex p-2 bg-gray-50/70 border-b border-gray-100">
           {[
             { 
               id: 'Expense', 
@@ -140,6 +390,7 @@ export default function TransactionForm({ onComplete, employees, branches, categ
           ].map((item) => (
             <button
               key={item.id}
+              type="button"
               onClick={() => setType(item.id as TransactionType)}
               className={`flex-1 py-4 flex items-center justify-center gap-3 rounded-2xl transition-all duration-300 font-black text-sm uppercase tracking-wider cursor-pointer ${
                 type === item.id 
@@ -153,7 +404,7 @@ export default function TransactionForm({ onComplete, employees, branches, categ
           ))}
         </div>
 
-        <form onSubmit={handleSubmit} className="p-10 space-y-8">
+        <form onSubmit={handleSubmit} className={isEditMode ? "p-6 sm:p-9 space-y-6 max-h-[75vh] overflow-y-auto" : "p-10 space-y-8"}>
           <AnimatePresence>
             {status && (
               <motion.div 
@@ -175,9 +426,10 @@ export default function TransactionForm({ onComplete, employees, branches, categ
           </AnimatePresence>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Transaction Date */}
             <div className="space-y-2">
               <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                <Calendar size={14} />
+                <Calendar size={14} className="text-emerald-600" />
                 تاريخ العملية
               </label>
               <input
@@ -189,9 +441,10 @@ export default function TransactionForm({ onComplete, employees, branches, categ
               />
             </div>
 
+            {/* Associated Branch */}
             <div className="space-y-2">
               <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                <Building2 size={14} />
+                <Building2 size={14} className="text-emerald-600" />
                 الفرع المرتبط
               </label>
               <select
@@ -211,6 +464,7 @@ export default function TransactionForm({ onComplete, employees, branches, categ
               </select>
             </div>
 
+            {/* Department (Special for 'سيتي') */}
             {formData.branch.trim() === 'سيتي' && (
               <motion.div 
                 initial={{ opacity: 0, scale: 0.98 }}
@@ -232,16 +486,17 @@ export default function TransactionForm({ onComplete, employees, branches, categ
                   ))}
                 </select>
                 <p className="text-[11px] font-semibold text-amber-700/80">
-                  خاص بفرع سيتي فقط: بهارات / غذائي / استهلاكي (الحركات السابقة تبقى بدون قسم)
+                  خاص بفرع سيتي فقط: بهارات / غذائي / استهلاكي
                 </p>
               </motion.div>
             )}
 
+            {/* Transfer Mode: Sender & Receiver */}
             {type === 'Transfer' ? (
               <>
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                    <User size={14} />
+                    <User size={14} className="text-blue-600" />
                     المرسل (من عهدة)
                   </label>
                   <select
@@ -256,7 +511,7 @@ export default function TransactionForm({ onComplete, employees, branches, categ
                 </div>
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                    <User size={14} />
+                    <User size={14} className="text-blue-600" />
                     المستلم (إلى عهدة)
                   </label>
                   <select
@@ -272,9 +527,10 @@ export default function TransactionForm({ onComplete, employees, branches, categ
               </>
             ) : (
               <>
+                {/* Regular Mode: Employee & Category */}
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                    <User size={14} />
+                    <User size={14} className="text-emerald-600" />
                     الموظف المسؤول
                   </label>
                   <select
@@ -289,7 +545,7 @@ export default function TransactionForm({ onComplete, employees, branches, categ
                 </div>
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                    <Tag size={14} />
+                    <Tag size={14} className="text-emerald-600" />
                     تصنيف العملية
                   </label>
                   <select
@@ -316,9 +572,10 @@ export default function TransactionForm({ onComplete, employees, branches, categ
               </>
             )}
 
+            {/* Total Amount in KWD */}
             <div className="space-y-2 md:col-span-2">
               <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                <Coins size={14} />
+                <Coins size={14} className="text-amber-500" />
                 المبلغ الإجمالي (د.ك)
               </label>
               <div className="relative">
@@ -335,13 +592,14 @@ export default function TransactionForm({ onComplete, employees, branches, categ
                     'focus:ring-blue-500/10 focus:border-blue-500 text-blue-600'
                   }`}
                 />
-                <div className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-gray-300 pointer-events-none">KWD</div>
+                <div className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-gray-400 pointer-events-none text-base">KWD</div>
               </div>
             </div>
 
+            {/* Detailed Description */}
             <div className="space-y-2 md:col-span-2">
               <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                <Info size={14} />
+                <Info size={14} className="text-blue-500" />
                 البيان / الوصف التفصيلي
               </label>
               <textarea
@@ -377,7 +635,7 @@ export default function TransactionForm({ onComplete, employees, branches, categ
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, isAccrual: !formData.isAccrual })}
-                  className={`px-5 py-3 rounded-2xl transition-all duration-300 font-black text-xs flex items-center gap-2.5 shrink-0 border shadow-sm ${
+                  className={`px-5 py-3 rounded-2xl transition-all duration-300 font-black text-xs flex items-center gap-2.5 shrink-0 border shadow-sm cursor-pointer ${
                     formData.isAccrual 
                       ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white border-amber-400 shadow-amber-500/30 scale-105 ring-4 ring-amber-400/20' 
                       : 'bg-white text-amber-900 border-amber-300 hover:bg-amber-100/60'
@@ -439,7 +697,7 @@ export default function TransactionForm({ onComplete, employees, branches, categ
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, hasTargetMonth: !formData.hasTargetMonth })}
-                  className={`w-12 h-6 rounded-full transition-all relative ${
+                  className={`w-12 h-6 rounded-full transition-all relative cursor-pointer ${
                     formData.hasTargetMonth ? 'bg-emerald-500' : 'bg-gray-200'
                   }`}
                 >
@@ -472,43 +730,65 @@ export default function TransactionForm({ onComplete, employees, branches, categ
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className={`w-full py-5 rounded-[2rem] font-black text-xl shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-[0.98] ${
-              loading ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 
-              type === 'Expense' ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-500/30' :
-              type === 'Income' ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/30' :
-              'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/30'
-            }`}
-          >
-            {loading ? (
-              <Loader2 size={24} className="animate-spin" />
+          {/* Action Buttons */}
+          <div className="pt-4">
+            {isEditMode ? (
+              <div className="flex flex-col sm:flex-row items-center gap-4">
+                <button
+                  type="submit"
+                  disabled={isBusy}
+                  className={`flex-1 w-full py-5 rounded-[2rem] font-black text-lg shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-[0.98] cursor-pointer ${
+                    isBusy ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 
+                    type === 'Expense' ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-500/30' : 
+                    type === 'Income' ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/30' : 
+                    'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/30'
+                  }`}
+                >
+                  {isBusy ? (
+                    <Loader2 size={24} className="animate-spin" />
+                  ) : (
+                    <>
+                      <Save size={24} />
+                      حفظ وتحديث العملية
+                    </>
+                  )}
+                </button>
+
+                {onCancel && (
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={onCancel}
+                    className="w-full sm:w-auto px-8 py-5 rounded-[2rem] bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-base transition-all active:scale-[0.98] cursor-pointer"
+                  >
+                    إلغاء التعديل
+                  </button>
+                )}
+              </div>
             ) : (
-              <>
-                <Save size={24} />
-                تأكيد وتسجيل العملية
-              </>
+              <button
+                type="submit"
+                disabled={isBusy}
+                className={`w-full py-5 rounded-[2rem] font-black text-xl shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-[0.98] cursor-pointer ${
+                  isBusy ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 
+                  type === 'Expense' ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-500/30' : 
+                  type === 'Income' ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/30' : 
+                  'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/30'
+                }`}
+              >
+                {isBusy ? (
+                  <Loader2 size={24} className="animate-spin" />
+                ) : (
+                  <>
+                    <Save size={24} />
+                    تأكيد وتسجيل العملية
+                  </>
+                )}
+              </button>
             )}
-          </button>
+          </div>
         </form>
       </div>
     </div>
   );
 }
-
-const Loader2 = ({ size, className }: { size: number, className: string }) => (
-  <svg 
-    width={size} 
-    height={size} 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="2" 
-    strokeLinecap="round" 
-    strokeLinejoin="round" 
-    className={className}
-  >
-    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-  </svg>
-);
