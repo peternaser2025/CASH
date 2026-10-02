@@ -541,24 +541,16 @@ export default function ReportViewer({
   // 4. Base opening balance from server/GAS if prior rows were pruned upstream
   const serverOpeningFils = toFils(report?.openingBalance || '0');
 
-  // Determine initial opening balance:
+  // Determine initial opening balance strictly based on transactions prior to startDate:
   let initialOpeningBalanceFils = 0;
-  if (priorRows.length > 0) {
-    // If prior rows are present in the dataset, their sum is the true prior opening balance
-    initialOpeningBalanceFils = priorNetFils;
-  } else if (normStartDate) {
-    // If prior rows were filtered out upstream, use server opening balance
-    initialOpeningBalanceFils = serverOpeningFils;
-  }
-
-  // 5. Mathematical Live Reconciliation for Employee Statement:
-  // When an employee is specifically selected, reconcile with their live balance in the authoritative ledger:
-  // Mathematical Identity: LiveBalance = OpeningBalance + PeriodNetCash + SubsequentNetCash
-  // Therefore: OpeningBalance = LiveBalance - PeriodNetCash - SubsequentNetCash
-  // This guarantees that EndingBalance = LiveBalance - SubsequentNetCash (and equals LiveBalance when statement is to-date)
-  const liveBalFils = liveEmployeeBalance !== null ? toFils(liveEmployeeBalance) : null;
-  if (filters.employee && liveBalFils !== null) {
-    initialOpeningBalanceFils = liveBalFils - periodNetCashFils - subsequentNetCashFils;
+  if (normStartDate) {
+    if (priorRows.length > 0) {
+      initialOpeningBalanceFils = priorNetFils;
+    } else {
+      initialOpeningBalanceFils = serverOpeningFils;
+    }
+  } else {
+    initialOpeningBalanceFils = 0;
   }
 
   // Calculate sequential historical running balance for all period transactions
@@ -630,10 +622,8 @@ export default function ReportViewer({
                          !!(filters.targetMonth && filters.targetMonth !== 'All' && filters.targetMonth !== 'الكل' && filters.targetMonth !== '') ||
                          accrualFilter !== 'All';
 
-  // Ending balance strictly satisfies: Opening + Inflow - Cash Outflow
-  const cashEndingBalanceFils = isSearchActive
-    ? (initialOpeningBalanceFils + totalDisplayIncomeFils - totalDisplayCashExpenseFils)
-    : runningAccFils;
+  // Ending cash balance is universally: Opening Balance + Total Inflow - Total Cash Outflow
+  const cashEndingBalanceFils = initialOpeningBalanceFils + totalDisplayIncomeFils - totalDisplayCashExpenseFils;
 
   const initialOpeningBalance = toKWD(initialOpeningBalanceFils);
   const filteredIn = toKWD(totalDisplayIncomeFils);
