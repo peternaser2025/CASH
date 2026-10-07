@@ -395,18 +395,38 @@ app.put('/api/transactions/:id', (req, res) => {
   const { id } = req.params;
   const updateData = req.body || {};
 
-  // Find transaction by:
-  // 1. Direct ID or rowId match
+  // Find transaction by multi-stage resolution to guarantee in-place update and prevent duplicates:
+  // 1. Direct ID or rowId match (both String and Number checks)
   let idx = serverStore.transactions.findIndex(t => 
-    t.id === id || 
-    String(t.rowId) === String(id) ||
-    (updateData.id && (t.id === updateData.id || String(t.rowId) === String(updateData.id))) ||
-    (updateData.rowId && (t.id === updateData.rowId || String(t.rowId) === String(updateData.rowId)))
+    (t.id && (String(t.id).trim() === String(id).trim() || t.id === id)) || 
+    (t.rowId && (String(t.rowId).trim() === String(id).trim() || t.rowId === id)) ||
+    (updateData.id && (String(t.id).trim() === String(updateData.id).trim() || String(t.rowId).trim() === String(updateData.id).trim())) ||
+    (updateData.rowId && (String(t.id).trim() === String(updateData.rowId).trim() || String(t.rowId).trim() === String(updateData.rowId).trim()))
   );
 
-  // 2. Index pattern in ID (e.g. row_0 or 2026-09-05_0)
+  // 2. updateData.originalRowIndex if provided and valid
+  if (idx === -1 && updateData.originalRowIndex !== undefined) {
+    const oIdx = parseInt(String(updateData.originalRowIndex), 10);
+    if (!isNaN(oIdx) && oIdx >= 0 && oIdx < serverStore.transactions.length) {
+      idx = oIdx;
+    }
+  }
+
+  // 3. updateData.rowIndex match if provided
+  if (idx === -1 && updateData.rowIndex !== undefined) {
+    const rIdx = parseInt(String(updateData.rowIndex), 10);
+    if (!isNaN(rIdx)) {
+      if (rIdx >= 0 && rIdx < serverStore.transactions.length) {
+        idx = rIdx;
+      } else if (rIdx >= 2 && (rIdx - 2) < serverStore.transactions.length) {
+        idx = rIdx - 2;
+      }
+    }
+  }
+
+  // 4. Index pattern in ID (e.g. row_0 or index_0)
   if (idx === -1) {
-    const rowMatch = String(id).match(/(?:row_|_)?(\d+)$/);
+    const rowMatch = String(id).match(/^(?:row_|tx_|item_)?(\d+)$/i);
     if (rowMatch) {
       const parsedIdx = parseInt(rowMatch[1], 10);
       if (parsedIdx >= 0 && parsedIdx < serverStore.transactions.length) {
@@ -415,17 +435,7 @@ app.put('/api/transactions/:id', (req, res) => {
     }
   }
 
-  // 3. updateData.rowIndex match if provided
-  if (idx === -1 && updateData.rowIndex !== undefined) {
-    const rIdx = parseInt(String(updateData.rowIndex), 10);
-    if (rIdx >= 0 && rIdx < serverStore.transactions.length) {
-      idx = rIdx;
-    } else if (rIdx >= 2 && (rIdx - 2) < serverStore.transactions.length) {
-      idx = rIdx - 2;
-    }
-  }
-
-  // 4. Content match using previous values if employee/date/amount changed
+  // 5. Content match using previous values if employee/date/amount were provided
   if (idx === -1) {
     const prevEmp = (updateData.previousEmployee || '').trim().toLowerCase();
     const prevDate = normalizeExcelDate(updateData.previousDate);
@@ -433,30 +443,58 @@ app.put('/api/transactions/:id', (req, res) => {
 
     if (prevEmp && prevDate) {
       idx = serverStore.transactions.findIndex(t => {
-        const empMatch = (t.employee || '').trim().toLowerCase() === prevEmp;
+        const empMatch = normalizeEntityId(t.employee) === normalizeEntityId(prevEmp);
         const dateMatch = normalizeExcelDate(t.date) === prevDate;
-        const amtMatch = prevAmt !== undefined ? Math.abs((parseFloat(t.amount) || 0) - prevAmt) < 0.001 : true;
+        const amtMatch = prevAmt !== undefined ? Math.abs(toFils(t.amount) - toFils(prevAmt)) === 0 : true;
         return empMatch && dateMatch && amtMatch;
       });
     }
   }
 
-  // 5. Content match using current values
+  // 6. Content match using previous employee + previous amount
+  if (idx === -1 && updateData.previousEmployee && updateData.previousAmount !== undefined) {
+    const prevEmp = (updateData.previousEmployee || '').trim().toLowerCase();
+    const prevAmt = parseFloat(String(updateData.previousAmount));
+    idx = serverStore.transactions.findIndex(t => 
+      normalizeEntityId(t.employee) === normalizeEntityId(prevEmp) &&
+      Math.abs(toFils(t.amount) - toFils(prevAmt)) === 0
+    );
+  }
+
+  // 7. Content match using current values (employee + date + amount)
+  if (idx === -1 && updateData.employee && updateData.date && updateData.amount !== undefined) {
+    const curEmp = (updateData.employee || '').trim().toLowerCase();
+    const curDate = normalizeExcelDate(updateData.date);
+    const curAmt = parseFloat(String(updateData.amount));
+    idx = serverStore.transactions.findIndex(t => 
+      normalizeEntityId(t.employee) === normalizeEntityId(curEmp) && 
+      normalizeExcelDate(t.date) === curDate &&
+      Math.abs(toFils(t.amount) - toFils(curAmt)) === 0
+    );
+  }
+
+  // 8. Content match using current employee + date
   if (idx === -1 && updateData.employee && updateData.date) {
     const curEmp = (updateData.employee || '').trim().toLowerCase();
     const curDate = normalizeExcelDate(updateData.date);
     idx = serverStore.transactions.findIndex(t => 
-      (t.employee || '').trim().toLowerCase() === curEmp && 
+      normalizeEntityId(t.employee) === normalizeEntityId(curEmp) && 
       normalizeExcelDate(t.date) === curDate
     );
   }
 
-  // 6. If only 1 transaction exists in store and an update was requested
+  // 9. If only 1 transaction exists in store and an update was requested
   if (idx === -1 && serverStore.transactions.length === 1) {
     idx = 0;
   }
 
-  const previousValue = idx !== -1 ? { ...serverStore.transactions[idx] } : null;
+  // CRITICAL: NEVER blindly duplicate with unshift! An update MUST modify an existing record.
+  if (idx === -1) {
+    console.warn(`[PUT /api/transactions] Transaction #${id} not found in store`);
+    return sendError(res, `لم يتم العثور على المعاملة المطلوب تعديلها برقم (#${id}) في سجل الحركات المحاسبية لمنع تكرار القيود أو تضارب الأرصدة`, 404);
+  }
+
+  const previousValue = { ...serverStore.transactions[idx] };
 
   let amountKwd = updateData.amount !== undefined ? parseFloat(String(updateData.amount)) || 0 : (previousValue ? previousValue.amount : 0);
   let amountFils = toFils(amountKwd);
@@ -474,8 +512,12 @@ app.put('/api/transactions/:id', (req, res) => {
   const effectiveDate = normalizeExcelDate(updateData.date) || (previousValue ? previousValue.date : new Date().toISOString().split('T')[0]);
   const effectiveType = updateData.type || (previousValue ? previousValue.type : (updateData.income > 0 ? 'Income' : 'Expense'));
 
+  const isIncoming = effectiveType === 'Income' || effectiveType === 'Transfer-In' || effectiveType === 'إيراد';
+  const effectiveIncome = isIncoming ? amountKwd : 0;
+  const effectiveExpense = !isIncoming ? amountKwd : 0;
+
   const updatedRecord = {
-    ...(previousValue || {}),
+    ...previousValue,
     ...updateData,
     id: effectiveId,
     rowId: effectiveId,
@@ -489,14 +531,18 @@ app.put('/api/transactions/:id', (req, res) => {
     targetMonth: updateData.targetMonth !== undefined ? updateData.targetMonth : (previousValue ? previousValue.targetMonth : ''),
     amount: amountKwd,
     amountFils,
+    income: effectiveIncome,
+    expense: effectiveExpense,
+    isAccrual: Boolean(updateData.isAccrual),
+    isAccrued: Boolean(updateData.isAccrual),
+    vendorName: updateData.vendorName !== undefined ? String(updateData.vendorName).trim() : (previousValue?.vendorName || ''),
+    sender: updateData.sender !== undefined ? updateData.sender : (previousValue?.sender || ''),
+    receiver: updateData.receiver !== undefined ? updateData.receiver : (previousValue?.receiver || ''),
     updatedAt: new Date().toISOString()
   };
 
-  if (idx !== -1) {
-    serverStore.transactions[idx] = updatedRecord;
-  } else {
-    serverStore.transactions.unshift(updatedRecord);
-  }
+  // 100% In-Place Update (Zero Duplicates, Zero Deletion)
+  serverStore.transactions[idx] = updatedRecord;
 
   // If this was part of a paired Transfer, update the other leg as well
   if ((updatedRecord.type === 'Transfer' || updatedRecord.type === 'Transfer-Out' || updatedRecord.type === 'Transfer-In') && (updateData.sender || previousValue?.sender) && (updateData.receiver || previousValue?.receiver)) {

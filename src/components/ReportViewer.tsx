@@ -37,6 +37,7 @@ import {
   parseReportRow,
   NormalizedReportRow,
   normalizeExcelDate,
+  isValidDateLike,
   getEffectiveDueMonth,
   formatMonthLabelAr,
   isArabicSearchMatch,
@@ -370,12 +371,18 @@ export default function ReportViewer({
     if (report && Array.isArray(report.rows)) {
       const newRows = report.rows.map((r: any, idx: number) => {
         const p = parseReportRow(r);
-        const isMatch = (sourceData.id && p.id === sourceData.id) ||
-                        (editingRowIndex !== null && (idx === editingRowIndex || (idx + 2) === editingRowIndex));
+        const isMatch = (sourceData.id && (
+          String(p.id).trim() === String(sourceData.id).trim() ||
+          (typeof r === 'object' && r && r.id && String(r.id).trim() === String(sourceData.id).trim()) ||
+          (typeof r === 'object' && r && r.rowId && String(r.rowId).trim() === String(sourceData.id).trim())
+        )) || (editingRowIndex !== null && idx === editingRowIndex);
+
         if (isMatch) {
           if (typeof r === 'object' && !Array.isArray(r)) {
             return {
               ...r,
+              id: r.id || sourceData.id,
+              rowId: r.rowId || sourceData.id,
               date: updatedData.date,
               branch: updatedData.branch,
               category: updatedData.category,
@@ -387,21 +394,33 @@ export default function ReportViewer({
               type: updatedData.type,
               targetMonth: updatedData.targetMonth,
               employee: updatedData.employee,
-              isAccrual: updatedData.isAccrual,
-              vendorName: updatedData.vendorName,
-              sender: updatedData.sender,
-              receiver: updatedData.receiver
+              isAccrual: Boolean(updatedData.isAccrual),
+              isAccrued: Boolean(updatedData.isAccrual),
+              vendorName: updatedData.vendorName || '',
+              sender: updatedData.sender || '',
+              receiver: updatedData.receiver || ''
             };
           } else if (Array.isArray(r)) {
             const arr = [...r];
-            arr[1] = updatedData.date;
-            arr[2] = updatedData.branch;
-            arr[3] = updatedData.category;
-            arr[4] = updatedData.description;
-            arr[5] = incAmt;
-            arr[6] = expAmt;
-            if (arr.length > 8) arr[8] = updatedData.targetMonth || '';
-            if (arr.length > 9) arr[9] = updatedData.employee || arr[9];
+            if (isValidDateLike(arr[1])) {
+              arr[1] = updatedData.date;
+              arr[2] = updatedData.branch;
+              arr[3] = updatedData.category;
+              arr[4] = updatedData.description;
+              arr[5] = incAmt;
+              arr[6] = expAmt;
+              if (arr.length > 8) arr[8] = updatedData.targetMonth || '';
+              if (arr.length > 9) arr[9] = updatedData.employee || arr[9];
+            } else if (isValidDateLike(arr[0])) {
+              arr[0] = updatedData.date;
+              arr[1] = updatedData.type;
+              arr[2] = updatedData.category;
+              arr[3] = updatedData.employee;
+              arr[4] = amountVal;
+              arr[5] = updatedData.description;
+              arr[6] = updatedData.branch;
+              if (arr.length > 7) arr[7] = updatedData.targetMonth || '';
+            }
             return arr;
           }
         }
@@ -418,16 +437,19 @@ export default function ReportViewer({
       if (res && res.success !== false) {
         showToast('تم حفظ وتحديث الحركة المالية وتحديث الرصيد فورياً', 'success');
         await refreshLiveBalances();
+        if (onRefreshBalances) onRefreshBalances();
         handleGenerate(true);
       } else {
         showToast(res?.error || 'تم التحديث في الكشف محلياً بنجاح', 'info');
         await refreshLiveBalances();
+        if (onRefreshBalances) onRefreshBalances();
       }
     } catch (err: any) {
       setIsUpdating(false);
       setIsEditModalOpen(false);
       showToast('تم حفظ التعديل محلياً في الكشف', 'info');
       await refreshLiveBalances();
+      if (onRefreshBalances) onRefreshBalances();
     }
   };
 
@@ -795,6 +817,7 @@ export default function ReportViewer({
     setEditingTransaction({
       id: calculatedRowId,
       rowIndex: rawIdx,
+      originalRowIndex: rawIdx,
       previousEmployee: row.employee,
       previousDate: row.date,
       previousAmount: row.income > 0 ? row.income : row.expense,

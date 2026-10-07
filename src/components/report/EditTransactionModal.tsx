@@ -7,7 +7,7 @@ interface EditTransactionModalProps {
   onClose: () => void;
   transaction: any;
   onChangeTransaction?: (transaction: any) => void;
-  onSubmit: (e: React.FormEvent, updatedData?: any) => void;
+  onSubmit: (e: React.FormEvent, updatedData?: any) => Promise<any> | void;
   employees: string[];
   branches: string[];
   categories: string[];
@@ -49,8 +49,8 @@ export default function EditTransactionModal({
             categories={categories}
             isUpdating={isUpdating}
             onCancel={onClose}
-            onComplete={(updatedData) => {
-              onSubmit({ preventDefault: () => {} } as any, updatedData);
+            onComplete={async (updatedData) => {
+              await onSubmit({ preventDefault: () => {} } as any, updatedData);
             }}
           />
         </motion.div>
