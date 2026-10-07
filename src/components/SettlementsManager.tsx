@@ -181,7 +181,7 @@ export default function SettlementsManager({
       const branch = row.branch || 'المركز الرئيسي';
       const emp = row.employee || selectedEmployee;
       
-      const isSettlement = /سداد|تسوية/i.test(cat + " " + desc);
+      const isSettlement = type === 'Settlement' || (rawRow && rawRow.isSettlement) || /سداد|تسوية/i.test(cat + " " + desc);
       const isAccrual = isSettlement ? false : isAccrualType(type, cat, desc);
       const isTransfer = isTransferType(type, cat, desc);
 

@@ -432,7 +432,8 @@ export default function ProfitLoss({ branches, onRefresh }: ProfitLossProps) {
         const rowMonth = date ? date.slice(0, 7) : '';
         const effectiveMonth = targetMonth || rowMonth;
 
-        const isSettlement = /سداد.*(مستحق|آجل|اجل|دين|دائن|مورد|التزام)|سداد مشتريات|تسوية التزامات/i.test(`${category} ${description}`) ||
+        const isSettlement = type === 'Settlement' || (rawRow && rawRow.isSettlement) ||
+                            /سداد.*(مستحق|آجل|اجل|دين|دائن|مورد|التزام)|سداد مشتريات|تسوية التزامات/i.test(`${category} ${description}`) ||
                             description.includes('سداد مستحقات') || 
                             description.includes('سداد آجل') ||
                             category.includes('سداد مشتريات');

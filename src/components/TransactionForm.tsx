@@ -5,6 +5,7 @@ import {
   ArrowRightLeft, 
   TrendingUp, 
   TrendingDown, 
+  CheckCheck, 
   AlertCircle, 
   CheckCircle2, 
   Calendar, 
@@ -13,11 +14,16 @@ import {
   Tag, 
   Info, 
   Coins, 
-  CalendarClock, 
   Layers, 
   Loader2,
   FileEdit,
-  X
+  X,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Clock,
+  Sparkles,
+  Search
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { TransactionType } from '../types';
@@ -26,13 +32,18 @@ import {
   isTransferType, 
   isIncomeType, 
   isAccrualType, 
-  normalizeExcelDate 
+  normalizeExcelDate,
+  formatKWD,
+  parseReportRow 
 } from '../utils/format';
+import { toFils } from '../utils/money';
+
+export type ExtendedTransactionType = 'Expense' | 'Income' | 'Transfer' | 'Settlement';
 
 export interface TransactionFormProps {
   mode?: 'create' | 'edit';
   transaction?: any;
-  onComplete: (data?: any) => void;
+  onComplete: (data?: any) => Promise<any> | void;
   onCancel?: () => void;
   employees: string[];
   branches: string[];
@@ -42,10 +53,22 @@ export interface TransactionFormProps {
   isUpdating?: boolean;
 }
 
+interface PendingAccrualOption {
+  id: string;
+  date: string;
+  branch: string;
+  employee: string;
+  category: string;
+  description: string;
+  amount: number;
+  vendorName: string;
+  targetMonth: string;
+}
+
 function cleanDescriptionText(raw: string): string {
   if (!raw) return '';
   return String(raw)
-    .replace(/\[(?:مستحق\/آجل|آجل|اجل|التزام آجل|فاتورة آجلة|غير مدفوع|غير مسدد|شراء آجل)\]/gi, '')
+    .replace(/\[(?:مستحق\/آجل|آجل|اجل|التزام آجل|فاتورة آجلة|غير مدفوع|غير مسدد|شراء آجل|سداد مستحقات[^\]]*)\]/gi, '')
     .replace(/\[تخص شهر\s*[^\]]+\]/gi, '')
     .replace(/(?:-?\s*المورد:\s*|المورد\s*:\s*)([^-\]]+)/gi, '')
     .replace(/\s+/g, ' ')
@@ -64,26 +87,23 @@ function extractTargetMonthVal(rawDesc: string, targetMonthProp?: string): strin
   return match ? match[1].trim() : '';
 }
 
-function resolveType(tx: any, initialType?: TransactionType): TransactionType {
-  if (!tx) return initialType || 'Expense';
+function resolveType(tx: any, initialType?: TransactionType): ExtendedTransactionType {
+  if (!tx) {
+    if (initialType === 'Transfer') return 'Transfer';
+    if (initialType === 'Income') return 'Income';
+    return 'Expense';
+  }
   const typeStr = String(tx.type || '');
   const catStr = String(tx.category || '');
   const descStr = String(tx.description || '');
 
-  if (
-    typeStr === 'Transfer' || 
-    typeStr === 'Transfer-In' || 
-    typeStr === 'Transfer-Out' || 
-    isTransferType(typeStr, catStr, descStr)
-  ) {
+  if (/سداد.*(مستحق|آجل|دين|دائن|مورد)|تسوية التزام/i.test(`${catStr} ${descStr}`) || catStr.includes('سداد مشتريات')) {
+    return 'Settlement';
+  }
+  if (typeStr === 'Transfer' || typeStr === 'Transfer-In' || typeStr === 'Transfer-Out' || isTransferType(typeStr, catStr, descStr)) {
     return 'Transfer';
   }
-  if (
-    typeStr === 'Income' || 
-    typeStr === 'إيراد' || 
-    (Number(tx.income) > 0 && !Number(tx.expense)) || 
-    isIncomeType(typeStr, catStr, descStr)
-  ) {
+  if (typeStr === 'Income' || typeStr === 'إيراد' || (Number(tx.income) > 0 && !Number(tx.expense)) || isIncomeType(typeStr, catStr, descStr)) {
     return 'Income';
   }
   return 'Expense';
@@ -102,9 +122,17 @@ export default function TransactionForm({
   isUpdating = false
 }: TransactionFormProps) {
   const isEditMode = mode === 'edit';
-  const [type, setType] = useState<TransactionType>(() => resolveType(transaction, initialType));
+  const [type, setType] = useState<ExtendedTransactionType>(() => resolveType(transaction, initialType));
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+
+  // Advanced Options Collapsible (UX Cleanup - Hides clutter for everyday transactions)
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+
+  // Pending Accruals for Settlement Matching
+  const [pendingAccruals, setPendingAccruals] = useState<PendingAccrualOption[]>([]);
+  const [loadingAccruals, setLoadingAccruals] = useState(false);
+  const [selectedAccrualId, setSelectedAccrualId] = useState<string>('');
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -119,8 +147,46 @@ export default function TransactionForm({
     hasTargetMonth: false,
     targetMonth: new Date().toISOString().slice(0, 7), // YYYY-MM
     isAccrual: false,
-    vendorName: ''
+    vendorName: '',
+    linkedAccrualId: ''
   });
+
+  // Pre-load pending accruals when Settlement is chosen to link settlement to accrual
+  useEffect(() => {
+    if (type === 'Settlement') {
+      setShowAdvancedOptions(true);
+      setLoadingAccruals(true);
+      gasService.getReport({ startDate: '', endDate: '' })
+        .then(data => {
+          if (data && Array.isArray(data.rows)) {
+            const list: PendingAccrualOption[] = [];
+            data.rows.forEach((r: any, idx: number) => {
+              const p = parseReportRow(r);
+              const isAccrual = isAccrualType(p.type, p.category, p.description) || (r && r.isAccrual);
+              const isAlreadySettled = /سداد|تسوية/i.test(`${p.category} ${p.description}`);
+              if (isAccrual && !isAlreadySettled && p.expense > 0) {
+                const targetMatch = p.description.match(/\[تخص شهر\s*([^\]]+)\]/i);
+                const vendorMatch = p.description.match(/(?:-?\s*المورد:\s*|المورد\s*:\s*)([^-\]]+)/i);
+                list.push({
+                  id: String(p.id || r.id || `acc-${idx}`),
+                  date: p.date,
+                  branch: p.branch,
+                  employee: p.employee,
+                  category: p.category,
+                  description: p.description,
+                  amount: p.expense,
+                  vendorName: (r && r.vendorName) || (vendorMatch ? vendorMatch[1].trim() : ''),
+                  targetMonth: p.targetMonth || (targetMatch ? targetMatch[1].trim() : p.date.slice(0, 7))
+                });
+              }
+            });
+            setPendingAccruals(list);
+          }
+        })
+        .catch(err => console.warn('Could not load pending accruals:', err))
+        .finally(() => setLoadingAccruals(false));
+    }
+  }, [type]);
 
   // Synchronize state when editing or switching modes
   useEffect(() => {
@@ -170,6 +236,11 @@ export default function TransactionForm({
         amountVal = String(transaction.expense);
       }
 
+      const hasTargetMonth = Boolean(targetMonthVal);
+      if (hasTargetMonth || isAccrualVal || vendorNameVal) {
+        setShowAdvancedOptions(true);
+      }
+
       setFormData({
         date: normalizeExcelDate(transaction.date) || new Date().toISOString().split('T')[0],
         employee: transaction.employee || '',
@@ -180,10 +251,11 @@ export default function TransactionForm({
         description: cleanDesc,
         sender: sender || transaction.employee || '',
         receiver: receiver || '',
-        hasTargetMonth: Boolean(targetMonthVal),
+        hasTargetMonth,
         targetMonth: targetMonthVal || new Date().toISOString().slice(0, 7),
         isAccrual: isAccrualVal,
-        vendorName: vendorNameVal
+        vendorName: vendorNameVal,
+        linkedAccrualId: transaction.linkedAccrualId || ''
       });
     } else if (!isEditMode && initialEmployee) {
       setFormData(prev => ({
@@ -194,6 +266,28 @@ export default function TransactionForm({
       }));
     }
   }, [transaction, isEditMode, initialEmployee, initialType]);
+
+  // When user selects a pending accrual in Settlement mode
+  const handleSelectPendingAccrual = (accrualId: string) => {
+    setSelectedAccrualId(accrualId);
+    if (!accrualId) return;
+
+    const accrual = pendingAccruals.find(a => a.id === accrualId);
+    if (accrual) {
+      setFormData(prev => ({
+        ...prev,
+        amount: String(accrual.amount),
+        branch: accrual.branch || prev.branch,
+        category: 'سداد مستحقات',
+        vendorName: accrual.vendorName || '',
+        hasTargetMonth: true,
+        targetMonth: accrual.targetMonth || prev.targetMonth,
+        linkedAccrualId: accrual.id,
+        description: `سداد مستحقات فاتورة [${accrual.category}] للمورد ${accrual.vendorName || 'المورد'} - تخص شهر ${accrual.targetMonth || 'السابق'}`
+      }));
+      setShowAdvancedOptions(true);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -208,6 +302,7 @@ export default function TransactionForm({
     let finalCategory = formData.category.trim();
     let finalDescription = formData.description.trim();
     let finalEmployee = formData.employee.trim();
+    const effectiveType = type === 'Settlement' ? 'Expense' : type;
 
     if (type === 'Transfer') {
       if (!formData.sender || !formData.receiver) {
@@ -223,6 +318,15 @@ export default function TransactionForm({
       if (!finalDescription || finalDescription.startsWith('تحويل عهدة نقدية')) {
         finalDescription = `تحويل عهدة نقدية من ${formData.sender.trim()} إلى ${formData.receiver.trim()}`;
       }
+    } else if (type === 'Settlement') {
+      if (!finalEmployee) {
+        setStatus({ type: 'error', message: 'يرجى اختيار الموظف/الصندوق القائم بسداد الالتزام' });
+        return;
+      }
+      finalCategory = 'سداد مستحقات';
+      if (!finalDescription.includes('سداد')) {
+        finalDescription = `سداد مستحقات ${formData.vendorName ? `للمورد ${formData.vendorName}` : ''} ${finalDescription}`.trim();
+      }
     } else {
       if (!finalEmployee) {
         setStatus({ type: 'error', message: 'يرجى اختيار الموظف المسؤول عن العملية' });
@@ -234,7 +338,8 @@ export default function TransactionForm({
       }
     }
 
-    if (formData.isAccrual) {
+    // [ACCOUNTING FIX]: Accrual & Target Month tagging
+    if (formData.isAccrual && type === 'Expense') {
       if (!finalCategory.includes('آجل') && !finalCategory.includes('مستحق')) {
         finalCategory = `${finalCategory} (آجل/مستحق)`;
       }
@@ -242,7 +347,7 @@ export default function TransactionForm({
       if (!finalDescription.includes('[مستحق/آجل]')) {
         finalDescription = `[مستحق/آجل] ${finalDescription} ${vendorTag}`.trim();
       }
-    } else {
+    } else if (type !== 'Settlement') {
       finalCategory = finalCategory.replace(/\s*\(آجل\/مستحق\)|\s*\(آجل\)|\s*\(مستحق\)/g, '').trim();
       finalDescription = finalDescription.replace(/\[(?:مستحق\/آجل|آجل|اجل|التزام آجل)\]\s*/gi, '').trim();
     }
@@ -256,6 +361,7 @@ export default function TransactionForm({
       finalDescription = finalDescription.replace(/\[تخص شهر\s*[^\]]+\]\s*/gi, '').trim();
     }
 
+    // [ACCOUNTING FIX]: City branch department isolation
     const isCity = formData.branch.trim() === 'سيتي';
     const finalDepartment = isCity && formData.department ? formData.department.trim() : null;
 
@@ -276,13 +382,16 @@ export default function TransactionForm({
       employee: finalEmployee,
       category: finalCategory,
       description: finalDescription,
-      type,
+      type: effectiveType,
       amount: parsedAmount,
+      amountFils: toFils(parsedAmount),
       sender: formData.sender,
       receiver: formData.receiver,
       targetMonth: formData.hasTargetMonth ? formData.targetMonth : '',
-      isAccrual: formData.isAccrual,
-      vendorName: formData.vendorName.trim()
+      isAccrual: type === 'Settlement' ? false : formData.isAccrual,
+      isSettlement: type === 'Settlement',
+      vendorName: formData.vendorName.trim(),
+      linkedAccrualId: formData.linkedAccrualId || selectedAccrualId
     };
 
     if (isEditMode) {
@@ -324,23 +433,23 @@ export default function TransactionForm({
   const isBusy = loading || isUpdating;
 
   return (
-    <div className={isEditMode ? "w-full bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-200" : "max-w-3xl mx-auto pb-12"}>
+    <div className={isEditMode ? "w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200" : "max-w-3xl mx-auto pb-12"}>
       {/* Header Area */}
       {isEditMode ? (
-        <div className="p-6 sm:p-8 bg-slate-50/90 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-3.5">
-            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl shadow-xs">
-              <FileEdit size={26} />
+        <div className="p-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-emerald-100 text-emerald-800 rounded-xl shadow-xs">
+              <FileEdit size={22} />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">تعديل الحركة المالية</h3>
-                <span className="px-2.5 py-0.5 bg-slate-200 text-slate-800 rounded-lg text-xs font-mono font-black">
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">تعديل الحركة المالية</h3>
+                <span className="px-2 py-0.5 bg-slate-200 text-slate-800 rounded-md text-xs font-mono font-bold">
                   #{transaction?.id || transaction?.rowIndex || 'سجل'}
                 </span>
               </div>
               <p className="text-xs font-medium text-slate-500 mt-0.5">
-                تعديل بنود الحركة المالية بنفس واجهة الإدخال المعتمدة لضمان الدقة المحاسبية
+                تعديل موضعي في سجل العمليات دون إنشاء سجلات مكررة لضمان الدقة المحاسبية
               </p>
             </div>
           </div>
@@ -348,7 +457,7 @@ export default function TransactionForm({
             <button
               type="button"
               onClick={onCancel}
-              className="p-2.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-full transition-colors cursor-pointer"
+              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-full transition-colors cursor-pointer"
               title="إغلاق النافذة"
             >
               <X size={20} />
@@ -356,100 +465,153 @@ export default function TransactionForm({
           )}
         </div>
       ) : (
-        <div className="mb-10 text-center">
+        <div className="mb-8 text-center">
           <motion.div 
-            initial={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, y: -15 }}
             animate={{ opacity: 1, y: 0 }}
-            className="inline-block p-3 bg-emerald-50 text-emerald-600 rounded-2xl mb-4"
+            className="inline-block p-3 bg-emerald-50 text-emerald-600 rounded-2xl mb-3 shadow-xs"
           >
             <Coins size={32} />
           </motion.div>
-          <h2 className="text-4xl font-black text-gray-900 tracking-tight">تسجيل عملية مالية</h2>
-          <p className="text-gray-500 mt-2 font-medium">أدخل بيانات العملية بدقة لضمان توازن الميزانية والتقارير</p>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight">تسجيل عملية مالية</h2>
+          <p className="text-slate-500 text-sm mt-1 font-medium">تسجيل دقيق للنقدية والالتزامات والتحويلات بالدينار الكويتي</p>
         </div>
       )}
 
-      <div className={isEditMode ? "" : "bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl shadow-gray-200/50 overflow-hidden"}>
-        {/* Type Selector - Unified Across Add and Edit */}
-        <div className="flex p-2 bg-gray-50/70 border-b border-gray-100">
+      <div className={isEditMode ? "" : "bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden"}>
+        {/* [UI & ACCOUNTING FIX]: 4 Distinct Transaction Types with Zero Broken Icons */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 p-2 bg-slate-50 border-b border-slate-200 gap-1.5">
           {[
             { 
               id: 'Expense', 
-              label: 'مصروف', 
+              label: 'مصروف نقدي', 
               icon: TrendingDown, 
-              activeClasses: 'bg-white text-rose-600 shadow-lg shadow-rose-500/10 border border-rose-100' 
+              activeClasses: 'bg-white text-rose-600 shadow-xs border border-rose-200' 
             },
             { 
               id: 'Income', 
-              label: 'توريد / مبيعات 💰', 
+              label: 'توريد / مبيعات', 
               icon: TrendingUp, 
-              activeClasses: 'bg-white text-emerald-600 shadow-lg shadow-emerald-500/10 border border-emerald-100' 
+              activeClasses: 'bg-white text-emerald-600 shadow-xs border border-emerald-200' 
             },
             { 
               id: 'Transfer', 
               label: 'تحويل عهدة', 
               icon: ArrowRightLeft, 
-              activeClasses: 'bg-white text-blue-600 shadow-lg shadow-blue-500/10 border border-blue-100' 
+              activeClasses: 'bg-white text-blue-600 shadow-xs border border-blue-200' 
+            },
+            { 
+              id: 'Settlement', 
+              label: 'سداد مستحقات', 
+              icon: CheckCheck, 
+              activeClasses: 'bg-white text-purple-600 shadow-xs border border-purple-200' 
             }
-          ].map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setType(item.id as TransactionType)}
-              className={`flex-1 py-4 flex items-center justify-center gap-3 rounded-2xl transition-all duration-300 font-black text-sm uppercase tracking-wider cursor-pointer ${
-                type === item.id 
-                  ? item.activeClasses 
-                  : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              <item.icon size={20} />
-              {item.label}
-            </button>
-          ))}
+          ].map((item) => {
+            const Icon = item.icon;
+            const active = type === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setType(item.id as ExtendedTransactionType);
+                  if (item.id === 'Settlement') {
+                    setFormData(prev => ({ ...prev, isAccrual: false, category: 'سداد مستحقات' }));
+                  }
+                }}
+                className={`py-3 px-2 flex items-center justify-center gap-2 rounded-xl transition-all font-black text-xs cursor-pointer ${
+                  active ? item.activeClasses : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+                }`}
+              >
+                <Icon size={16} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
         </div>
 
-        <form onSubmit={handleSubmit} className={isEditMode ? "p-6 sm:p-9 space-y-6 max-h-[75vh] overflow-y-auto" : "p-10 space-y-8"}>
+        <form onSubmit={handleSubmit} className={isEditMode ? "p-6 space-y-5" : "p-8 space-y-6"}>
           <AnimatePresence>
             {status && (
               <motion.div 
-                initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-                animate={{ opacity: 1, height: 'auto', marginBottom: 24 }}
-                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-                className={`p-4 rounded-2xl flex items-center gap-4 border ${
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className={`p-4 rounded-xl flex items-center gap-3 border ${
                   status.type === 'success' 
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-100' 
-                    : 'bg-red-50 text-red-800 border-red-100'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                    : 'bg-rose-50 text-rose-800 border-rose-200'
                 }`}
               >
-                <div className={`p-2 rounded-xl ${status.type === 'success' ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
-                  {status.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
-                </div>
-                <p className="text-sm font-black">{status.message}</p>
+                {status.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+                <p className="text-xs font-bold">{status.message}</p>
               </motion.div>
             )}
           </AnimatePresence>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Transaction Date */}
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                <Calendar size={14} className="text-emerald-600" />
-                تاريخ العملية
+          {/* [ACCOUNTING CRITICAL]: Settlement Selector - Link Payment to Pending Accrual */}
+          {type === 'Settlement' && (
+            <motion.div 
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-5 bg-purple-50/80 border border-purple-200 rounded-2xl space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCheck size={18} className="text-purple-700" />
+                  <label className="text-xs font-black text-purple-900">
+                    ربط السداد بفاتورة / التزام آجل سابق (اختياري)
+                  </label>
+                </div>
+                {loadingAccruals && <Loader2 size={14} className="animate-spin text-purple-600" />}
+              </div>
+
+              {pendingAccruals.length > 0 ? (
+                <div className="space-y-2">
+                  <select
+                    value={selectedAccrualId}
+                    onChange={(e) => handleSelectPendingAccrual(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-purple-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                  >
+                    <option value="">-- اختر فاتورة مستحقة للتحميل التلقائي للمبلغ والمورد وشهر الاستحقاق --</option>
+                    {pendingAccruals.map(acc => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.date} | {acc.category} {acc.vendorName ? `(${acc.vendorName})` : ''} - {formatKWD(acc.amount)} د.ك [شهر {acc.targetMonth}]
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-purple-700 font-semibold leading-relaxed">
+                    ⚖️ <strong>أثر محاسبي صفري على P&L:</strong> سداد الالتزام يخصم النقدية فوراً من الخزينة، ولا يُسجل كمصروف جديد في شهر الدفع لمنع ازدواجية التكلفة.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-purple-700 font-medium">
+                  لا توجد فواتير آجلة معلقة مسجلة حالياً. يمكنك إدخال بيانات السداد يدوياً أدناه.
+                </p>
+              )}
+            </motion.div>
+          )}
+
+          {/* Date and Branch Inputs */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                <Calendar size={14} className="text-slate-400" />
+                <span>تاريخ العملية</span>
               </label>
               <input
                 type="date"
                 required
                 value={formData.date}
                 onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                className="w-full px-5 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none font-bold text-gray-900"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
               />
             </div>
 
-            {/* Associated Branch */}
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                <Building2 size={14} className="text-emerald-600" />
-                الفرع المرتبط
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                <Building2 size={14} className="text-slate-400" />
+                <span>الفرع المرتبط</span>
               </label>
               <select
                 value={formData.branch}
@@ -461,333 +623,257 @@ export default function TransactionForm({
                     department: newBranch.trim() === 'سيتي' ? formData.department : ''
                   });
                 }}
-                className="w-full px-5 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none font-bold text-gray-900"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
               >
                 <option value="">غير محدد / عام</option>
                 {branches.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             </div>
+          </div>
 
-            {/* Department (Special for 'سيتي') */}
-            {formData.branch.trim() === 'سيتي' && (
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="space-y-2"
+          {/* City Branch Department Selection */}
+          {formData.branch.trim() === 'سيتي' && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+              <label className="block text-xs font-bold text-emerald-800 mb-1.5 flex items-center gap-1.5">
+                <Layers size={14} className="text-emerald-600" />
+                <span>القسم التشغيلي (فرع سيتي فقط)</span>
+              </label>
+              <select
+                value={formData.department}
+                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                className="w-full px-3.5 py-2.5 bg-emerald-50/60 border border-emerald-300 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-emerald-500 outline-none transition-all"
               >
-                <label className="flex items-center gap-2 text-xs font-black text-amber-700 uppercase tracking-widest">
-                  <Layers size={14} className="text-amber-600" />
-                  القسم التشغيلي (فرع "سيتي" فقط)
+                <option value="">-- اختياري: حدد القسم التشغيلي --</option>
+                {CITY_DEPARTMENTS.map(dept => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+              </select>
+            </motion.div>
+          )}
+
+          {/* Transfer vs Normal Mode Fields */}
+          {type === 'Transfer' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                  <User size={14} className="text-blue-500" />
+                  <span>المرسل (من عهدة)</span>
                 </label>
                 <select
-                  value={formData.department}
-                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  className="w-full px-5 py-3 bg-amber-50/60 border border-amber-300/80 rounded-2xl focus:ring-4 focus:ring-amber-500/15 focus:border-amber-500 transition-all outline-none font-bold text-amber-950"
-                >
-                  <option value="">-- اختياري: حدد القسم الداخلي --</option>
-                  {CITY_DEPARTMENTS.map(dept => (
-                    <option key={dept} value={dept}>{dept}</option>
-                  ))}
-                </select>
-                <p className="text-[11px] font-semibold text-amber-700/80">
-                  خاص بفرع سيتي فقط: بهارات / غذائي / استهلاكي
-                </p>
-              </motion.div>
-            )}
-
-            {/* Transfer Mode: Sender & Receiver */}
-            {type === 'Transfer' ? (
-              <>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                    <User size={14} className="text-blue-600" />
-                    المرسل (من عهدة)
-                  </label>
-                  <select
-                    required
-                    value={formData.sender}
-                    onChange={(e) => setFormData({ ...formData, sender: e.target.value })}
-                    className="w-full px-5 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold text-gray-900"
-                  >
-                    <option value="">اختر الموظف المرسل</option>
-                    {employees.map(e => <option key={e} value={e}>{e}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                    <User size={14} className="text-blue-600" />
-                    المستلم (إلى عهدة)
-                  </label>
-                  <select
-                    required
-                    value={formData.receiver}
-                    onChange={(e) => setFormData({ ...formData, receiver: e.target.value })}
-                    className="w-full px-5 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold text-gray-900"
-                  >
-                    <option value="">اختر الموظف المستلم</option>
-                    {employees.map(e => <option key={e} value={e}>{e}</option>)}
-                  </select>
-                </div>
-              </>
-            ) : (
-              <>
-                {/* Regular Mode: Employee & Category */}
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                    <User size={14} className="text-emerald-600" />
-                    الموظف المسؤول
-                  </label>
-                  <select
-                    required
-                    value={formData.employee}
-                    onChange={(e) => setFormData({ ...formData, employee: e.target.value })}
-                    className="w-full px-5 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-bold text-gray-900"
-                  >
-                    <option value="">اختر الموظف</option>
-                    {employees.map(e => <option key={e} value={e}>{e}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                    <Tag size={14} className="text-emerald-600" />
-                    تصنيف العملية
-                  </label>
-                  <select
-                    required
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-5 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none font-bold text-gray-900"
-                  >
-                    <option value="">اختر التصنيف</option>
-                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-
-                {/سداد|تسوية/i.test(formData.category) && (
-                  <div className="md:col-span-2 p-4 bg-purple-50 border-2 border-purple-200 rounded-2xl text-purple-950 text-xs font-bold space-y-1">
-                    <div className="flex items-center gap-2 font-black text-purple-900">
-                      <span>💳 إشعار المعالجة المحاسبية لسداد المستحقات:</span>
-                    </div>
-                    <p className="text-[11px] leading-relaxed text-purple-800">
-                      سيتم <strong>خصم المبلغ نقدياً فوراً من صندوق/عهدة الموظف</strong> ({formData.employee || 'المحدد'})، <strong>ولن يُحسب إطلاقاً كمصروف جديد في أرباح وخسائر (P&L) الشهر المدفوع فيه</strong> لمنع الازدواجية، كون التكلفة قد حُسبت سابقاً في شهر الاستحقاق الأصلي.
-                    </p>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* Total Amount in KWD */}
-            <div className="space-y-2 md:col-span-2">
-              <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                <Coins size={14} className="text-amber-500" />
-                المبلغ الإجمالي (د.ك)
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  step="0.001"
                   required
-                  placeholder="0.000"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  className={`w-full px-6 py-6 bg-gray-50 border border-gray-100 rounded-[2rem] focus:ring-8 transition-all outline-none text-4xl font-black font-mono text-center ${
-                    type === 'Expense' ? 'focus:ring-red-500/10 focus:border-red-500 text-red-600' : 
-                    type === 'Income' ? 'focus:ring-emerald-500/10 focus:border-emerald-500 text-emerald-600' :
-                    'focus:ring-blue-500/10 focus:border-blue-500 text-blue-600'
-                  }`}
-                />
-                <div className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-gray-400 pointer-events-none text-base">KWD</div>
+                  value={formData.sender}
+                  onChange={(e) => setFormData({ ...formData, sender: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-blue-500 outline-none transition-all"
+                >
+                  <option value="">اختر الموظف المرسل</option>
+                  {employees.map(e => <option key={e} value={e}>{e}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                  <User size={14} className="text-blue-500" />
+                  <span>المستلم (إلى عهدة)</span>
+                </label>
+                <select
+                  required
+                  value={formData.receiver}
+                  onChange={(e) => setFormData({ ...formData, receiver: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-blue-500 outline-none transition-all"
+                >
+                  <option value="">اختر الموظف المستلم</option>
+                  {employees.map(e => <option key={e} value={e}>{e}</option>)}
+                </select>
               </div>
             </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                  <User size={14} className="text-slate-400" />
+                  <span>الموظف المسؤول / الصندوق</span>
+                </label>
+                <select
+                  required
+                  value={formData.employee}
+                  onChange={(e) => setFormData({ ...formData, employee: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-emerald-500 outline-none transition-all"
+                >
+                  <option value="">اختر الموظف</option>
+                  {employees.map(e => <option key={e} value={e}>{e}</option>)}
+                </select>
+              </div>
 
-            {/* Detailed Description */}
-            <div className="space-y-2 md:col-span-2">
-              <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                <Info size={14} className="text-blue-500" />
-                البيان / الوصف التفصيلي
-              </label>
-              <textarea
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                  <Tag size={14} className="text-slate-400" />
+                  <span>تصنيف العملية</span>
+                </label>
+                <select
+                  required
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-emerald-500 outline-none transition-all"
+                >
+                  <option value="">اختر التصنيف</option>
+                  {type === 'Settlement' && <option value="سداد مستحقات">سداد مستحقات</option>}
+                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* Amount Input */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Coins size={14} className="text-amber-500" />
+                <span>المبلغ الإجمالي (دينار كويتي)</span>
+              </span>
+              <span className="text-[11px] font-mono text-slate-500 font-bold">1 KWD = 1000 Fils</span>
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                step="0.001"
                 required
-                rows={4}
-                placeholder="اكتب تفاصيل العملية هنا بشكل واضح..."
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none resize-none font-medium text-gray-900"
+                placeholder="0.000"
+                value={formData.amount}
+                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xl font-mono font-black text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all pl-16 text-left"
+                dir="ltr"
               />
-            </div>
-
-            {/* Accrued / Credit Purchase Toggle Card - The Golden Key */}
-            <div className="md:col-span-2 p-6 bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 border-2 border-amber-300/80 rounded-3xl space-y-4 shadow-sm shadow-amber-500/10 relative overflow-hidden">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-gradient-to-br from-amber-400 to-yellow-600 text-white rounded-2xl shadow-md shadow-amber-500/20 font-black text-xl flex items-center justify-center">
-                    🔑
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-base font-black text-amber-950">المفتاح الذهبي: عملية آجلة / مشتريات بالدين / مصاريف مستحقة</h4>
-                      <span className="px-2.5 py-0.5 text-[10px] font-black bg-amber-200/80 text-amber-900 rounded-full border border-amber-300">
-                        آجل / مستحق
-                      </span>
-                    </div>
-                    <p className="text-xs font-bold text-amber-800/80 mt-0.5">
-                      تفعيل هذا المفتاح يحول العملية تلقائياً لدفتر المشتريات الآجلة والالتزامات لمتابعة السداد دون تأخير
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, isAccrual: !formData.isAccrual })}
-                  className={`px-5 py-3 rounded-2xl transition-all duration-300 font-black text-xs flex items-center gap-2.5 shrink-0 border shadow-sm cursor-pointer ${
-                    formData.isAccrual 
-                      ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white border-amber-400 shadow-amber-500/30 scale-105 ring-4 ring-amber-400/20' 
-                      : 'bg-white text-amber-900 border-amber-300 hover:bg-amber-100/60'
-                  }`}
-                >
-                  <span className="text-base">{formData.isAccrual ? '⚡' : '🔒'}</span>
-                  <span>{formData.isAccrual ? 'مُفعّل: عملية آجلة (دين)' : 'تفعيل المفتاح الذهبي (آجل)'}</span>
-                </button>
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-xs text-slate-400">
+                KWD
               </div>
-
-              <AnimatePresence>
-                {formData.isAccrual && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden pt-4 border-t border-amber-200/80 space-y-3"
-                  >
-                    <div className="p-3 bg-amber-100/90 border border-amber-300 rounded-2xl text-amber-950 text-xs font-bold flex items-start gap-2.5 shadow-sm">
-                      <span className="text-lg leading-none">🛡️</span>
-                      <div>
-                        <p className="font-black text-amber-950 mb-0.5">تأكيد محاسبي لسلامة الصندوق والخزنة:</p>
-                        <p className="text-[11px] font-bold text-amber-900 leading-relaxed">
-                          هذه المشتريات الآجلة تُسجل كالتزام بدفتر الديون والأرباح والخسائر (أساس الاستحقاق)، <strong>وتم ضبط النظام تماماً لعدم خصمها إطلاقاً من الصندوق أو السيولة النقدية</strong>، ولن يتم خصم نقدية من الخزنة إلا في تاريخ سداد المورد لاحقاً.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-xs font-black text-amber-950">
-                      <span>✨ البيانات الخاصة بالعملية الآجلة</span>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-black text-amber-900 mb-1.5">اسم المورد / الجهة الدائنة (اختياري)</label>
-                      <input
-                        type="text"
-                        placeholder="مثال: شركة التوريدات الكويتية / مصنع السلام..."
-                        value={formData.vendorName}
-                        onChange={(e) => setFormData({ ...formData, vendorName: e.target.value })}
-                        className="w-full px-5 py-3 bg-white border border-amber-300 rounded-2xl focus:ring-4 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition-all font-bold text-gray-900 text-xs shadow-inner"
-                      />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Target Month Feature */}
-            <div className="md:col-span-2 p-6 bg-gray-50/50 border border-gray-100 rounded-3xl space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-xl shadow-sm border border-gray-100 text-blue-600">
-                    <CalendarClock size={20} />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-black text-gray-900">تخصيص لشهر محدد</h4>
-                    <p className="text-[10px] font-bold text-gray-400">فعل هذا الخيار إذا كان المصروف يخص شهراً سابقاً (مصروف مستحق)</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, hasTargetMonth: !formData.hasTargetMonth })}
-                  className={`w-12 h-6 rounded-full transition-all relative cursor-pointer ${
-                    formData.hasTargetMonth ? 'bg-emerald-500' : 'bg-gray-200'
-                  }`}
-                >
-                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${
-                    formData.hasTargetMonth ? 'right-7' : 'right-1'
-                  }`} />
-                </button>
-              </div>
-
-              <AnimatePresence>
-                {formData.hasTargetMonth && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="pt-4 border-t border-gray-100">
-                      <label className="block text-[10px] font-black text-gray-400 uppercase mb-2">اختر الشهر والسنة</label>
-                      <input
-                        type="month"
-                        value={formData.targetMonth}
-                        onChange={(e) => setFormData({ ...formData, targetMonth: e.target.value })}
-                        className="w-full px-5 py-3 bg-white border border-gray-100 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold text-gray-900"
-                      />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="pt-4">
-            {isEditMode ? (
-              <div className="flex flex-col sm:flex-row items-center gap-4">
-                <button
-                  type="submit"
-                  disabled={isBusy}
-                  className={`flex-1 w-full py-5 rounded-[2rem] font-black text-lg shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-[0.98] cursor-pointer ${
-                    isBusy ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 
-                    type === 'Expense' ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-500/30' : 
-                    type === 'Income' ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/30' : 
-                    'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/30'
-                  }`}
-                >
-                  {isBusy ? (
-                    <Loader2 size={24} className="animate-spin" />
-                  ) : (
-                    <>
-                      <Save size={24} />
-                      حفظ وتحديث العملية
-                    </>
-                  )}
-                </button>
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+              <FileText size={14} className="text-slate-400" />
+              <span>البيان / الوصف التفصيلي</span>
+            </label>
+            <textarea
+              required
+              rows={3}
+              placeholder="اكتب تفاصيل المعاملة هنا بدقة..."
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all resize-none"
+            />
+          </div>
 
-                {onCancel && (
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={onCancel}
-                    className="w-full sm:w-auto px-8 py-5 rounded-[2rem] bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-base transition-all active:scale-[0.98] cursor-pointer"
-                  >
-                    إلغاء التعديل
-                  </button>
+          {/* [ACCOUNTING FIX]: Accrued / Credit Purchase Toggle (Only for Expense) */}
+          {type === 'Expense' && (
+            <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl flex items-center justify-between">
+              <div>
+                <span className="text-xs font-black text-amber-950 block">شراء آجل / مصاريف مستحقة (دين غير مسدد)</span>
+                <span className="text-[11px] text-amber-700 font-medium">
+                  تسجيل الالتزام في شهر الاستحقاق دون خصم فوري من الصندوق النقدي لحين السداد
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={formData.isAccrual}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setFormData({ ...formData, isAccrual: checked });
+                  if (checked) setShowAdvancedOptions(true);
+                }}
+                className="w-5 h-5 text-amber-600 rounded cursor-pointer accent-amber-600"
+              />
+            </div>
+          )}
+
+          {/* [UX CLEANUP]: Advanced Accounting Options Collapsible Toggle */}
+          <div className="border border-slate-200 rounded-2xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
+              className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100 flex items-center justify-between text-xs font-black text-slate-700 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <Clock size={15} className="text-slate-500" />
+                <span>خيارات محاسبية متقدمة (شهر الاستحقاق P&L، بيانات المورد)</span>
+                {(formData.hasTargetMonth || formData.vendorName) && (
+                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] rounded-full font-bold">
+                    مُحدد
+                  </span>
                 )}
               </div>
-            ) : (
+              {showAdvancedOptions ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+
+            <AnimatePresence>
+              {showAdvancedOptions && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="p-4 bg-white border-t border-slate-200 space-y-4"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Target Month Allocation (P&L Accounting Match) */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-bold text-slate-700">تخص شهر (استحقاق P&L)</label>
+                        <input
+                          type="checkbox"
+                          checked={formData.hasTargetMonth}
+                          onChange={(e) => setFormData({ ...formData, hasTargetMonth: e.target.checked })}
+                          className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
+                        />
+                      </div>
+                      <input
+                        type="month"
+                        disabled={!formData.hasTargetMonth}
+                        value={formData.targetMonth}
+                        onChange={(e) => setFormData({ ...formData, targetMonth: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 disabled:opacity-40 outline-none focus:bg-white focus:border-emerald-500"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        تحديد الشهر الذي تتحمل فيه قائمة الأرباح والخسائر (P&L) هذا المصروف
+                      </p>
+                    </div>
+
+                    {/* Vendor Name */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">اسم المورد / الشركة الدائنة</label>
+                      <input
+                        type="text"
+                        placeholder="مثال: شركة المواد الغذائية، المؤجر..."
+                        value={formData.vendorName}
+                        onChange={(e) => setFormData({ ...formData, vendorName: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:bg-white focus:border-emerald-500"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        لتتبع مديونيات الموردين في سجل الالتزامات الآجلة
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Submit Actions */}
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              type="submit"
+              disabled={isBusy}
+              className="flex-1 py-3 px-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl font-black text-sm flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+            >
+              {isBusy ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+              <span>{isEditMode ? 'حفظ وتحديث العملية' : 'تسجيل العملية'}</span>
+            </button>
+            {onCancel && (
               <button
-                type="submit"
-                disabled={isBusy}
-                className={`w-full py-5 rounded-[2rem] font-black text-xl shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-[0.98] cursor-pointer ${
-                  isBusy ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 
-                  type === 'Expense' ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-500/30' : 
-                  type === 'Income' ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/30' : 
-                  'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/30'
-                }`}
+                type="button"
+                onClick={onCancel}
+                className="py-3 px-5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-all cursor-pointer"
               >
-                {isBusy ? (
-                  <Loader2 size={24} className="animate-spin" />
-                ) : (
-                  <>
-                    <Save size={24} />
-                    تأكيد وتسجيل العملية
-                  </>
-                )}
+                إلغاء
               </button>
             )}
           </div>

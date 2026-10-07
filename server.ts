@@ -211,7 +211,8 @@ app.get('/api/transactions', (req, res) => {
   if (!isAll(category)) {
     list = list.filter(t => t.category === category);
   }
-  if (department && department !== 'All' && department !== 'الكل' && department !== '') {
+  const isCityBranch = !isAll(branch) && (String(branch).trim() === 'سيتي' || String(branch).includes('سيتي'));
+  if (isCityBranch && department && department !== 'All' && department !== 'الكل' && department !== '') {
     if (department === 'unassigned' || department === 'غير محدد / بيانات سابقة' || department === 'none') {
       list = list.filter(t => !t.department || String(t.department).trim() === '');
     } else {
