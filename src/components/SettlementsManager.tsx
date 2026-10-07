@@ -6,7 +6,7 @@ import {
   Search, 
   User, 
   Calendar, 
-  DollarSign, 
+  Coins, 
   CheckCircle2, 
   AlertTriangle, 
   Layers,
@@ -626,7 +626,7 @@ export default function SettlementsManager({
               الجرد الفعلي (النقد الموجود بالخزينة)
             </label>
             <div className="relative">
-              <DollarSign className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-600" size={16} />
+              <Coins className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-600" size={16} />
               <input
                 type="number"
                 step="0.001"
@@ -917,7 +917,7 @@ export default function SettlementsManager({
           </div>
           <div className="p-3 rounded-2xl bg-white/80 shadow-sm">
             {!settlementStats.hasCount ? (
-              <DollarSign size={22} className="text-slate-400" />
+              <Coins size={22} className="text-slate-400" />
             ) : Math.abs(settlementStats.variance) < 0.001 ? (
               <CheckCircle2 size={22} className="text-emerald-600" />
             ) : (
