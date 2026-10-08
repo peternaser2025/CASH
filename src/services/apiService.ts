@@ -13,8 +13,8 @@ export const apiService = {
     }
   },
 
-  // 2. Settings (Branches & Categories)
-  async getSettings(): Promise<{ branches: string[]; categories: string[] } | null> {
+  // 2. Settings (Branches, Categories, Vendors, Employees)
+  async getSettings(): Promise<{ branches: string[]; categories: string[]; vendors?: string[]; employees?: string[]; settings?: any } | null> {
     try {
       const res = await fetch('/api/settings');
       if (!res.ok) return null;
@@ -36,6 +36,51 @@ export const apiService = {
     } catch (e) {
       console.warn('Backend updateSettings failed:', e);
       return false;
+    }
+  },
+
+  async updateFullSettings(settings: any): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings })
+      });
+      const data = await res.json();
+      return { success: res.ok && data.success, data };
+    } catch (e: any) {
+      console.warn('Backend updateFullSettings failed:', e);
+      return { success: false, error: e.message || 'خطأ في تحديث الإعدادات' };
+    }
+  },
+
+  async checkReferentialIntegrity(type: 'branch' | 'category' | 'vendor' | 'employee', name: string, id?: string): Promise<{ canDelete: boolean; linkedCount: number; sampleTransactions?: any[]; reason?: string }> {
+    try {
+      const res = await fetch('/api/settings/check-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, name, id })
+      });
+      if (!res.ok) {
+        return { canDelete: false, linkedCount: 0, reason: 'تعذر التحقق من السيرفر' };
+      }
+      return await res.json();
+    } catch (e) {
+      console.warn('checkReferentialIntegrity failed:', e);
+      return { canDelete: false, linkedCount: 0, reason: 'خطأ في الاتصال' };
+    }
+  },
+
+  async deleteSettingItem(type: string, id: string, forceSoftDelete = false): Promise<{ success: boolean; softDeleted?: boolean; hardDeleted?: boolean; error?: string; message?: string }> {
+    try {
+      const res = await fetch(`/api/settings/${type}/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ forceSoftDelete })
+      });
+      return await res.json();
+    } catch (e: any) {
+      return { success: false, error: e.message || 'فشل حذف البند' };
     }
   },
 

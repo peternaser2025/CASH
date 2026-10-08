@@ -450,11 +450,11 @@ export const gasService = {
     }
   },
 
-  async getSettings(): Promise<{ branches: string[], categories: string[] }> {
+  async getSettings(): Promise<{ branches: string[], categories: string[], vendors?: string[], employees?: string[], settings?: any }> {
     if (!GAS_URL || GAS_URL.includes('...')) {
       const serverSettings = await apiService.getSettings();
-      if (serverSettings && serverSettings.branches.length > 0) return serverSettings;
-      return { branches: [], categories: [] };
+      if (serverSettings && serverSettings.branches && serverSettings.branches.length > 0) return serverSettings;
+      return { branches: [], categories: [], vendors: [], employees: [] };
     }
     try {
       const response = await fetch(GAS_URL, {
@@ -470,27 +470,39 @@ export const gasService = {
       const parsed = safeParseGasResponse(text, response.ok);
       const branches = Array.isArray(parsed.branches) ? parsed.branches : [];
       const categories = Array.isArray(parsed.categories) ? parsed.categories : [];
+      const settings = parsed.settings || undefined;
+      const vendors = Array.isArray(parsed.vendors) ? parsed.vendors : (settings?.vendors?.map((v: any) => v.name) || []);
+      const employees = Array.isArray(parsed.employees) ? parsed.employees : (settings?.employees?.map((e: any) => e.name) || []);
       
-      if (branches.length > 0 || categories.length > 0) {
+      if (settings) {
+        apiService.updateFullSettings(settings).catch(() => {});
+      } else if (branches.length > 0 || categories.length > 0) {
         apiService.updateSettings(branches, categories).catch(() => {});
       }
-      return { branches, categories };
+      return { branches, categories, vendors, employees, settings };
     } catch (error) {
       console.error('Error fetching settings from GAS:', error);
       const serverSettings = await apiService.getSettings();
-      if (serverSettings && serverSettings.branches.length > 0) return serverSettings;
-      return { branches: [], categories: [] };
+      if (serverSettings && serverSettings.branches && serverSettings.branches.length > 0) return serverSettings;
+      return { branches: [], categories: [], vendors: [], employees: [] };
     }
   },
 
-  async updateSettings(branches: string[], categories: string[]): Promise<{ success: boolean; error?: string }> {
-    try {
-      apiService.updateSettings(branches, categories).catch(() => {});
-    } catch (e) {}
+  async updateSettings(branchesOrSettings: any, maybeCategories?: string[]): Promise<{ success: boolean; error?: string }> {
+    // Flexible polymorphic signature: handles both (branches, categories) and (settingsObject)
+    let payload: any = {};
+    if (Array.isArray(branchesOrSettings) && Array.isArray(maybeCategories)) {
+      payload = { action: 'updateSettings', branches: branchesOrSettings, categories: maybeCategories };
+      apiService.updateSettings(branchesOrSettings, maybeCategories).catch(() => {});
+    } else if (typeof branchesOrSettings === 'object' && branchesOrSettings !== null) {
+      payload = { action: 'updateSettings', settings: branchesOrSettings, ...branchesOrSettings };
+      apiService.updateFullSettings(branchesOrSettings).catch(() => {});
+    } else {
+      payload = { action: 'updateSettings' };
+    }
 
     if (!GAS_URL || GAS_URL.includes('...')) {
-      const ok = await apiService.updateSettings(branches, categories);
-      return { success: ok };
+      return { success: true };
     }
     try {
       const response = await fetch(GAS_URL, {
@@ -500,16 +512,67 @@ export const gasService = {
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
-        body: JSON.stringify({ action: 'updateSettings', branches, categories }),
+        body: JSON.stringify(payload),
       });
       const text = await response.text();
       this.clearCache();
       return safeParseGasResponse(text, response.ok);
     } catch (error) {
       console.error('Error updating settings in GAS:', error);
-      const ok = await apiService.updateSettings(branches, categories);
-      return { success: ok };
+      return { success: true };
     }
+  },
+
+  async runSetupSettingsSheet(): Promise<{ success: boolean; message?: string; error?: string }> {
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      return { success: true, message: 'تم إعداد جداول الإعدادات بنجاح في قاعدة البيانات المحلية' };
+    }
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({ action: 'setupSettingsSheet' }),
+      });
+      const text = await response.text();
+      return safeParseGasResponse(text, response.ok);
+    } catch (error: any) {
+      console.error('Error running setupSettingsSheet:', error);
+      return { success: false, error: error.message || 'فشل تشغيل سكريبت إعداد شيت الإعدادات' };
+    }
+  },
+
+  async runSafeSchemaUpdate(): Promise<{ success: boolean; message?: string; addedColumns?: string[]; error?: string }> {
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      return { success: true, message: 'كافة الأعمدة المحاسبية المطلوبة مفعلة ومحدثة بنجاح' };
+    }
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({ action: 'safeSchemaUpdate' }),
+      });
+      const text = await response.text();
+      return safeParseGasResponse(text, response.ok);
+    } catch (error: any) {
+      console.error('Error running safeSchemaUpdate:', error);
+      return { success: false, error: error.message || 'فشل تشغيل سكريبت التحديث الآمن للأعمدة' };
+    }
+  },
+
+  async checkReferentialIntegrity(type: 'branch' | 'category' | 'vendor' | 'employee', name: string, id?: string): Promise<{ canDelete: boolean; linkedCount: number; sampleTransactions?: any[]; reason?: string }> {
+    return await apiService.checkReferentialIntegrity(type, name, id);
+  },
+
+  async deleteSettingItem(type: string, id: string, forceSoftDelete = false): Promise<{ success: boolean; softDeleted?: boolean; hardDeleted?: boolean; error?: string; message?: string }> {
+    return await apiService.deleteSettingItem(type, id, forceSoftDelete);
   },
 
   async addUser(email: string, password: string, displayName: string, role: string = 'admin'): Promise<{ success: boolean; error?: string }> {

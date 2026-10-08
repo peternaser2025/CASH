@@ -42,6 +42,7 @@ import SettlementsManager from './components/SettlementsManager';
 import JournalEntries from './components/JournalEntries';
 import BudgetManager from './components/BudgetManager';
 import OrdersManager from './components/OrdersManager';
+import SettingsManager from './components/SettingsManager';
 
 export default function App() {
   const [user, setUser] = useState<User | any>(null);
@@ -555,6 +556,11 @@ export default function App() {
                 <EmployeeManager 
                   balances={balances} 
                   onRefresh={() => fetchData(true)} 
+                />
+              )}
+              {activeTab === 'settings' && (
+                <SettingsManager 
+                  onRefreshParentState={() => fetchData(true)} 
                 />
               )}
               {activeTab === 'profit-loss' && (

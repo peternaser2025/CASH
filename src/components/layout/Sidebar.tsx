@@ -18,7 +18,8 @@ import {
   BookOpen,
   Target,
   Truck,
-  CalendarCheck2
+  CalendarCheck2,
+  SlidersHorizontal
 } from 'lucide-react';
 
 export type TabId = 
@@ -31,6 +32,7 @@ export type TabId =
   | 'journal-entries' 
   | 'budgets' 
   | 'employees' 
+  | 'settings'
   | 'google-tools' 
   | 'profit-loss' 
   | 'cost-control' 
@@ -213,6 +215,14 @@ export default function Sidebar({
               badge={`${balancesCount}`}
               badgeType="neutral"
               onClick={() => onNavigate('employees')} 
+            />
+            <SidebarItem 
+              icon={<SlidersHorizontal size={18} />} 
+              label="الإعدادات المركزية والجداول" 
+              active={activeTab === 'settings'} 
+              badge="مركزي"
+              badgeType="success"
+              onClick={() => onNavigate('settings')} 
             />
             <SidebarItem 
               icon={<ShieldCheck size={18} />} 

@@ -151,6 +151,50 @@ export default function TransactionForm({
     linkedAccrualId: ''
   });
 
+  // Dynamic Lookups loaded from Centralized Settings Sheet
+  const [activeBranchesList, setActiveBranchesList] = useState<string[]>(branches);
+  const [activeCategoriesList, setActiveCategoriesList] = useState<{ name: string; parentCategory?: string }[]>(
+    categories.map(c => ({ name: c, parentCategory: 'عام' }))
+  );
+  const [activeVendorsList, setActiveVendorsList] = useState<string[]>([]);
+  const [activeEmployeesList, setActiveEmployeesList] = useState<string[]>(employees);
+
+  useEffect(() => {
+    gasService.getSettings()
+      .then(res => {
+        if (res && res.settings) {
+          const s = res.settings;
+          if (Array.isArray(s.branches)) {
+            const b = s.branches.filter((x: any) => x.isActive).map((x: any) => x.name);
+            if (b.length > 0) setActiveBranchesList(b);
+          }
+          if (Array.isArray(s.categories)) {
+            const c = s.categories.filter((x: any) => x.isActive).map((x: any) => ({
+              name: x.name,
+              parentCategory: x.parentCategory || 'عام'
+            }));
+            if (c.length > 0) setActiveCategoriesList(c);
+          }
+          if (Array.isArray(s.vendors)) {
+            const v = s.vendors.filter((x: any) => x.isActive).map((x: any) => x.name);
+            if (v.length > 0) setActiveVendorsList(v);
+          }
+          if (Array.isArray(s.employees)) {
+            const e = s.employees.filter((x: any) => x.isActive).map((x: any) => x.name);
+            if (e.length > 0) setActiveEmployeesList(e);
+          }
+        } else if (res) {
+          if (Array.isArray(res.branches) && res.branches.length > 0) setActiveBranchesList(res.branches);
+          if (Array.isArray(res.categories) && res.categories.length > 0) {
+            setActiveCategoriesList(res.categories.map((c: string) => ({ name: c, parentCategory: 'عام' })));
+          }
+          if (Array.isArray(res.vendors) && res.vendors.length > 0) setActiveVendorsList(res.vendors);
+          if (Array.isArray(res.employees) && res.employees.length > 0) setActiveEmployeesList(res.employees);
+        }
+      })
+      .catch(err => console.warn('Could not load dynamic settings for form dropdowns:', err));
+  }, []);
+
   // Pre-load pending accruals when Settlement is chosen to link settlement to accrual
   useEffect(() => {
     if (type === 'Settlement') {
@@ -626,7 +670,7 @@ export default function TransactionForm({
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
               >
                 <option value="">غير محدد / عام</option>
-                {branches.map(b => <option key={b} value={b}>{b}</option>)}
+                {activeBranchesList.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             </div>
           </div>
@@ -666,7 +710,7 @@ export default function TransactionForm({
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-blue-500 outline-none transition-all"
                 >
                   <option value="">اختر الموظف المرسل</option>
-                  {employees.map(e => <option key={e} value={e}>{e}</option>)}
+                  {activeEmployeesList.map(e => <option key={e} value={e}>{e}</option>)}
                 </select>
               </div>
               <div>
@@ -681,7 +725,7 @@ export default function TransactionForm({
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-blue-500 outline-none transition-all"
                 >
                   <option value="">اختر الموظف المستلم</option>
-                  {employees.map(e => <option key={e} value={e}>{e}</option>)}
+                  {activeEmployeesList.map(e => <option key={e} value={e}>{e}</option>)}
                 </select>
               </div>
             </div>
@@ -699,7 +743,7 @@ export default function TransactionForm({
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-emerald-500 outline-none transition-all"
                 >
                   <option value="">اختر الموظف</option>
-                  {employees.map(e => <option key={e} value={e}>{e}</option>)}
+                  {activeEmployeesList.map(e => <option key={e} value={e}>{e}</option>)}
                 </select>
               </div>
 
@@ -716,7 +760,11 @@ export default function TransactionForm({
                 >
                   <option value="">اختر التصنيف</option>
                   {type === 'Settlement' && <option value="سداد مستحقات">سداد مستحقات</option>}
-                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                  {activeCategoriesList.map(c => (
+                    <option key={c.name} value={c.name}>
+                      {c.parentCategory && c.parentCategory !== 'عام' ? `[${c.parentCategory}] ${c.name}` : c.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -837,18 +885,41 @@ export default function TransactionForm({
                       </p>
                     </div>
 
-                    {/* Vendor Name */}
+                    {/* Vendor Name & Quick Select */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">اسم المورد / الشركة الدائنة</label>
-                      <input
-                        type="text"
-                        placeholder="مثال: شركة المواد الغذائية، المؤجر..."
-                        value={formData.vendorName}
-                        onChange={(e) => setFormData({ ...formData, vendorName: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:bg-white focus:border-emerald-500"
-                      />
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-slate-700">اسم المورد / الشركة الدائنة</label>
+                        {activeVendorsList.length > 0 && (
+                          <span className="text-[10px] text-purple-700 font-bold">موردون معتمدون في الإعدادات</span>
+                        )}
+                      </div>
+                      <div className="space-y-1.5">
+                        {activeVendorsList.length > 0 && (
+                          <select
+                            value={activeVendorsList.includes(formData.vendorName) ? formData.vendorName : ''}
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                setFormData({ ...formData, vendorName: e.target.value });
+                              }
+                            }}
+                            className="w-full px-3 py-1.5 bg-purple-50/60 border border-purple-200 rounded-xl text-xs font-bold text-purple-900 outline-none focus:border-purple-500"
+                          >
+                            <option value="">-- اختر من قائمة الموردين المعتمدين (أو اكتب أدناه) --</option>
+                            {activeVendorsList.map(v => (
+                              <option key={v} value={v}>{v}</option>
+                            ))}
+                          </select>
+                        )}
+                        <input
+                          type="text"
+                          placeholder="مثال: شركة المواد الغذائية، المؤجر، مورد الصيانة..."
+                          value={formData.vendorName}
+                          onChange={(e) => setFormData({ ...formData, vendorName: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:bg-white focus:border-emerald-500"
+                        />
+                      </div>
                       <p className="text-[10px] text-slate-500 mt-1">
-                        لتتبع مديونيات الموردين في سجل الالتزامات الآجلة
+                        لتتبع مديونيات الموردين في سجل الالتزامات الآجلة وشيت الإعدادات
                       </p>
                     </div>
                   </div>

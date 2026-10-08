@@ -84,6 +84,64 @@ export interface Order {
 }
 
 // ----------------------------------------------------
+// Centralized System Settings & Lookups
+// ----------------------------------------------------
+export interface BranchSetting {
+  id: string;
+  branchId: string;
+  name: string;
+  isActive: boolean;
+  notes?: string;
+  createdAt?: string;
+}
+
+export interface CategorySetting {
+  id: string;
+  categoryId: string;
+  name: string;
+  parentCategory?: string;
+  isActive: boolean;
+  notes?: string;
+  createdAt?: string;
+}
+
+export interface VendorSetting {
+  id: string;
+  vendorId: string;
+  name: string;
+  contactInfo?: string;
+  isActive: boolean;
+  notes?: string;
+  createdAt?: string;
+}
+
+export interface EmployeeSetting {
+  id: string;
+  employeeId: string;
+  name: string;
+  role?: string;
+  isActive: boolean;
+  balance?: number;
+  notes?: string;
+  createdAt?: string;
+}
+
+export interface SystemSettings {
+  branches: BranchSetting[];
+  categories: CategorySetting[];
+  vendors: VendorSetting[];
+  employees: EmployeeSetting[];
+  lastSync?: string;
+}
+
+export interface ReferentialIntegrityResult {
+  canDelete: boolean;
+  linkedCount: number;
+  linkedTransactions?: any[];
+  reason?: string;
+}
+
+// ----------------------------------------------------
 // Unified API Response Wrapper
 // ----------------------------------------------------
 export interface ApiResponse<T = any> {

@@ -36,6 +36,46 @@ if (!fs.existsSync(DATA_DIR)) {
 
 const STORE_FILE = path.join(DATA_DIR, 'financial_store.json');
 
+interface BranchItem {
+  id: string;
+  branchId: string;
+  name: string;
+  isActive: boolean;
+  notes?: string;
+  createdAt?: string;
+}
+
+interface CategoryItem {
+  id: string;
+  categoryId: string;
+  name: string;
+  parentCategory?: string;
+  isActive: boolean;
+  notes?: string;
+  createdAt?: string;
+}
+
+interface VendorItem {
+  id: string;
+  vendorId: string;
+  name: string;
+  contactInfo?: string;
+  isActive: boolean;
+  notes?: string;
+  createdAt?: string;
+}
+
+interface EmployeeItem {
+  id: string;
+  employeeId: string;
+  name: string;
+  role?: string;
+  isActive: boolean;
+  balance?: number;
+  notes?: string;
+  createdAt?: string;
+}
+
 interface ServerStore {
   transactions: any[];
   orders: any[];
@@ -44,6 +84,11 @@ interface ServerStore {
   employees: { name: string; balance: number }[];
   branches: string[];
   categories: string[];
+  // Structured Centralized Settings
+  settingsBranches?: BranchItem[];
+  settingsCategories?: CategoryItem[];
+  settingsVendors?: VendorItem[];
+  settingsEmployees?: EmployeeItem[];
   lastSync: string;
 }
 
@@ -68,14 +113,76 @@ function loadStore(): ServerStore {
     if (fs.existsSync(STORE_FILE)) {
       const data = fs.readFileSync(STORE_FILE, 'utf-8');
       const parsed = JSON.parse(data);
+
+      const baseBranches = Array.isArray(parsed.branches) && parsed.branches.length > 0 ? parsed.branches : defaultStore.branches;
+      const baseCategories = Array.isArray(parsed.categories) && parsed.categories.length > 0 ? parsed.categories : defaultStore.categories;
+      const baseEmployees = Array.isArray(parsed.employees) && parsed.employees.length > 0 ? parsed.employees : defaultStore.employees;
+
+      // Safe non-destructive derivation of structured settings
+      const settingsBranches: BranchItem[] = Array.isArray(parsed.settingsBranches) && parsed.settingsBranches.length > 0
+        ? parsed.settingsBranches
+        : baseBranches.map((bName: string, idx: number) => ({
+            id: `BR-${String(idx + 1).padStart(3, '0')}`,
+            branchId: `BR-${String(idx + 1).padStart(3, '0')}`,
+            name: bName,
+            isActive: true,
+            createdAt: new Date().toISOString()
+          }));
+
+      const settingsCategories: CategoryItem[] = Array.isArray(parsed.settingsCategories) && parsed.settingsCategories.length > 0
+        ? parsed.settingsCategories
+        : baseCategories.map((cName: string, idx: number) => {
+            let parent = 'تشغيلي';
+            if (cName.includes('رواتب') || cName.includes('إداري')) parent = 'إداري';
+            else if (cName.includes('إيجار')) parent = 'ثابت';
+            else if (cName.includes('مبيعات') || cName.includes('إيراد')) parent = 'إيرادات';
+            else if (cName.includes('سداد') || cName.includes('التزام') || cName.includes('آجل')) parent = 'التزامات';
+            else if (cName.includes('ضيافة') || cName.includes('نثريات')) parent = 'عمومية';
+            return {
+              id: `CAT-${String(idx + 1).padStart(3, '0')}`,
+              categoryId: `CAT-${String(idx + 1).padStart(3, '0')}`,
+              name: cName,
+              parentCategory: parent,
+              isActive: true,
+              createdAt: new Date().toISOString()
+            };
+          });
+
+      const defaultVendors: VendorItem[] = [
+        { id: 'VEN-001', vendorId: 'VEN-001', name: 'شركة المواد الغذائية المتحدة', contactInfo: '22450000', isActive: true },
+        { id: 'VEN-002', vendorId: 'VEN-002', name: 'مؤسسة التغليف الحديثة', contactInfo: '24810000', isActive: true },
+        { id: 'VEN-003', vendorId: 'VEN-003', name: 'مطبعة النور الكويتية', contactInfo: '99887766', isActive: true },
+        { id: 'VEN-004', vendorId: 'VEN-004', name: 'المؤجر العقاري', contactInfo: '55443322', isActive: true }
+      ];
+
+      const settingsVendors: VendorItem[] = Array.isArray(parsed.settingsVendors) && parsed.settingsVendors.length > 0
+        ? parsed.settingsVendors
+        : defaultVendors;
+
+      const settingsEmployees: EmployeeItem[] = Array.isArray(parsed.settingsEmployees) && parsed.settingsEmployees.length > 0
+        ? parsed.settingsEmployees
+        : baseEmployees.map((e: any, idx: number) => ({
+            id: `EMP-${String(idx + 1).padStart(3, '0')}`,
+            employeeId: `EMP-${String(idx + 1).padStart(3, '0')}`,
+            name: e.name,
+            role: e.name.includes('كاشير') ? 'كاشير مبيعات' : e.name.includes('مشتريات') ? 'مسؤول مشتريات' : 'أمين عهدة / محاسب',
+            isActive: true,
+            balance: e.balance || 0,
+            createdAt: new Date().toISOString()
+          }));
+
       return {
         transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
         orders: Array.isArray(parsed.orders) ? parsed.orders : [],
         budgets: Array.isArray(parsed.budgets) ? parsed.budgets : [],
         settlements: Array.isArray(parsed.settlements) ? parsed.settlements : [],
-        employees: Array.isArray(parsed.employees) && parsed.employees.length > 0 ? parsed.employees : defaultStore.employees,
-        branches: Array.isArray(parsed.branches) && parsed.branches.length > 0 ? parsed.branches : defaultStore.branches,
-        categories: Array.isArray(parsed.categories) && parsed.categories.length > 0 ? parsed.categories : defaultStore.categories,
+        employees: baseEmployees,
+        branches: baseBranches,
+        categories: baseCategories,
+        settingsBranches,
+        settingsCategories,
+        settingsVendors,
+        settingsEmployees,
         lastSync: parsed.lastSync || defaultStore.lastSync
       };
     }
@@ -178,20 +285,253 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-// 2. Settings (Branches & Categories)
+// 2. Centralized Settings (Branches, Categories, Vendors, Employees)
 app.get('/api/settings', (_req, res) => {
+  // Return backward compatible arrays as well as full structured tables
+  const activeBranches = (serverStore.settingsBranches || []).filter(b => b.isActive).map(b => b.name);
+  const activeCategories = (serverStore.settingsCategories || []).filter(c => c.isActive).map(c => c.name);
+  const activeVendors = (serverStore.settingsVendors || []).filter(v => v.isActive).map(v => v.name);
+  const activeEmployees = (serverStore.settingsEmployees || []).filter(e => e.isActive).map(e => e.name);
+
   res.json({
-    branches: serverStore.branches,
-    categories: serverStore.categories
+    success: true,
+    branches: activeBranches.length > 0 ? activeBranches : serverStore.branches,
+    categories: activeCategories.length > 0 ? activeCategories : serverStore.categories,
+    vendors: activeVendors,
+    employees: activeEmployees,
+    settings: {
+      branches: serverStore.settingsBranches || [],
+      categories: serverStore.settingsCategories || [],
+      vendors: serverStore.settingsVendors || [],
+      employees: serverStore.settingsEmployees || []
+    }
   });
 });
 
 app.post('/api/settings', (req, res) => {
-  const { branches, categories } = req.body;
-  if (Array.isArray(branches)) serverStore.branches = branches;
-  if (Array.isArray(categories)) serverStore.categories = categories;
+  const { branches, categories, vendors, employees, settings } = req.body;
+
+  // 1. Structured settings object update
+  if (settings && typeof settings === 'object') {
+    if (Array.isArray(settings.branches)) {
+      serverStore.settingsBranches = settings.branches;
+      serverStore.branches = settings.branches.map((b: any) => typeof b === 'string' ? b : b.name);
+    }
+    if (Array.isArray(settings.categories)) {
+      serverStore.settingsCategories = settings.categories;
+      serverStore.categories = settings.categories.map((c: any) => typeof c === 'string' ? c : c.name);
+    }
+    if (Array.isArray(settings.vendors)) {
+      serverStore.settingsVendors = settings.vendors;
+    }
+    if (Array.isArray(settings.employees)) {
+      serverStore.settingsEmployees = settings.employees;
+    }
+  }
+
+  // 2. Direct array updates
+  if (Array.isArray(branches)) {
+    if (branches.length > 0 && typeof branches[0] === 'object') {
+      serverStore.settingsBranches = branches;
+      serverStore.branches = branches.map((b: any) => b.name);
+    } else {
+      serverStore.branches = branches;
+      serverStore.settingsBranches = branches.map((b: string, i: number) => ({
+        id: `BR-${String(i + 1).padStart(3, '0')}`,
+        branchId: `BR-${String(i + 1).padStart(3, '0')}`,
+        name: b,
+        isActive: true,
+        createdAt: new Date().toISOString()
+      }));
+    }
+  }
+
+  if (Array.isArray(categories)) {
+    if (categories.length > 0 && typeof categories[0] === 'object') {
+      serverStore.settingsCategories = categories;
+      serverStore.categories = categories.map((c: any) => c.name);
+    } else {
+      serverStore.categories = categories;
+      serverStore.settingsCategories = categories.map((c: string, i: number) => ({
+        id: `CAT-${String(i + 1).padStart(3, '0')}`,
+        categoryId: `CAT-${String(i + 1).padStart(3, '0')}`,
+        name: c,
+        parentCategory: 'عام',
+        isActive: true,
+        createdAt: new Date().toISOString()
+      }));
+    }
+  }
+
+  if (Array.isArray(vendors)) {
+    serverStore.settingsVendors = vendors;
+  }
+
+  if (Array.isArray(employees)) {
+    serverStore.settingsEmployees = employees;
+  }
+
   saveStore(serverStore);
-  res.json({ success: true, branches: serverStore.branches, categories: serverStore.categories });
+
+  auditService.log({
+    action: 'UPDATE',
+    entityType: 'SETTINGS',
+    entityId: 'SYSTEM_SETTINGS',
+    actor: req.body.actor || 'مدير النظام',
+    description: 'تحديث جداول الإعدادات المركزية (الفروع، التصنيفات، الموردين، الموظفين)'
+  });
+
+  res.json({
+    success: true,
+    message: 'تم حفظ وتحديث الإعدادات بنجاح',
+    branches: serverStore.branches,
+    categories: serverStore.categories,
+    settings: {
+      branches: serverStore.settingsBranches,
+      categories: serverStore.settingsCategories,
+      vendors: serverStore.settingsVendors,
+      employees: serverStore.settingsEmployees
+    }
+  });
+});
+
+// Referential Integrity Checker: Pre-flight check before deleting an entity
+app.post('/api/settings/check-delete', (req, res) => {
+  const { type, name, id } = req.body;
+  if (!name && !id) {
+    return res.status(400).json({ success: false, error: 'الاسم أو المعرف مطلوب للتحقق' });
+  }
+
+  const targetName = String(name || '').trim().toLowerCase();
+  let matchedTransactions: any[] = [];
+
+  if (type === 'branch') {
+    matchedTransactions = serverStore.transactions.filter(t => 
+      String(t.branch || '').trim().toLowerCase() === targetName
+    );
+  } else if (type === 'category') {
+    matchedTransactions = serverStore.transactions.filter(t => 
+      String(t.category || '').trim().toLowerCase() === targetName ||
+      String(t.category || '').trim().toLowerCase().includes(targetName)
+    );
+  } else if (type === 'vendor') {
+    matchedTransactions = serverStore.transactions.filter(t => 
+      String(t.vendorName || '').trim().toLowerCase() === targetName ||
+      String(t.description || '').trim().toLowerCase().includes(targetName)
+    );
+  } else if (type === 'employee') {
+    matchedTransactions = serverStore.transactions.filter(t => 
+      String(t.employee || '').trim().toLowerCase() === targetName ||
+      String(t.sender || '').trim().toLowerCase() === targetName ||
+      String(t.receiver || '').trim().toLowerCase() === targetName
+    );
+  }
+
+  const linkedCount = matchedTransactions.length;
+  const canDelete = linkedCount === 0;
+
+  res.json({
+    success: true,
+    canDelete,
+    linkedCount,
+    type,
+    name,
+    sampleTransactions: matchedTransactions.slice(0, 5).map(t => ({
+      id: t.id,
+      date: t.date,
+      amount: t.amount,
+      type: t.type,
+      description: t.description
+    })),
+    reason: canDelete 
+      ? 'لا توجد أي معاملات مالية مسجلة مرتبطة بهذا البند، يمكن حذفه بأمان تام.'
+      : `لا يمكن حذف هذا البند لارتباطه بـ (${linkedCount}) حركة مالية مسجلة في شيت المعاملات. لحماية سلامة السجلات التاريخية، يُرجى تعطيله (تحويله إلى غير نشط) بدلاً من حذفه.`
+  });
+});
+
+// Delete or Soft-Delete Setting Item
+app.delete('/api/settings/:type/:id', (req, res) => {
+  const { type, id } = req.params;
+  const { forceSoftDelete } = req.body || {};
+
+  let listKey: 'settingsBranches' | 'settingsCategories' | 'settingsVendors' | 'settingsEmployees' | null = null;
+  let nameKey = 'name';
+
+  if (type === 'branch') listKey = 'settingsBranches';
+  else if (type === 'category') listKey = 'settingsCategories';
+  else if (type === 'vendor') listKey = 'settingsVendors';
+  else if (type === 'employee') listKey = 'settingsEmployees';
+
+  if (!listKey || !serverStore[listKey]) {
+    return res.status(400).json({ success: false, error: 'نوع الإعداد المطلوب غير معروف' });
+  }
+
+  const list: any[] = serverStore[listKey] || [];
+  const itemIndex = list.findIndex(item => item.id === id || item[`${type}Id`] === id || item.name === id);
+
+  if (itemIndex === -1) {
+    return res.status(404).json({ success: false, error: 'العنصر المطلوب غير موجود في الإعدادات' });
+  }
+
+  const targetItem = list[itemIndex];
+  const targetName = String(targetItem[nameKey] || '').trim().toLowerCase();
+
+  // Referential integrity check
+  let linkedCount = 0;
+  if (type === 'branch') {
+    linkedCount = serverStore.transactions.filter(t => String(t.branch || '').trim().toLowerCase() === targetName).length;
+  } else if (type === 'category') {
+    linkedCount = serverStore.transactions.filter(t => String(t.category || '').trim().toLowerCase() === targetName).length;
+  } else if (type === 'vendor') {
+    linkedCount = serverStore.transactions.filter(t => String(t.vendorName || '').trim().toLowerCase() === targetName).length;
+  } else if (type === 'employee') {
+    linkedCount = serverStore.transactions.filter(t => String(t.employee || '').trim().toLowerCase() === targetName).length;
+  }
+
+  if (linkedCount > 0 && !forceSoftDelete) {
+    return res.status(400).json({
+      success: false,
+      canDelete: false,
+      linkedCount,
+      error: `لا يمكن حذف (${targetItem.name}) لوجود ${linkedCount} معاملة مالية مرتبطة به. يرجى تعطيله بدلاً من حذفه.`
+    });
+  }
+
+  if (linkedCount > 0 || forceSoftDelete) {
+    // Soft Delete (Deactivate)
+    targetItem.isActive = false;
+    saveStore(serverStore);
+    return res.json({
+      success: true,
+      softDeleted: true,
+      message: `تم تحويل (${targetItem.name}) إلى غير نشط لحفظ السجلات التاريخية.`
+    });
+  }
+
+  // Hard Delete if 0 linked transactions
+  list.splice(itemIndex, 1);
+
+  if (type === 'branch') {
+    serverStore.branches = (serverStore.settingsBranches || []).map(b => b.name);
+  } else if (type === 'category') {
+    serverStore.categories = (serverStore.settingsCategories || []).map(c => c.name);
+  }
+
+  saveStore(serverStore);
+
+  auditService.log({
+    action: 'DELETE',
+    entityType: 'SETTINGS',
+    entityId: id,
+    actor: 'مدير النظام',
+    description: `حذف (${targetItem.name}) من إعدادات ${type} بأمان لعدم ارتباطه بأي معاملات`
+  });
+
+  res.json({
+    success: true,
+    hardDeleted: true,
+    message: `تم حذف (${targetItem.name}) نهائياً لعدم وجود أي ارتباطات محاسبية به.`
+  });
 });
 
 // 3. Transactions CRUD & Reporting
