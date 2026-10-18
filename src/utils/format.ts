@@ -189,7 +189,7 @@ export const formatKWD = (amount: number | string | undefined | null): string =>
   if (amount === undefined || amount === null) return '0.000';
   const value = typeof amount === 'string' ? parseFloat(amount) : amount;
   if (isNaN(value)) return '0.000';
-  return value.toFixed(3);
+  return value.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 };
 
 /**

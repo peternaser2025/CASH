@@ -1,8 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800;900&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Cairo", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "IBM Plex Sans Arabic", "Tajawal", "Cairo", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
@@ -16,7 +16,9 @@ body {
   background-color: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .data-table-row {
@@ -30,10 +32,12 @@ body {
 /* RTL Support for Arabic text */
 [dir="rtl"] {
   text-align: right;
+  letter-spacing: normal;
 }
 
 .arabic-text {
-  font-family: 'Cairo', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: 'IBM Plex Sans Arabic', 'Tajawal', 'Cairo', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: normal;
 }
 
 /* World-class Print Styles for Reports, Ledgers, Invoices & Financial Statements */
@@ -200,13 +204,22 @@ body {
     display: block !important;
   }
 
+  /* Universal font and crisp rendering for printing */
+  body, table, th, td, div, p, span, h1, h2, h3, h4, a, strong {
+    font-family: 'IBM Plex Sans Arabic', 'Tajawal', 'Cairo', sans-serif !important;
+    letter-spacing: normal !important;
+  }
+  .font-mono, td.font-mono, span.font-mono, th.font-mono, [class*="font-mono"] {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace !important;
+  }
+
   /* Table formatting for high precision multi-page accounting printing */
   table {
     width: 100% !important;
     border-collapse: collapse !important;
     margin-top: 6px !important;
     margin-bottom: 6px !important;
-    font-size: 8pt !important;
+    font-size: 8.5pt !important;
     page-break-inside: auto !important;
     break-inside: auto !important;
   }
@@ -226,14 +239,30 @@ body {
   }
 
   th, td {
-    border: 1px solid #64748b !important;
-    padding: 4px 6px !important;
+    border: 1px solid #94a3b8 !important;
+    padding: 5px 6px !important;
     text-align: right !important;
   }
 
   th {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
+    font-weight: 800 !important;
+    border: 1px solid #0f172a !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  tr:nth-child(even) td {
+    background-color: #f8fafc !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  tfoot tr td {
+    border-top: 2px solid #0f172a !important;
+    border-bottom: 3px double #0f172a !important;
     background-color: #f1f5f9 !important;
-    color: #0f172a !important;
     font-weight: 800 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;

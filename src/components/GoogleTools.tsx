@@ -33,8 +33,10 @@ import { workspaceService } from '../services/workspaceService';
 import { gasService } from '../services/gasService';
 import { EmployeeBalance } from '../types';
 import { parseReportRow } from '../utils/format';
+import { GOOGLE_APPS_SCRIPT_FULL_CODE } from '../utils/googleAppsScriptCode';
 
-const SAFE_GAS_CODE = `/**
+const SAFE_GAS_CODE = GOOGLE_APPS_SCRIPT_FULL_CODE;
+const OLD_UNUSED_CODE = `/**
  * ============================================================================
  * KWD FINANCE PRO - GOOGLE APPS SCRIPT (الكود المحدث والآمن 100%)
  * ============================================================================

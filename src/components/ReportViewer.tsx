@@ -1063,6 +1063,7 @@ export default function ReportViewer({
                     overflow: visible !important;
                     display: block !important;
                     position: static !important;
+                    letter-spacing: normal !important;
                   }
                   aside, header, .no-print {
                     display: none !important;
@@ -1075,15 +1076,17 @@ export default function ReportViewer({
                     margin: 8mm;
                     size: ${printOptions.paperSize === 'A4-landscape' ? 'A4 landscape' : printOptions.paperSize === 'A5' ? 'A5' : 'A4 portrait'};
                   }
-                  body {
-                    background: white !important;
-                    color: black !important;
-                    -webkit-print-color-adjust: exact;
-                    print-color-adjust: exact;
-                    font-family: system-ui, -apple-system, sans-serif !important;
+                  body, * {
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                  }
+                  body, table, th, td, div, p, span, h1, h2, h3, h4 {
+                    font-family: 'IBM Plex Sans Arabic', 'Tajawal', 'Cairo', sans-serif !important;
+                    letter-spacing: normal !important;
+                    color: #0f172a !important;
                   }
                   #printable-report {
-                    font-size: 9pt;
+                    font-size: 8.5pt;
                     width: 100% !important;
                     max-width: 100% !important;
                     margin: 0 auto !important;
@@ -1095,8 +1098,7 @@ export default function ReportViewer({
                   table {
                     border-collapse: collapse !important;
                     width: 100% !important;
-                    margin: 0 auto !important;
-                    border: 1px solid #64748b !important;
+                    margin: 4px 0 !important;
                   }
                   tr {
                     page-break-inside: avoid !important;
@@ -1104,14 +1106,24 @@ export default function ReportViewer({
                   }
                   th, td {
                     border: 1px solid #94a3b8 !important;
-                    padding: 4px 6px !important;
+                    padding: 5px 6px !important;
                     text-align: right !important;
-                    font-size: 9px !important;
+                    font-size: 8pt !important;
                   }
                   th {
                     font-weight: 800 !important;
+                    background-color: #0f172a !important;
+                    color: #ffffff !important;
+                    border: 1px solid #0f172a !important;
+                  }
+                  tr:nth-child(even) td {
+                    background-color: #f8fafc !important;
+                  }
+                  tfoot td {
                     background-color: #f1f5f9 !important;
-                    color: #0f172a !important;
+                    font-weight: 800 !important;
+                    border-top: 2px solid #0f172a !important;
+                    border-bottom: 3px double #0f172a !important;
                   }
                   .break-inside-avoid {
                     page-break-inside: avoid !important;
@@ -1119,12 +1131,14 @@ export default function ReportViewer({
                   }
                   .no-print { display: none !important; }
                   .print-only { display: block !important; }
-                  .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important; }
+                  .font-mono, td.font-mono, span.font-mono, [class*="font-mono"] {
+                    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace !important;
+                  }
                 }
               ` }} />
 
               {/* Print Header */}
-              <div className="hidden print:block print-only mb-6 p-4">
+              <div className="hidden print:block print-only mb-4 p-2 sm:p-4">
                 <PrintHeader
                   documentTitleAr="كشف حساب مالي تفصيلي ومطابقة عهدة"
                   documentTitleEn="FINANCIAL STATEMENT & RECONCILIATION SCHEDULE"
@@ -1145,10 +1159,42 @@ export default function ReportViewer({
                   extraMeta={[
                     { label: 'الموظف / العهدة', value: filters.employee || 'كافة الموظفين' },
                     { label: 'الفرع المستفيد', value: filters.branch || 'كافة الفروع' },
-                    { label: 'فترة الكشف', value: `${filters.startDate} إلى ${filters.endDate}` },
-                    { label: 'الرصيد الختامي', value: `${formatKWD(report.finalBalance)} د.ك` }
+                    { label: 'فترة الكشف', value: `${filters.startDate || 'البداية'} إلى ${filters.endDate || 'الآن'}` },
+                    { label: 'الرصيد الختامي', value: `${formatKWD(cashEndingBalance)} د.ك` }
                   ]}
                 />
+
+                {/* Official Executive Statement Summary Schedule (Print Only) */}
+                <div className="mt-3 mb-3 border border-slate-300 rounded-xl overflow-hidden break-inside-avoid">
+                  <div className="bg-slate-900 text-white px-3 py-1.5 flex justify-between items-center text-[8.5pt] font-black">
+                    <span className="flex items-center gap-1.5">
+                      <span>ملخص المركز المالي لحساب الفترة والعهدة المعتمدة</span>
+                    </span>
+                    <span className="font-mono text-emerald-400 text-[8pt]">العملة: دينار كويتي (KWD) • 1 د.ك = 1000 فلس</span>
+                  </div>
+                  <div className="grid grid-cols-5 divide-x divide-x-reverse divide-slate-300 text-center bg-slate-50 text-slate-900 p-2 text-[8pt]">
+                    <div className="p-1">
+                      <span className="text-[7.5pt] font-bold text-slate-500 block">الرصيد الافتتاحي:</span>
+                      <span className="font-black font-mono text-[9pt] text-slate-800">{formatKWD(initialOpeningBalance)} د.ك</span>
+                    </div>
+                    <div className="p-1">
+                      <span className="text-[7.5pt] font-bold text-emerald-800 block">إجمالي المقبوضات (مدين):</span>
+                      <span className="font-black font-mono text-[9pt] text-emerald-700">+{formatKWD(filteredIn)} د.ك</span>
+                    </div>
+                    <div className="p-1">
+                      <span className="text-[7.5pt] font-bold text-rose-800 block">إجمالي المدفوعات (دائن):</span>
+                      <span className="font-black font-mono text-[9pt] text-rose-700">-{formatKWD(filteredCashOut)} د.ك</span>
+                    </div>
+                    <div className="p-1">
+                      <span className="text-[7.5pt] font-bold text-amber-800 block">الآجل غير المسدد:</span>
+                      <span className="font-black font-mono text-[9pt] text-amber-700">{formatKWD(filteredUnpaidAccruals)} د.ك</span>
+                    </div>
+                    <div className="p-1 bg-slate-900 text-white rounded-lg">
+                      <span className="text-[7.5pt] font-bold text-emerald-400 block">رصيد العهدة الختامي:</span>
+                      <span className="font-black font-mono text-[9.5pt] text-white">{formatKWD(cashEndingBalance)} د.ك</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* On-screen Header */}

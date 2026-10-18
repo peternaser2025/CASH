@@ -110,7 +110,7 @@ export default function ReportTable({
   // Density & presentation mode (Comfortable, Compact, Smart Cards)
   const [densityMode, setDensityMode] = useState<TableDensityMode>('comfortable');
 
-  let leadingColSpan = 1; // For the right-hand Edit/Actions column
+  let leadingColSpan = 2; // For the right-hand Edit/Actions column + Serial number 'م' column
   if (visibleColumns.date) leadingColSpan++;
   if (visibleColumns.branch) leadingColSpan++;
   if (visibleColumns.opType) leadingColSpan++;
@@ -252,66 +252,73 @@ export default function ReportTable({
       {/* ========================================================================= */}
       {/* MODE 1 & 2: TABLE VIEW (COMFORTABLE & COMPACT)                           */}
       {/* ========================================================================= */}
-      {densityMode !== 'cards' && (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-xs bg-white">
-          <table className="w-full text-right border-collapse">
-            <thead>
-              <tr className="bg-slate-900 text-slate-100 text-xs">
-                {/* 1. Primary Action & Edit Column on the RIGHT in RTL - NEVER SCROLLED OFF */}
-                <th className="px-3.5 py-3.5 font-black text-center sticky right-0 z-20 bg-slate-900 border-l border-slate-800 min-w-[130px] shadow-[4px_0_12px_rgba(0,0,0,0.25)] no-print">
-                  <span className="flex items-center justify-center gap-1.5 text-blue-300">
-                    <Edit2 size={13} className="text-blue-400 stroke-[2.5]" />
-                    <span>تعديل وإجراءات</span>
-                  </span>
-                </th>
+      <div className={`${densityMode === 'cards' ? 'hidden print:block' : 'block'} overflow-x-auto rounded-xl border border-slate-200 shadow-xs bg-white print:border-none print:shadow-none`}>
+        <table className="w-full text-right border-collapse">
+          <thead>
+            <tr className="bg-slate-900 text-slate-100 text-xs">
+              {/* 1. Primary Action & Edit Column on the RIGHT in RTL - NEVER SCROLLED OFF */}
+              <th className="px-3.5 py-3.5 font-black text-center sticky right-0 z-20 bg-slate-900 border-l border-slate-800 min-w-[130px] shadow-[4px_0_12px_rgba(0,0,0,0.25)] no-print">
+                <span className="flex items-center justify-center gap-1.5 text-blue-300">
+                  <Edit2 size={13} className="text-blue-400 stroke-[2.5]" />
+                  <span>تعديل وإجراءات</span>
+                </span>
+              </th>
 
-                {visibleColumns.date && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 whitespace-nowrap">التاريخ</th>}
-                {visibleColumns.branch && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800">الفرع</th>}
-                {visibleColumns.opType && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 text-center whitespace-nowrap">نوع العملية</th>}
-                {visibleColumns.category && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800">التصنيف / الموظف</th>}
-                {visibleColumns.description && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 min-w-[220px]">البيان والتفاصيل</th>}
-                {visibleColumns.paymentStatus && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 text-center whitespace-nowrap">حالة الدفع</th>}
-                {visibleColumns.income && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 text-emerald-400 text-left whitespace-nowrap">وارد (+)</th>}
-                {visibleColumns.expense && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 text-rose-400 text-left whitespace-nowrap">صادر (-)</th>}
-                {visibleColumns.balance && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 text-left whitespace-nowrap">الرصيد التراكمي</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200/90 bg-white">
-              {/* Opening Balance Row - Only shown when there is an actual prior opening balance */}
-              {Boolean(openingBalance && openingBalance !== 0) && (
-                <tr className="bg-slate-50/80 font-bold">
-                  <td className="px-3.5 py-2.5 text-center text-slate-400 font-mono text-xs sticky right-0 z-10 bg-slate-100 border-l border-slate-200 no-print">
-                    ---
+              {/* Serial Index Column */}
+              <th className="px-2.5 py-3.5 font-bold border-b border-slate-800 text-center w-12 whitespace-nowrap text-slate-300">
+                م
+              </th>
+
+              {visibleColumns.date && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 whitespace-nowrap">التاريخ</th>}
+              {visibleColumns.branch && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800">الفرع</th>}
+              {visibleColumns.opType && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 text-center whitespace-nowrap">نوع العملية</th>}
+              {visibleColumns.category && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800">التصنيف / الموظف</th>}
+              {visibleColumns.description && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 min-w-[220px]">البيان والتفاصيل المحاسبية</th>}
+              {visibleColumns.paymentStatus && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 text-center whitespace-nowrap">حالة الدفع</th>}
+              {visibleColumns.income && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 text-emerald-400 text-left whitespace-nowrap">وارد / مدين (+)</th>}
+              {visibleColumns.expense && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 text-rose-400 text-left whitespace-nowrap">صادر / دائن (-)</th>}
+              {visibleColumns.balance && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 text-left whitespace-nowrap">الرصيد التراكمي (د.ك)</th>}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200/90 bg-white">
+            {/* Opening Balance Row - Only shown when there is an actual prior opening balance */}
+            {Boolean(openingBalance && openingBalance !== 0) && (
+              <tr className="bg-slate-50/80 font-bold">
+                <td className="px-3.5 py-2.5 text-center text-slate-400 font-mono text-xs sticky right-0 z-10 bg-slate-100 border-l border-slate-200 no-print">
+                  ---
+                </td>
+                <td className="px-2.5 py-2.5 text-center text-slate-400 font-mono text-xs">
+                  ---
+                </td>
+                {visibleColumns.date && <td className="px-3.5 py-2.5 text-center text-slate-400 font-mono text-xs">---</td>}
+                {visibleColumns.branch && <td className="px-3.5 py-2.5 text-center text-slate-400 text-xs">---</td>}
+                {visibleColumns.opType && (
+                  <td className="px-3.5 py-2.5 text-center font-bold text-xs text-slate-600">
+                    <span className="px-2 py-0.5 bg-slate-200 text-slate-800 rounded text-[11px] font-black">
+                      رصيد سابق
+                    </span>
                   </td>
-                  {visibleColumns.date && <td className="px-3.5 py-2.5 text-center text-slate-400 font-mono text-xs">---</td>}
-                  {visibleColumns.branch && <td className="px-3.5 py-2.5 text-center text-slate-400 text-xs">---</td>}
-                  {visibleColumns.opType && (
-                    <td className="px-3.5 py-2.5 text-center font-bold text-xs text-slate-600">
-                      <span className="px-2 py-0.5 bg-slate-200 text-slate-800 rounded text-[11px] font-black">
-                        رصيد سابق
-                      </span>
-                    </td>
-                  )}
-                  {visibleColumns.category && (
-                    <td className="px-3.5 py-2.5 font-bold text-xs text-slate-800">
-                      رصيد افتتاحي
-                    </td>
-                  )}
-                  {visibleColumns.description && (
-                    <td className="px-3.5 py-2.5 text-slate-500 text-xs italic">
-                      الرصيد المرحل من السجلات السابقة لما قبل بداية الفترة المحددة
-                    </td>
-                  )}
-                  {visibleColumns.paymentStatus && <td className="px-3.5 py-2.5 text-center text-slate-400 text-xs">---</td>}
-                  {visibleColumns.income && <td className="px-3.5 py-2.5 text-left font-mono text-xs text-slate-300">0.000</td>}
-                  {visibleColumns.expense && <td className="px-3.5 py-2.5 text-left font-mono text-xs text-slate-300">0.000</td>}
-                  {visibleColumns.balance && (
-                    <td className="px-3.5 py-2.5 text-left font-mono text-sm font-black text-slate-900 bg-slate-100/60">
-                      {formatKWD(openingBalance)}
-                    </td>
-                  )}
-                </tr>
-              )}
+                )}
+                {visibleColumns.category && (
+                  <td className="px-3.5 py-2.5 font-bold text-xs text-slate-800">
+                    رصيد افتتاحي
+                  </td>
+                )}
+                {visibleColumns.description && (
+                  <td className="px-3.5 py-2.5 text-slate-500 text-xs italic">
+                    الرصيد المرحل من السجلات السابقة لما قبل بداية الفترة المحددة
+                  </td>
+                )}
+                {visibleColumns.paymentStatus && <td className="px-3.5 py-2.5 text-center text-slate-400 text-xs">---</td>}
+                {visibleColumns.income && <td className="px-3.5 py-2.5 text-left font-mono text-xs text-slate-300">0.000</td>}
+                {visibleColumns.expense && <td className="px-3.5 py-2.5 text-left font-mono text-xs text-slate-300">0.000</td>}
+                {visibleColumns.balance && (
+                  <td className="px-3.5 py-2.5 text-left font-mono text-sm font-black text-slate-900 bg-slate-100/60">
+                    {formatKWD(openingBalance)}
+                  </td>
+                )}
+              </tr>
+            )}
 
               {/* Transactions Rows */}
               {computedRows.map((row, i) => {
@@ -385,6 +392,11 @@ export default function ReportTable({
                           <Trash2 size={14} />
                         </button>
                       </div>
+                    </td>
+
+                    {/* Serial Index 'م' */}
+                    <td className={`px-2.5 ${pyClass} text-center font-mono text-xs font-bold text-slate-500 bg-slate-50/50 whitespace-nowrap`}>
+                      {i + 1}
                     </td>
 
                     {/* Date */}
@@ -528,8 +540,11 @@ export default function ReportTable({
                 <td className="px-3.5 py-3.5 text-center text-slate-400 sticky right-0 bg-slate-900 border-l border-slate-800 no-print">
                   المجاميع
                 </td>
-                {leadingColSpan > 1 && (
-                  <td colSpan={leadingColSpan - 1} className="px-3.5 py-3.5 text-right">
+                <td className="px-2.5 py-3.5 text-center text-slate-400 font-mono text-xs">
+                  ---
+                </td>
+                {leadingColSpan > 2 && (
+                  <td colSpan={leadingColSpan - 2} className="px-3.5 py-3.5 text-right">
                     <div className="flex flex-col gap-1">
                       <span className="font-black text-slate-200">
                         {searchKeyword ? `إجمالي الحركات المطابقة للبحث (${computedRows.length} حركة):` : 'معادلة المطابقة المحاسبية لكشف الحساب:'}
@@ -567,13 +582,12 @@ export default function ReportTable({
             </tfoot>
           </table>
         </div>
-      )}
 
       {/* ========================================================================= */}
       {/* MODE 3: SMART CARDS VIEW (NO HORIZONTAL SCROLL, ZERO CROWDEDNESS)        */}
       {/* ========================================================================= */}
       {densityMode === 'cards' && (
-        <div className="space-y-4">
+        <div className="space-y-4 no-print">
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {computedRows.map((row, i) => {
               const rowIndexInSheet = (typeof row.raw === 'object' && row.raw?.rowIndex) ? row.raw.rowIndex : (i + 2);
