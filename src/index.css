@@ -61,11 +61,6 @@ body {
     font-size: 10px !important;
   }
 
-  body.thermal-mode @page {
-    size: 80mm auto;
-    margin: 2mm 3mm 4mm 3mm;
-  }
-
   /* Universal print visibility fixes */
   html, body, #root, main, [dir="rtl"] {
     background: white !important;
