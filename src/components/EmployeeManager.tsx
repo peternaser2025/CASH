@@ -1068,7 +1068,7 @@ function generateReport(ss, filters) {
                 <thead>
                   <tr className="text-gray-400 text-xs font-black uppercase tracking-widest border-b border-gray-50">
                     <th className="px-8 py-6">الموظف</th>
-                    <th className="px-8 py-6">حالة الحساب</th>
+                    <th className="px-8 py-6 no-print">حالة الحساب</th>
                     <th className="px-8 py-6">الرصيد التراكمي</th>
                     <th className="px-8 py-6 text-left no-print">إدارة</th>
                   </tr>
@@ -1090,7 +1090,7 @@ function generateReport(ss, filters) {
                           </div>
                         </div>
                       </td>
-                      <td className="px-8 py-6">
+                      <td className="px-8 py-6 no-print">
                         <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-wider border border-emerald-100">
                           <CheckCircle2 size={12} />
                           حساب نشط

@@ -30,6 +30,7 @@ export interface ComputedReportRow {
   type: string;
   category: string;
   description: string;
+  notes?: string;
   income: number;
   expense: number;
   computedBalance: number;
@@ -110,13 +111,21 @@ export default function ReportTable({
   // Density & presentation mode (Comfortable, Compact, Smart Cards)
   const [densityMode, setDensityMode] = useState<TableDensityMode>('comfortable');
 
-  let leadingColSpan = 2; // For the right-hand Edit/Actions column + Serial number 'م' column
-  if (visibleColumns.date) leadingColSpan++;
-  if (visibleColumns.branch) leadingColSpan++;
-  if (visibleColumns.opType) leadingColSpan++;
-  if (visibleColumns.category) leadingColSpan++;
-  if (visibleColumns.description) leadingColSpan++;
-  if (visibleColumns.paymentStatus) leadingColSpan++;
+  let leadingColSpanScreen = 2; // For the right-hand Edit/Actions column + Serial number 'م' column
+  if (visibleColumns.date) leadingColSpanScreen++;
+  if (visibleColumns.branch) leadingColSpanScreen++;
+  if (visibleColumns.opType) leadingColSpanScreen++;
+  if (visibleColumns.category) leadingColSpanScreen++;
+  if (visibleColumns.description) leadingColSpanScreen++;
+
+  let leadingColSpanPrint = 1; // In print: Serial 'م' column (Actions is no-print)
+  if (visibleColumns.date) leadingColSpanPrint++;
+  if (visibleColumns.branch) leadingColSpanPrint++;
+  if (visibleColumns.opType) leadingColSpanPrint++;
+  if (visibleColumns.category) leadingColSpanPrint++;
+  if (visibleColumns.description) leadingColSpanPrint++;
+
+  let leadingColSpan = leadingColSpanScreen;
 
   let trailingColSpan = 0;
   if (visibleColumns.balance) trailingColSpan++;
@@ -273,8 +282,11 @@ export default function ReportTable({
               {visibleColumns.branch && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800">الفرع</th>}
               {visibleColumns.opType && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 text-center whitespace-nowrap">نوع العملية</th>}
               {visibleColumns.category && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800">التصنيف / الموظف</th>}
-              {visibleColumns.description && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 min-w-[220px]">البيان والتفاصيل المحاسبية</th>}
-              {visibleColumns.paymentStatus && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 text-center whitespace-nowrap">حالة الدفع</th>}
+              {visibleColumns.description && (
+                <th className="col-description px-4 py-3.5 font-black border-b border-slate-800 text-right min-w-[280px] sm:min-w-[360px] text-white">
+                  البيان والتفاصيل المحاسبية
+                </th>
+              )}
               {visibleColumns.income && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 text-emerald-400 text-left whitespace-nowrap">وارد / مدين (+)</th>}
               {visibleColumns.expense && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 text-rose-400 text-left whitespace-nowrap">صادر / دائن (-)</th>}
               {visibleColumns.balance && <th className="px-3.5 py-3.5 font-bold border-b border-slate-800 text-left whitespace-nowrap">الرصيد التراكمي (د.ك)</th>}
@@ -305,11 +317,10 @@ export default function ReportTable({
                   </td>
                 )}
                 {visibleColumns.description && (
-                  <td className="px-3.5 py-2.5 text-slate-500 text-xs italic">
+                  <td className="col-description px-4 py-2.5 text-right font-bold text-slate-700 text-xs sm:text-[13px] leading-relaxed">
                     الرصيد المرحل من السجلات السابقة لما قبل بداية الفترة المحددة
                   </td>
                 )}
-                {visibleColumns.paymentStatus && <td className="px-3.5 py-2.5 text-center text-slate-400 text-xs">---</td>}
                 {visibleColumns.income && <td className="px-3.5 py-2.5 text-left font-mono text-xs text-slate-300">0.000</td>}
                 {visibleColumns.expense && <td className="px-3.5 py-2.5 text-left font-mono text-xs text-slate-300">0.000</td>}
                 {visibleColumns.balance && (
@@ -463,25 +474,19 @@ export default function ReportTable({
                       </td>
                     )}
 
-                    {/* Description */}
+                    {/* Description - Clarified, prominent, crystal clear typography */}
                     {visibleColumns.description && (
-                      <td className={`px-3.5 ${pyClass} text-xs text-slate-800 font-medium leading-relaxed max-w-[340px]`}>
-                        <HighlightMatch text={description} query={searchKeyword} />
-                      </td>
-                    )}
-
-                    {/* Payment Status */}
-                    {visibleColumns.paymentStatus && (
-                      <td className={`px-3.5 ${pyClass} text-center whitespace-nowrap`}>
-                        {isTransactionAccrued ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-900 rounded-md border border-amber-300 text-[11px] font-bold">
-                            <span>آجل / غير مدفوع</span>
+                      <td className={`col-description px-4 ${pyClass} text-right align-middle`}>
+                        <div className="flex flex-col gap-1 text-right py-0.5">
+                          <span className="text-[13px] sm:text-sm font-bold text-slate-950 leading-relaxed break-words block">
+                            <HighlightMatch text={description || '---'} query={searchKeyword} />
                           </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-900 rounded-md border border-emerald-300 text-[11px] font-bold">
-                            <span>نقدي / مسدد</span>
-                          </span>
-                        )}
+                          {row.notes && row.notes.trim() !== '' && row.notes.trim() !== description?.trim() && (
+                            <span className="text-[11px] font-semibold text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/90 inline-block w-fit">
+                              ملاحظة: <HighlightMatch text={row.notes} query={searchKeyword} />
+                            </span>
+                          )}
+                        </div>
                       </td>
                     )}
 

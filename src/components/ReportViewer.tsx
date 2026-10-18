@@ -53,17 +53,16 @@ import ColumnCustomizationModal from './report/ColumnCustomizationModal';
 import EditTransactionModal from './report/EditTransactionModal';
 import ReportPrintFooter from './report/ReportPrintFooter';
 
-export type ReportColumnId = 'date' | 'branch' | 'opType' | 'category' | 'description' | 'paymentStatus' | 'income' | 'expense' | 'balance';
+export type ReportColumnId = 'date' | 'branch' | 'opType' | 'category' | 'description' | 'income' | 'expense' | 'balance';
 
 export const ALL_COLUMNS: { id: ReportColumnId; label: string; desc: string }[] = [
   { id: 'date', label: 'التاريخ', desc: 'تاريخ تنفيذ الحركة المالية' },
   { id: 'branch', label: 'الفرع', desc: 'الفرع التابع للعملية' },
   { id: 'opType', label: 'نوع العملية', desc: 'مبيعات / مشتريات / مصاريف / تسوية' },
   { id: 'category', label: 'التصنيف / الموظف', desc: 'تصنيف البند والموظف المسؤول' },
-  { id: 'description', label: 'البيان والتفاصيل', desc: 'ملاحظات وتفاصيل المعاملة' },
-  { id: 'paymentStatus', label: 'حالة الدفع', desc: 'نقدي مسدد أو آجل مستحق' },
-  { id: 'income', label: 'وارد (+)', desc: 'المبالغ المقبوضة والتوريدات' },
-  { id: 'expense', label: 'صادر (-)', desc: 'المصاريف والمشتريات المدفوعة' },
+  { id: 'description', label: 'البيان والتفاصيل (عريض وواضح)', desc: 'البيان والملاحظات المحاسبية بالكامل' },
+  { id: 'income', label: 'وارد / مدين (+)', desc: 'المبالغ المقبوضة والتوريدات' },
+  { id: 'expense', label: 'صادر / دائن (-)', desc: 'المصاريف والمشتريات المدفوعة' },
   { id: 'balance', label: 'الرصيد التراكمي', desc: 'رصيد العهدة/الصندوق بعد الحركة' },
 ];
 
@@ -149,7 +148,6 @@ export default function ReportViewer({
     opType: true,
     category: true,
     description: true,
-    paymentStatus: true,
     income: true,
     expense: true,
     balance: true,
@@ -213,7 +211,6 @@ export default function ReportViewer({
       opType: true,
       category: true,
       description: true,
-      paymentStatus: true,
       income: true,
       expense: true,
       balance: true,
@@ -230,7 +227,6 @@ export default function ReportViewer({
         opType: true,
         category: true,
         description: true,
-        paymentStatus: false,
         income: true,
         expense: true,
         balance: true,
@@ -242,7 +238,6 @@ export default function ReportViewer({
         opType: false,
         category: true,
         description: false,
-        paymentStatus: false,
         income: true,
         expense: true,
         balance: true,
@@ -254,7 +249,6 @@ export default function ReportViewer({
         opType: true,
         category: true,
         description: false,
-        paymentStatus: true,
         income: true,
         expense: true,
         balance: true,
@@ -665,7 +659,6 @@ export default function ReportViewer({
     if (visibleColumns.opType) headers.push('نوع الحركة');
     if (visibleColumns.category) headers.push('التصنيف / البند');
     if (visibleColumns.description) headers.push('البيان والتفاصيل الشاملة');
-    if (visibleColumns.paymentStatus) headers.push('حالة الدفع');
     if (visibleColumns.income) headers.push('وارد (+)');
     if (visibleColumns.expense) headers.push('صادر (-)');
     if (visibleColumns.balance) headers.push('الرصيد التراكمي (د.ك)');
@@ -677,7 +670,6 @@ export default function ReportViewer({
     if (visibleColumns.opType) openingRow.push('رصيد افتتاحي');
     if (visibleColumns.category) openingRow.push('رصيد سابق');
     if (visibleColumns.description) openingRow.push('الرصيد المرحل بداية الفترة المالية');
-    if (visibleColumns.paymentStatus) openingRow.push('مباشر');
     if (visibleColumns.income) openingRow.push(0);
     if (visibleColumns.expense) openingRow.push(0);
     if (visibleColumns.balance) openingRow.push(initialOpeningBalance);
@@ -700,7 +692,6 @@ export default function ReportViewer({
       if (visibleColumns.opType) r.push(row.opType);
       if (visibleColumns.category) r.push(row.category);
       if (visibleColumns.description) r.push(row.description);
-      if (visibleColumns.paymentStatus) r.push(row.isAccrued ? 'آجل / غير مدفوع' : 'نقدي / مسدد');
       if (visibleColumns.income) r.push(row.income > 0 ? row.income : 0);
       if (visibleColumns.expense) r.push(row.expense > 0 ? row.expense : 0);
       if (visibleColumns.balance) r.push(row.computedBalance);
@@ -1118,6 +1109,14 @@ export default function ReportViewer({
                   }
                   tr:nth-child(even) td {
                     background-color: #f8fafc !important;
+                  }
+                  .col-description, td.col-description, th.col-description {
+                    font-size: 9.5pt !important;
+                    font-weight: 700 !important;
+                    color: #000000 !important;
+                    line-height: 1.45 !important;
+                    text-align: right !important;
+                    min-width: 180px !important;
                   }
                   tfoot td {
                     background-color: #f1f5f9 !important;
