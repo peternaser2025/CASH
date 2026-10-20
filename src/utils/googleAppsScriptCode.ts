@@ -405,6 +405,258 @@ function doPost(e) {
       return respondJSON({ success: false, error: "لم يتم العثور على الحركة المالية للتعديل في الشيت" });
     }
 
+    // 8. حفظ تقرير وإغلاق الأرباح والخسائر (Profit & Loss Report)
+    else if (action === 'saveProfitLoss') {
+      var itemPnl = requestData.data || {};
+      var pnlSheet = ss.getSheetByName('ProfitLoss_Reports') || ss.getSheetByName('الارباح_والخسائر') || ss.getSheetByName('الأرباح_والخسائر');
+      if (!pnlSheet) {
+        setupAllEnterpriseSheets();
+        pnlSheet = ss.getSheetByName('ProfitLoss_Reports');
+      }
+      var pnlYear = itemPnl.year || new Date().getFullYear();
+      var pnlMonth = itemPnl.month || (new Date().getMonth() + 1);
+      var pnlBranch = itemPnl.branch || 'ALL';
+      var nowStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'GMT+3', 'yyyy-MM-dd HH:mm:ss');
+      var pnlId = itemPnl.id || ('PNL-' + pnlYear + '-' + pnlMonth + '-' + pnlBranch);
+
+      var pnlRow = [
+        pnlId,
+        itemPnl.date || new Date().toISOString().split('T')[0],
+        pnlYear,
+        pnlMonth,
+        pnlBranch,
+        parseFloat(itemPnl.income) || 0,
+        parseFloat(itemPnl.openingStock) || 0,
+        parseFloat(itemPnl.purchases) || 0,
+        parseFloat(itemPnl.closingStock) || 0,
+        parseFloat(itemPnl.cogs) || 0,
+        parseFloat(itemPnl.grossProfit) || 0,
+        parseFloat(itemPnl.opex) || 0,
+        parseFloat(itemPnl.accrued) || 0,
+        parseFloat(itemPnl.netProfit) || 0,
+        itemPnl.notes || '',
+        nowStr
+      ];
+
+      var lastPnlRow = pnlSheet.getLastRow();
+      var pnlUpdated = false;
+      if (lastPnlRow > 1) {
+        var existingPnlVals = pnlSheet.getRange(2, 1, lastPnlRow - 1, 5).getValues();
+        for (var p = 0; p < existingPnlVals.length; p++) {
+          if (String(existingPnlVals[p][0]) === String(pnlId) || 
+              (String(existingPnlVals[p][2]) === String(pnlYear) && String(existingPnlVals[p][3]) === String(pnlMonth) && String(existingPnlVals[p][4]) === String(pnlBranch))) {
+            pnlSheet.getRange(p + 2, 1, 1, pnlRow.length).setValues([pnlRow]);
+            pnlUpdated = true;
+            break;
+          }
+        }
+      }
+      if (!pnlUpdated) {
+        pnlSheet.appendRow(pnlRow);
+      }
+      logAction(logSheet, 'SAVE_PNL', 'حفظ أو تحديث تقرير الأرباح والخسائر لشهر ' + pnlMonth + '-' + pnlYear + ' فرع ' + pnlBranch, 'نجاح');
+      return respondJSON({ success: true, id: pnlId, updated: pnlUpdated, message: 'تم حفظ تقرير الأرباح والخسائر بنجاح في Google Sheets' });
+    }
+
+    // 9. جلب كافة تقارير الأرباح والخسائر المسجلة
+    else if (action === 'getProfitLoss') {
+      var pnlSheet = ss.getSheetByName('ProfitLoss_Reports') || ss.getSheetByName('الارباح_والخسائر') || ss.getSheetByName('الأرباح_والخسائر');
+      if (!pnlSheet) {
+        return respondJSON({ success: true, records: [] });
+      }
+      var lastPnlRow = pnlSheet.getLastRow();
+      var pnlRecords = [];
+      if (lastPnlRow > 1) {
+        var pnlData = pnlSheet.getRange(2, 1, lastPnlRow - 1, Math.max(16, pnlSheet.getLastColumn())).getValues();
+        for (var pr = 0; pr < pnlData.length; pr++) {
+          var rowP = pnlData[pr];
+          pnlRecords.push({
+            id: rowP[0],
+            date: rowP[1],
+            year: rowP[2],
+            month: rowP[3],
+            branch: rowP[4],
+            income: parseFloat(rowP[5]) || 0,
+            openingStock: parseFloat(rowP[6]) || 0,
+            purchases: parseFloat(rowP[7]) || 0,
+            closingStock: parseFloat(rowP[8]) || 0,
+            cogs: parseFloat(rowP[9]) || 0,
+            grossProfit: parseFloat(rowP[10]) || 0,
+            opex: parseFloat(rowP[11]) || 0,
+            accrued: parseFloat(rowP[12]) || 0,
+            netProfit: parseFloat(rowP[13]) || 0,
+            notes: rowP[14] || '',
+            savedAt: rowP[15] || ''
+          });
+        }
+      }
+      return respondJSON({ success: true, records: pnlRecords });
+    }
+
+    // 10. حفظ وتحديث طلبية ومواعيد التوريد والتسليم (Orders Schedule)
+    else if (action === 'saveOrder') {
+      var ord = requestData.data || {};
+      var ordersSheet = ss.getSheetByName('Orders') || ss.getSheetByName('الطلبيات');
+      if (!ordersSheet) {
+        setupAllEnterpriseSheets();
+        ordersSheet = ss.getSheetByName('Orders');
+      }
+      var ordId = ord.orderNumber || ord.id || ('ORD-' + Date.now());
+      var nowStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'GMT+3', 'yyyy-MM-dd HH:mm:ss');
+      var ordRow = [
+        ordId,
+        ord.orderDate || new Date().toISOString().split('T')[0],
+        ord.title || 'طلب توريد وبضاعة',
+        ord.type || 'supply',
+        ord.supplierOrCustomer || ord.clientName || 'عميل نقدي',
+        ord.branch || 'الفرع الرئيسي',
+        ord.deliveryDueDate || '',
+        parseFloat(ord.amount) || 0,
+        parseFloat(ord.paidAmount) || 0,
+        (parseFloat(ord.amount) || 0) - (parseFloat(ord.paidAmount) || 0),
+        ord.status || 'pending',
+        ord.priority || 'medium',
+        ord.paymentStatus || 'unpaid',
+        ord.assignedEmployee || '',
+        ord.contactPhone || '',
+        ord.notes || '',
+        typeof ord.items === 'object' ? JSON.stringify(ord.items) : (ord.items || ''),
+        nowStr
+      ];
+
+      var lastOrdRow = ordersSheet.getLastRow();
+      var ordUpdated = false;
+      if (lastOrdRow > 1) {
+        var ordVals = ordersSheet.getRange(2, 1, lastOrdRow - 1, 1).getValues();
+        for (var o = 0; o < ordVals.length; o++) {
+          if (String(ordVals[o][0]).trim() === String(ordId).trim()) {
+            ordersSheet.getRange(o + 2, 1, 1, ordRow.length).setValues([ordRow]);
+            ordUpdated = true;
+            break;
+          }
+        }
+      }
+      if (!ordUpdated) {
+        ordersSheet.appendRow(ordRow);
+      }
+      logAction(logSheet, 'SAVE_ORDER', 'حفظ أو تحديث الطلبية رقم ' + ordId, 'نجاح');
+      return respondJSON({ success: true, id: ordId, updated: ordUpdated, message: 'تم حفظ وتحديث الطلبية بنجاح في Google Sheets' });
+    }
+
+    // 11. جلب كافة الطلبيات المسجلة
+    else if (action === 'getOrders') {
+      var ordersSheet = ss.getSheetByName('Orders') || ss.getSheetByName('الطلبيات');
+      if (!ordersSheet) {
+        return respondJSON({ success: true, orders: [] });
+      }
+      var lastOrdRow = ordersSheet.getLastRow();
+      var ordersList = [];
+      if (lastOrdRow > 1) {
+        var ordData = ordersSheet.getRange(2, 1, lastOrdRow - 1, Math.max(18, ordersSheet.getLastColumn())).getValues();
+        for (var oi = 0; oi < ordData.length; oi++) {
+          var ro = ordData[oi];
+          var itemsParsed = [];
+          try {
+            if (ro[16]) itemsParsed = JSON.parse(ro[16]);
+          } catch(e) {}
+          ordersList.push({
+            id: ro[0],
+            orderNumber: ro[0],
+            orderDate: ro[1],
+            title: ro[2],
+            type: ro[3],
+            supplierOrCustomer: ro[4],
+            branch: ro[5],
+            deliveryDueDate: ro[6],
+            amount: parseFloat(ro[7]) || 0,
+            paidAmount: parseFloat(ro[8]) || 0,
+            remainingAmount: parseFloat(ro[9]) || 0,
+            status: ro[10],
+            priority: ro[11],
+            paymentStatus: ro[12],
+            assignedEmployee: ro[13],
+            contactPhone: ro[14],
+            notes: ro[15],
+            items: itemsParsed,
+            updatedAt: ro[17]
+          });
+        }
+      }
+      return respondJSON({ success: true, orders: ordersList });
+    }
+
+    // 12. حفظ سقوف الموازنات التقديرية (Budgets)
+    else if (action === 'saveBudget') {
+      var bItem = requestData.data || {};
+      var bSheet = ss.getSheetByName('Budgets') || ss.getSheetByName('الموازنات');
+      if (!bSheet) {
+        setupAllEnterpriseSheets();
+        bSheet = ss.getSheetByName('Budgets');
+      }
+      var bYear = bItem.year || new Date().getFullYear();
+      var bMonth = bItem.month || (new Date().getMonth() + 1);
+      var bBranch = bItem.branch || 'ALL';
+      var bCategory = bItem.category || 'عام';
+      var bLimit = parseFloat(bItem.limit) || 0;
+      var bActual = parseFloat(bItem.actual) || 0;
+      var bVariancePct = bLimit > 0 ? ((bActual / bLimit) * 100).toFixed(1) : 0;
+      var bStatus = bActual > bLimit ? 'تجاوز وانحراف' : 'ضمن السقف التقديري';
+      var nowStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'GMT+3', 'yyyy-MM-dd HH:mm:ss');
+
+      var bRow = [bYear, bMonth, bBranch, bCategory, bLimit, bActual, bVariancePct + '%', bStatus, nowStr];
+      var lastBRow = bSheet.getLastRow();
+      var bUpdated = false;
+      if (lastBRow > 1) {
+        var existingB = bSheet.getRange(2, 1, lastBRow - 1, 4).getValues();
+        for (var bi = 0; bi < existingB.length; bi++) {
+          if (String(existingB[bi][0]) === String(bYear) && String(existingB[bi][1]) === String(bMonth) &&
+              String(existingB[bi][2]) === String(bBranch) && String(existingB[bi][3]) === String(bCategory)) {
+            bSheet.getRange(bi + 2, 1, 1, bRow.length).setValues([bRow]);
+            bUpdated = true;
+            break;
+          }
+        }
+      }
+      if (!bUpdated) {
+        bSheet.appendRow(bRow);
+      }
+      logAction(logSheet, 'SAVE_BUDGET', 'حفظ سقف الموازنة لبند ' + bCategory + ' فرع ' + bBranch, 'نجاح');
+      return respondJSON({ success: true, updated: bUpdated, message: 'تم حفظ سقف الموازنة التقديرية بنجاح' });
+    }
+
+    // 13. جلب الموازنات التقديرية
+    else if (action === 'getBudgets') {
+      var bSheet = ss.getSheetByName('Budgets') || ss.getSheetByName('الموازنات');
+      if (!bSheet) {
+        return respondJSON({ success: true, budgets: [] });
+      }
+      var lastBRow = bSheet.getLastRow();
+      var bList = [];
+      if (lastBRow > 1) {
+        var bData = bSheet.getRange(2, 1, lastBRow - 1, Math.max(9, bSheet.getLastColumn())).getValues();
+        for (var bj = 0; bj < bData.length; bj++) {
+          bList.push({
+            year: bData[bj][0],
+            month: bData[bj][1],
+            branch: bData[bj][2],
+            category: bData[bj][3],
+            limit: parseFloat(bData[bj][4]) || 0,
+            actual: parseFloat(bData[bj][5]) || 0,
+            variancePct: bData[bj][6],
+            status: bData[bj][7],
+            confirmedAt: bData[bj][8]
+          });
+        }
+      }
+      return respondJSON({ success: true, budgets: bList });
+    }
+
+    // 14. التهيئة الشاملة لكافة شيتات المنظومة (setupAllEnterpriseSheets)
+    else if (action === 'setupAllEnterpriseSheets') {
+      var resAll = setupAllEnterpriseSheets();
+      return respondJSON(resAll);
+    }
+
     return respondJSON({ success: false, error: "الإجراء المطلوب غير معروف" });
 
   } catch (error) {
@@ -589,6 +841,79 @@ function onEdit(e) {
       }
     }
   } catch (err) {}
+/**
+ * التهيئة الشاملة لكافة شيتات المنظومة (setupAllEnterpriseSheets)
+ * تنشئ شيتات الأرباح والخسائر والطلبيات والموازنات التقديرية بأمان تام ودون حذف
+ */
+function setupAllEnterpriseSheets() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var logSheet = getOrCreateSetupLogSheet(ss);
+  
+  // 1. الشيت الرئيسي للحركات
+  var mainSheet = ss.getSheetByName('البيانات') || ss.getSheetByName('Transactions') || ss.getSheetByName('Sheet1') || ss.getSheets()[0];
+  if (!mainSheet) {
+    mainSheet = ss.insertSheet('البيانات');
+    mainSheet.appendRow(['الرقم التعريفى', 'التاريخ', 'النوع', 'البند والتصنيف', 'الموظف / الصندوق', 'المبلغ (د.ك)', 'الملاحظات والبيان', 'الفرع', 'targetMonth', 'vendorName', 'linkedAccrualId', 'isSettlement']);
+    mainSheet.getRange('A1:L1').setBackground('#0f172a').setFontColor('#ffffff').setFontWeight('bold');
+    logAction(logSheet, 'CREATE_MAIN_SHEET', 'تم إنشاء شيت البيانات الرئيسي', 'نجاح');
+  } else {
+    safeSchemaUpdate();
+  }
+
+  // 2. شيت الإعدادات
+  setupSettingsSheet();
+
+  // 3. شيت تقارير الأرباح والخسائر المعتمدة (ProfitLoss_Reports)
+  var pnlSheet = ss.getSheetByName('ProfitLoss_Reports') || ss.getSheetByName('الارباح_والخسائر') || ss.getSheetByName('الأرباح_والخسائر');
+  if (!pnlSheet) {
+    pnlSheet = ss.insertSheet('ProfitLoss_Reports');
+    var pnlHeaders = [
+      'رقم_التقرير', 'التاريخ', 'السنة', 'الشهر', 'الفرع', 
+      'إجمالي_الإيرادات', 'مخزون_أول_المدة', 'مشتريات_الفترة', 'مخزون_آخر_المدة', 
+      'تكلفة_البضاعة_COGS', 'مجمل_الربح', 'المصروفات_التشغيلية', 'المصروفات_المستحقة', 
+      'صافي_الربح_والخسارة', 'ملاحظات_وإيضاحات', 'تاريخ_الاعتماد_والحفظ'
+    ];
+    pnlSheet.appendRow(pnlHeaders);
+    pnlSheet.getRange(1, 1, 1, pnlHeaders.length).setBackground('#0b1d36').setFontColor('#ffffff').setFontWeight('bold');
+    pnlSheet.setFrozenRows(1);
+    logAction(logSheet, 'CREATE_PNL_SHEET', 'تم إنشاء شيت تقارير الأرباح والخسائر ProfitLoss_Reports', 'نجاح');
+  }
+
+  // 4. شيت إدارة ومواعيد الطلبيات (Orders)
+  var ordersSheet = ss.getSheetByName('Orders') || ss.getSheetByName('الطلبيات');
+  if (!ordersSheet) {
+    ordersSheet = ss.insertSheet('Orders');
+    var ordersHeaders = [
+      'رقم_الطلبية', 'تاريخ_الإنشاء', 'العنوان_أو_البند', 'النوع', 'العميل_أو_المورد', 
+      'الفرع', 'تاريخ_التسليم_المحدد', 'إجمالي_المبلغ', 'المدفوع', 'المتبقي', 
+      'حالة_التنفيذ', 'الأولوية', 'حالة_الدفع', 'الموظف_المسؤول', 'الهاتف', 
+      'الملاحظات_والشروط', 'تفاصيل_البنود_JSON', 'تاريخ_التحديث'
+    ];
+    ordersSheet.appendRow(ordersHeaders);
+    ordersSheet.getRange(1, 1, 1, ordersHeaders.length).setBackground('#134e4a').setFontColor('#ffffff').setFontWeight('bold');
+    ordersSheet.setFrozenRows(1);
+    logAction(logSheet, 'CREATE_ORDERS_SHEET', 'تم إنشاء شيت إدارة ومواعيد الطلبيات Orders', 'نجاح');
+  }
+
+  // 5. شيت الموازنات التقديرية (Budgets)
+  var budgetSheet = ss.getSheetByName('Budgets') || ss.getSheetByName('الموازنات');
+  if (!budgetSheet) {
+    budgetSheet = ss.insertSheet('Budgets');
+    var budgetHeaders = [
+      'السنة', 'الشهر', 'الفرع', 'بند_المصروف_أو_التصنيف', 
+      'سقف_الموازنة_التقديرية', 'المنصرف_الفعلي', 'نسبة_الاستهلاك_%', 'الحالة_الرقابية', 'تاريخ_الاعتماد'
+    ];
+    budgetSheet.appendRow(budgetHeaders);
+    budgetSheet.getRange(1, 1, 1, budgetHeaders.length).setBackground('#1e3a8a').setFontColor('#ffffff').setFontWeight('bold');
+    budgetSheet.setFrozenRows(1);
+    logAction(logSheet, 'CREATE_BUDGETS_SHEET', 'تم إنشاء شيت الموازنات التقديرية Budgets', 'نجاح');
+  }
+
+  logAction(logSheet, 'SETUP_ALL_ENTERPRISE', 'تم فحص وتهيئة كافة شيتات النظام المعتمد بنجاح', 'نجاح');
+  return { 
+    success: true, 
+    message: 'تم فحص وتهيئة كافة شيتات المنظومة (البيانات، Settings، ProfitLoss_Reports، Orders، Budgets، SetupLog) بأمان تام ودون حذف'
+  };
 }
 
 function getOrCreateSetupLogSheet(ss) {
