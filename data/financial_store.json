@@ -62,5 +62,183 @@
     "تحويل عهدة نقدية",
     "خدمات حكومية"
   ],
-  "lastSync": "2026-10-07T11:03:29.525Z"
+  "settingsBranches": [
+    {
+      "id": "BR-001",
+      "branchId": "BR-001",
+      "name": "الورده الانيقة",
+      "isActive": true,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    },
+    {
+      "id": "BR-002",
+      "branchId": "BR-002",
+      "name": "تعبئة وتغليف",
+      "isActive": true,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    },
+    {
+      "id": "BR-003",
+      "branchId": "BR-003",
+      "name": "الرئيسي",
+      "isActive": true,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    },
+    {
+      "id": "BR-004",
+      "branchId": "BR-004",
+      "name": "المصنع",
+      "isActive": true,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    },
+    {
+      "id": "BR-005",
+      "branchId": "BR-005",
+      "name": "المستودع",
+      "isActive": true,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    },
+    {
+      "id": "BR-006",
+      "branchId": "BR-006",
+      "name": "فرع حولي",
+      "isActive": true,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    }
+  ],
+  "settingsCategories": [
+    {
+      "id": "CAT-001",
+      "categoryId": "CAT-001",
+      "name": "مشتريات",
+      "parentCategory": "تشغيلي",
+      "isActive": true,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    },
+    {
+      "id": "CAT-002",
+      "categoryId": "CAT-002",
+      "name": "رواتب",
+      "parentCategory": "إداري",
+      "isActive": true,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    },
+    {
+      "id": "CAT-003",
+      "categoryId": "CAT-003",
+      "name": "إيجار",
+      "parentCategory": "ثابت",
+      "isActive": true,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    },
+    {
+      "id": "CAT-004",
+      "categoryId": "CAT-004",
+      "name": "ضيافة وبوفيه",
+      "parentCategory": "عمومية",
+      "isActive": true,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    },
+    {
+      "id": "CAT-005",
+      "categoryId": "CAT-005",
+      "name": "نثريات",
+      "parentCategory": "عمومية",
+      "isActive": true,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    },
+    {
+      "id": "CAT-006",
+      "categoryId": "CAT-006",
+      "name": "صيانة",
+      "parentCategory": "تشغيلي",
+      "isActive": true,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    },
+    {
+      "id": "CAT-007",
+      "categoryId": "CAT-007",
+      "name": "تحويل عهدة نقدية",
+      "parentCategory": "تشغيلي",
+      "isActive": true,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    },
+    {
+      "id": "CAT-008",
+      "categoryId": "CAT-008",
+      "name": "خدمات حكومية",
+      "parentCategory": "تشغيلي",
+      "isActive": true,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    }
+  ],
+  "settingsVendors": [
+    {
+      "id": "VEN-001",
+      "vendorId": "VEN-001",
+      "name": "شركة المواد الغذائية المتحدة",
+      "contactInfo": "22450000",
+      "isActive": true
+    },
+    {
+      "id": "VEN-002",
+      "vendorId": "VEN-002",
+      "name": "مؤسسة التغليف الحديثة",
+      "contactInfo": "24810000",
+      "isActive": true
+    },
+    {
+      "id": "VEN-003",
+      "vendorId": "VEN-003",
+      "name": "مطبعة النور الكويتية",
+      "contactInfo": "99887766",
+      "isActive": true
+    },
+    {
+      "id": "VEN-004",
+      "vendorId": "VEN-004",
+      "name": "المؤجر العقاري",
+      "contactInfo": "55443322",
+      "isActive": true
+    }
+  ],
+  "settingsEmployees": [
+    {
+      "id": "EMP-001",
+      "employeeId": "EMP-001",
+      "name": "بيتر ناصر",
+      "role": "أمين عهدة / محاسب",
+      "isActive": true,
+      "balance": 150.25,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    },
+    {
+      "id": "EMP-002",
+      "employeeId": "EMP-002",
+      "name": "محمد جابر",
+      "role": "أمين عهدة / محاسب",
+      "isActive": true,
+      "balance": 0,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    },
+    {
+      "id": "EMP-003",
+      "employeeId": "EMP-003",
+      "name": "كاشير الفرع الرئيسي",
+      "role": "كاشير مبيعات",
+      "isActive": true,
+      "balance": 0,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    },
+    {
+      "id": "EMP-004",
+      "employeeId": "EMP-004",
+      "name": "مسؤول المشتريات",
+      "role": "مسؤول مشتريات",
+      "isActive": true,
+      "balance": 0,
+      "createdAt": "2026-10-23T11:36:10.916Z"
+    }
+  ],
+  "lastSync": "2026-10-23T11:36:21.843Z"
 }

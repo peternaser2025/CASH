@@ -1,5 +1,51 @@
 [
   {
+    "id": "aud_1792755381844_vre6q",
+    "timestamp": "2026-10-23T11:36:21.844Z",
+    "action": "DELETE",
+    "entityType": "TRANSACTION",
+    "entityId": "1792755377750",
+    "actor": "المستخدم",
+    "description": "حذف المعاملة #1792755377750 بمبلغ 10.5 د.ك للموظف (كاشير الفرع الرئيسي)",
+    "previousValue": {
+      "id": "1792755377750",
+      "rowId": "1792755377750",
+      "date": "2026-10-23",
+      "employee": "كاشير الفرع الرئيسي",
+      "branch": "الرئيسي",
+      "department": null,
+      "category": "مبيعات",
+      "description": "اختبار حفظ الإيراد",
+      "amount": 10.5,
+      "amountFils": 10500,
+      "type": "Income",
+      "createdAt": "2026-10-23T11:36:17.751Z"
+    }
+  },
+  {
+    "id": "aud_1792755377753_nyuj1",
+    "timestamp": "2026-10-23T11:36:17.753Z",
+    "action": "CREATE",
+    "entityType": "TRANSACTION",
+    "entityId": "1792755377750",
+    "actor": "المستخدم",
+    "description": "إضافة معاملة إيراد / توريد بمبلغ 10.500 د.ك للموظف (كاشير الفرع الرئيسي)",
+    "newValue": {
+      "id": "1792755377750",
+      "rowId": "1792755377750",
+      "date": "2026-10-23",
+      "employee": "كاشير الفرع الرئيسي",
+      "branch": "الرئيسي",
+      "department": null,
+      "category": "مبيعات",
+      "description": "اختبار حفظ الإيراد",
+      "amount": 10.5,
+      "amountFils": 10500,
+      "type": "Income",
+      "createdAt": "2026-10-23T11:36:17.751Z"
+    }
+  },
+  {
     "id": "aud_1791371009526_85zk7",
     "timestamp": "2026-10-07T11:03:29.526Z",
     "action": "UPDATE",

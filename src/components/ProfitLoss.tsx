@@ -29,9 +29,14 @@ import {
   Calendar,
   AlertCircle,
   Eye,
-  CheckCircle2
+  CheckCircle2,
+  Loader2,
+  TrendingUp,
+  Sparkles,
+  Coins
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
+import { apiService } from '../services/apiService';
 import { EmployeeBalance } from '../types';
 import { parseReportRow } from '../utils/format';
 
@@ -194,10 +199,22 @@ export default function ProfitLoss({ branches: propBranches = [], categories = [
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Quick direct sales entry state (Persisted in server, sheet, & DB)
+  const [quickSaleDate, setQuickSaleDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [quickSaleBranch, setQuickSaleBranch] = useState<string>('');
+  const [quickSaleEmployee, setQuickSaleEmployee] = useState<string>('');
+  const [quickSaleCategory, setQuickSaleCategory] = useState<string>('مبيعات');
+  const [quickSaleAmount, setQuickSaleAmount] = useState<string>('');
+  const [quickSaleDesc, setQuickSaleDesc] = useState<string>('');
+  const [quickSaleSubmitting, setQuickSaleSubmitting] = useState<boolean>(false);
+  const [savingRow, setSavingRow] = useState<boolean>(false);
+
   // Modals state
   const [editModalData, setEditModalData] = useState<{
     isOpen: boolean;
     idx: number;
+    targetUid?: number;
+    targetId?: string | number;
     DateStr: string;
     Branch: string;
     Employee: string;
@@ -323,7 +340,11 @@ export default function ProfitLoss({ branches: propBranches = [], categories = [
         }).filter(r => r.Type || r.Category || r.Amount);
 
         if (mapped.length > 0) {
-          setAllData(mapped);
+          setAllData(prev => {
+            const mappedIds = new Set(mapped.map(m => String(m.ID || m._uid)));
+            const localOnly = prev.filter(r => r.ID && !mappedIds.has(String(r.ID)) && !mappedIds.has(String(r._uid)));
+            return [...localOnly, ...mapped];
+          });
           toast(`تم تحميل ${mapped.length.toLocaleString('ar-KW')} حركة من قاعدة البيانات`);
           const latest = mapped.filter(r => r.Date).sort((a, b) => (b.Date?.getTime() || 0) - (a.Date?.getTime() || 0))[0];
           if (latest && latest.Date) {
@@ -440,6 +461,14 @@ export default function ProfitLoss({ branches: propBranches = [], categories = [
     return Array.from(setC).sort();
   }, [allData, categories]);
 
+  const availableEmployees = useMemo(() => {
+    const setE = new Set<string>();
+    balances.forEach(b => b.name && setE.add(b.name.trim()));
+    allData.forEach(r => r.Employee && setE.add(r.Employee.trim()));
+    const arr = Array.from(setE).sort();
+    return arr.length > 0 ? arr : ['كاشير الفرع الرئيسي', 'بيتر ناصر', 'محمد جابر', 'مسؤول المبيعات'];
+  }, [allData, balances]);
+
   // Filtered dataset for selected Month & Year
   const monthData = useMemo(() => {
     return allData.filter(r => {
@@ -520,11 +549,12 @@ export default function ProfitLoss({ branches: propBranches = [], categories = [
     return ((part / whole) * 100).toFixed(1) + '%';
   };
 
-  // Save current month state to localStorage
-  const saveCurrentMonthState = (showToast: boolean = true) => {
+  // Save current month state to localStorage & Server Store
+  const saveCurrentMonthState = (showToast: boolean = true, customData?: PLTransaction[]) => {
     try {
+      const dataToSave = customData || allData;
       const payload = {
-        data: allData,
+        data: dataToSave,
         inv: { op: invOpening, cl: invClosing },
         accruals: accrualLines,
         header: headerConfig,
@@ -540,6 +570,26 @@ export default function ProfitLoss({ branches: propBranches = [], categories = [
         savedAt: payload.savedAt
       }));
       localStorage.setItem('pl_header_v1', JSON.stringify(headerConfig));
+
+      // Asynchronously backup and sync to server filesystem store
+      try {
+        apiService.syncAll({
+          transactions: dataToSave.map(r => ({
+            id: r.ID || r._uid,
+            rowId: r.ID || r._uid,
+            date: r.DateStr,
+            employee: r.Employee,
+            branch: r.Branch,
+            type: r.Type,
+            category: r.Category,
+            amount: r.Amount,
+            description: r.Description,
+            isExcluded: r.isExcluded,
+            targetMonth: periodKey
+          }))
+        }).catch(() => {});
+      } catch (e) {}
+
       if (showToast) toast(`تم حفظ وتحديث بيانات شهر ${periodKey} بنجاح`);
     } catch (e: any) {
       toast('فشل الحفظ: ' + (e.message || ''));
@@ -1341,11 +1391,13 @@ export default function ProfitLoss({ branches: propBranches = [], categories = [
       setEditModalData({
         isOpen: true,
         idx,
+        targetUid: r._uid,
+        targetId: r.ID || r._uid,
         DateStr: r.DateStr || '',
-        Branch: r.Branch || '',
-        Employee: r.Employee || '',
-        Type: r.Type || 'Expense',
-        Category: r.Category || '',
+        Branch: r.Branch || (availableBranches[0] || 'الرئيسي'),
+        Employee: r.Employee || (availableEmployees[0] || ''),
+        Type: r.Type || defaultType,
+        Category: r.Category || (defaultType === 'Income' ? 'مبيعات' : 'نثريات'),
         Amount: r.Amount || 0,
         isExcluded: r.isExcluded || 0,
         Description: r.Description || ''
@@ -1354,11 +1406,13 @@ export default function ProfitLoss({ branches: propBranches = [], categories = [
       setEditModalData({
         isOpen: true,
         idx: -1,
+        targetUid: undefined,
+        targetId: undefined,
         DateStr: new Date().toISOString().slice(0, 10),
-        Branch: selBranch === 'ALL' ? (availableBranches[0] || '') : selBranch,
-        Employee: '',
+        Branch: selBranch === 'ALL' ? (availableBranches[0] || 'الرئيسي') : selBranch,
+        Employee: availableEmployees[0] || 'كاشير الفرع الرئيسي',
         Type: defaultType,
-        Category: '',
+        Category: defaultType === 'Income' ? 'مبيعات' : '',
         Amount: '',
         isExcluded: 0,
         Description: ''
@@ -1366,72 +1420,245 @@ export default function ProfitLoss({ branches: propBranches = [], categories = [
     }
   };
 
-  const handleSaveModalRow = () => {
+  const handleSaveModalRow = async () => {
     if (!editModalData) return;
     const amt = parseFloat(String(editModalData.Amount));
-    if (isNaN(amt) || amt < 0) {
-      toast('يرجى إدخال مبلغ صحيح');
+    if (isNaN(amt) || amt <= 0) {
+      toast('يرجى إدخال مبلغ صحيح أكبر من الصفر');
       return;
     }
-    const dateVal = editModalData.DateStr;
-    const dateObj = dateVal ? new Date(dateVal + 'T12:00:00') : null;
+    const dateVal = editModalData.DateStr || new Date().toISOString().slice(0, 10);
+    const dateObj = dateVal ? new Date(dateVal + 'T12:00:00') : new Date();
+    const branchVal = editModalData.Branch.trim() || (availableBranches[0] || 'الرئيسي');
+    const empVal = editModalData.Employee.trim() || (availableEmployees[0] || 'كاشير الفرع الرئيسي');
+    const typeVal = editModalData.Type || 'Income';
+    const catVal = editModalData.Category.trim() || (typeVal === 'Income' ? 'مبيعات' : 'نثريات');
+    const descVal = editModalData.Description.trim() || (typeVal === 'Income' ? `مبيعات فرع ${branchVal}` : `مصروف ${catVal}`);
+    const isExclVal = editModalData.isExcluded || 0;
 
-    if (editModalData.idx >= 0 && monthData[editModalData.idx]) {
-      const targetUid = monthData[editModalData.idx]._uid;
-      setAllData(prev => prev.map(r => {
-        if (r._uid === targetUid) {
-          return {
-            ...r,
-            Date: dateObj,
-            DateStr: dateVal,
-            Branch: editModalData.Branch.trim(),
-            Employee: editModalData.Employee.trim(),
-            Type: editModalData.Type,
-            Category: editModalData.Category.trim(),
-            Amount: amt,
-            isExcluded: editModalData.isExcluded,
-            Description: editModalData.Description.trim()
-          };
-        }
-        return r;
-      }));
-      toast('تم تحديث الحركة بنجاح');
-    } else {
-      const maxUid = allData.reduce((m, r) => Math.max(m, r._uid), 0) + 1;
-      const newTxn: PLTransaction = {
-        _uid: maxUid,
-        ID: maxUid,
-        Date: dateObj,
-        DateStr: dateVal,
-        Branch: editModalData.Branch.trim(),
-        Employee: editModalData.Employee.trim(),
-        Type: editModalData.Type,
-        Category: editModalData.Category.trim(),
-        Amount: amt,
-        isExcluded: editModalData.isExcluded,
-        Description: editModalData.Description.trim()
-      };
-      setAllData(prev => [newTxn, ...prev]);
-      toast('تمت إضافة الحركة بنجاح');
+    setSavingRow(true);
+    try {
+      if (editModalData.targetUid !== undefined || (editModalData.idx >= 0 && monthData[editModalData.idx])) {
+        // UPDATE EXISTING ROW
+        const targetRow = editModalData.targetUid !== undefined
+          ? allData.find(r => r._uid === editModalData.targetUid)
+          : monthData[editModalData.idx];
+        const targetId = String(editModalData.targetId || targetRow?.ID || targetRow?._uid || '');
+
+        const updatePayload = {
+          id: targetId,
+          date: dateVal,
+          branch: branchVal,
+          employee: empVal,
+          type: typeVal,
+          category: catVal,
+          amount: amt,
+          description: descVal,
+          targetMonth: periodKey,
+          isExcluded: isExclVal
+        };
+
+        // 1. Update in backend API
+        await apiService.updateTransaction(targetId, updatePayload);
+        // 2. Update in Google Sheets
+        gasService.updateTransaction(targetId, updatePayload).catch(() => {});
+
+        // 3. Update in local state
+        const updatedList = allData.map(r => {
+          if (r._uid === (editModalData.targetUid ?? targetRow?._uid)) {
+            return {
+              ...r,
+              Date: dateObj,
+              DateStr: dateVal,
+              Branch: branchVal,
+              Employee: empVal,
+              Type: typeVal,
+              Category: catVal,
+              Amount: amt,
+              isExcluded: isExclVal,
+              Description: descVal
+            };
+          }
+          return r;
+        });
+        setAllData(updatedList);
+        saveCurrentMonthState(false, updatedList);
+        toast(`✅ تم تحديث وحفظ ${typeVal === 'Income' ? 'حركة المبيعات / الإيراد' : 'المعاملة'} بنجاح`);
+      } else {
+        // CREATE NEW ROW (e.g. New Income / Sale)
+        const newId = Date.now();
+        const txPayload = {
+          id: String(newId),
+          rowId: String(newId),
+          date: dateVal,
+          branch: branchVal,
+          employee: empVal,
+          type: typeVal,
+          category: catVal,
+          amount: amt,
+          description: descVal,
+          targetMonth: periodKey
+        };
+
+        // 1. Post to backend API
+        const serverRes = await apiService.addTransaction(txPayload);
+        const resolvedId = (serverRes && serverRes.id) ? serverRes.id : newId;
+
+        // 2. Post to Google Sheets
+        gasService.addTransaction({
+          Date: dateVal,
+          Branch: branchVal,
+          Employee: empVal,
+          Type: typeVal === 'Income' ? 'إيراد' : 'مصروف',
+          Category: catVal,
+          Amount: amt,
+          Description: descVal,
+          TargetMonth: periodKey
+        }).catch(() => {});
+
+        // 3. Add to local allData state
+        const newTxn: PLTransaction = {
+          _uid: Number(resolvedId) || newId,
+          ID: Number(resolvedId) || newId,
+          Date: dateObj,
+          DateStr: dateVal,
+          Branch: branchVal,
+          Employee: empVal,
+          Type: typeVal,
+          Category: catVal,
+          Amount: amt,
+          isExcluded: isExclVal,
+          Description: descVal
+        };
+
+        const updatedList = [newTxn, ...allData];
+        setAllData(updatedList);
+        saveCurrentMonthState(false, updatedList);
+        toast(`✅ تم حفظ وتسجيل ${typeVal === 'Income' ? 'المبيعات / الإيراد المحقق' : 'المعاملة'} بنجاح في السيرفر وشيت جوجل وقاعدة البيانات`);
+      }
+
+      onRefresh?.();
+      setEditModalData(null);
+    } catch (err: any) {
+      console.error('Error saving transaction in P&L:', err);
+      toast('حدث خطأ أثناء الحفظ: ' + (err.message || 'خطأ غير معروف'));
+    } finally {
+      setSavingRow(false);
     }
-    setEditModalData(null);
   };
 
   const handleToggleExclusion = (targetUid: number) => {
-    setAllData(prev => prev.map(r => {
+    const updated = allData.map(r => {
       if (r._uid === targetUid) {
         const nextState = r.isExcluded === 1 ? 0 : 1;
         toast(nextState === 1 ? 'تم استبعاد الحركة من P&L' : 'تم تفعيل الحركة في P&L');
         return { ...r, isExcluded: nextState };
       }
       return r;
-    }));
+    });
+    setAllData(updated);
+    saveCurrentMonthState(false, updated);
   };
 
-  const handleDeleteRow = (targetUid: number) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذه الحركة نهائياً؟')) return;
-    setAllData(prev => prev.filter(r => r._uid !== targetUid));
-    toast('تم حذف الحركة');
+  const handleDeleteTransaction = async (targetUid: number) => {
+    const row = allData.find(r => r._uid === targetUid);
+    if (!row) return;
+    if (!window.confirm(`هل أنت متأكد من حذف هذه المعاملة (${row.Description || row.Category}) بقيمة ${fmtC(row.Amount)} نهائياً؟`)) {
+      return;
+    }
+    try {
+      const idToDelete = String(row.ID || row._uid);
+      await apiService.deleteTransaction(idToDelete);
+      gasService.deleteTransaction(idToDelete).catch(() => {});
+      const updated = allData.filter(r => r._uid !== targetUid);
+      setAllData(updated);
+      saveCurrentMonthState(false, updated);
+      toast('تم حذف المعاملة وتحديث السجلات بنجاح');
+      onRefresh?.();
+    } catch (e: any) {
+      toast('تعذر الحذف: ' + e.message);
+    }
+  };
+
+  const handleDeleteRow = handleDeleteTransaction;
+
+  // Quick Direct Sale Form submission in Tab 2
+  const handleQuickAddSale = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseFloat(quickSaleAmount);
+    if (isNaN(amt) || amt <= 0) {
+      toast('يرجى كتابة مبلغ إيراد صحيح أكبر من الصفر');
+      return;
+    }
+    const branchVal = quickSaleBranch.trim() || (selBranch !== 'ALL' ? selBranch : (availableBranches[0] || 'الرئيسي'));
+    const empVal = quickSaleEmployee.trim() || (availableEmployees[0] || 'كاشير الفرع الرئيسي');
+    const dateVal = quickSaleDate || new Date().toISOString().slice(0, 10);
+    const dateObj = new Date(dateVal + 'T12:00:00');
+    const catVal = quickSaleCategory.trim() || 'مبيعات';
+    const descVal = quickSaleDesc.trim() || `مبيعات وإيرادات فرع ${branchVal}`;
+
+    setQuickSaleSubmitting(true);
+    try {
+      const newId = Date.now();
+      const txPayload = {
+        id: String(newId),
+        rowId: String(newId),
+        date: dateVal,
+        branch: branchVal,
+        employee: empVal,
+        type: 'Income',
+        category: catVal,
+        amount: amt,
+        description: descVal,
+        targetMonth: periodKey
+      };
+
+      // 1. Save to Backend Server API
+      const serverRes = await apiService.addTransaction(txPayload);
+      const resolvedId = (serverRes && serverRes.id) ? serverRes.id : newId;
+
+      // 2. Save to Google Sheets
+      gasService.addTransaction({
+        Date: dateVal,
+        Branch: branchVal,
+        Employee: empVal,
+        Type: 'إيراد',
+        Category: catVal,
+        Amount: amt,
+        Description: descVal,
+        TargetMonth: periodKey
+      }).catch(() => {});
+
+      // 3. Update local state
+      const newTxn: PLTransaction = {
+        _uid: Number(resolvedId) || newId,
+        ID: Number(resolvedId) || newId,
+        Date: dateObj,
+        DateStr: dateVal,
+        Branch: branchVal,
+        Employee: empVal,
+        Type: 'Income',
+        Category: catVal,
+        Amount: amt,
+        isExcluded: 0,
+        Description: descVal
+      };
+
+      const updatedList = [newTxn, ...allData];
+      setAllData(updatedList);
+      saveCurrentMonthState(false, updatedList);
+
+      // Reset quick fields
+      setQuickSaleAmount('');
+      setQuickSaleDesc('');
+      toast(`✅ تم حفظ وتثبيت إيراد (${descVal}) بمبلغ ${fmtC(amt)} بنجاح في السيرفر وشيت جوجل`);
+      onRefresh?.();
+    } catch (err: any) {
+      console.error('Failed to quick add sale:', err);
+      toast('خطأ أثناء حفظ الإيراد: ' + (err.message || 'فشل الاتصال'));
+    } finally {
+      setQuickSaleSubmitting(false);
+    }
   };
 
   return (
@@ -2024,63 +2251,315 @@ export default function ProfitLoss({ branches: propBranches = [], categories = [
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: SALES & REVENUES                                                   */}
+      {/* TAB 2: SALES & REVENUES (تفاصيل المبيعات والإيرادات المحققة)               */}
       {/* ========================================================================= */}
       {activeTab === 'sales' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="p-4 bg-gradient-to-l from-slate-900 to-indigo-950 text-white flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Wallet size={18} className="text-emerald-400" />
-              <span className="font-extrabold text-sm sm:text-base">تفاصيل المبيعات والإيرادات المحققة</span>
+        <div className="space-y-4">
+          {/* Executive KPIs Banner */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+              <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-1">
+                <span>إجمالي المبيعات المحققة</span>
+                <Wallet size={16} className="text-emerald-500" />
+              </div>
+              <div className="text-lg md:text-xl font-black font-mono text-emerald-600">
+                {fmtC(stats.income)}
+              </div>
+              <div className="text-[10px] text-slate-400 mt-0.5">
+                الفترة: {MONTH_AR[selMonth]} {selYear}
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => handleOpenEditModal(-1, 'Income')}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
-            >
-              <Plus size={13} className="inline ml-1" />
-              <span>إضافة إيراد</span>
-            </button>
+
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+              <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-1">
+                <span>عدد حركات المبيعات</span>
+                <CheckCircle2 size={16} className="text-blue-500" />
+              </div>
+              <div className="text-lg md:text-xl font-black font-mono text-slate-800">
+                {viewData.filter(r => r.Type === 'Income' && r.isExcluded === 0).length} حركة
+              </div>
+              <div className="text-[10px] text-slate-400 mt-0.5">
+                معتمدة في قائمة الأرباح والخسائر
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+              <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-1">
+                <span>متوسط الحركة الواحدة</span>
+                <TrendingUp size={16} className="text-indigo-500" />
+              </div>
+              <div className="text-lg md:text-xl font-black font-mono text-indigo-600">
+                {(() => {
+                  const incRows = viewData.filter(r => r.Type === 'Income' && r.isExcluded === 0);
+                  const count = incRows.length;
+                  return count > 0 ? fmtC(stats.income / count) : fmtC(0);
+                })()}
+              </div>
+              <div className="text-[10px] text-slate-400 mt-0.5">
+                معدل الإيراد لكل عملية
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+              <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-1">
+                <span>الفرع النشط</span>
+                <Building size={16} className="text-amber-500" />
+              </div>
+              <div className="text-sm md:text-base font-black text-slate-800 truncate">
+                {selBranch === 'ALL' ? 'كافة الفروع (مجمّع)' : selBranch}
+              </div>
+              <div className="text-[10px] text-emerald-600 font-bold mt-0.5">
+                حفظ فوري وسحابي دائم
+              </div>
+            </div>
           </div>
-          <div className="overflow-x-auto max-h-[550px]">
-            <table className="w-full text-right text-xs">
-              <thead className="bg-slate-100 sticky top-0 border-b border-slate-200 text-slate-700 font-bold">
-                <tr>
-                  <th className="py-3 px-4">التاريخ</th>
-                  <th className="py-3 px-4">البيان / العميل</th>
-                  <th className="py-3 px-4">الموظف</th>
-                  <th className="py-3 px-4">الفرع</th>
-                  <th className="py-3 px-4">التصنيف</th>
-                  <th className="py-3 px-4 text-left">المبلغ</th>
-                  <th className="py-3 px-4 text-center">إجراء</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {viewData.filter(r => r.Type === 'Income' && r.isExcluded === 0).map(r => {
-                  const idx = monthData.indexOf(r);
-                  return (
-                    <tr key={r._uid} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-2.5 px-4 font-mono font-bold text-slate-700">{r.DateStr || '—'}</td>
-                      <td className="py-2.5 px-4 font-bold text-slate-900">{r.Description || r.Category}</td>
-                      <td className="py-2.5 px-4 font-semibold text-slate-700">{r.Employee || '—'}</td>
-                      <td className="py-2.5 px-4 font-semibold text-slate-700">{r.Branch || '—'}</td>
-                      <td className="py-2.5 px-4 font-semibold text-slate-700">{r.Category || '—'}</td>
-                      <td className="py-2.5 px-4 text-left font-mono font-black text-emerald-600">{fmtC(r.Amount)}</td>
-                      <td className="py-2.5 px-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditModal(idx)}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer"
-                          title="تعديل"
-                        >
-                          <PenSquare size={14} />
-                        </button>
+
+          {/* Quick Direct Sales Entry Card */}
+          <div className="bg-gradient-to-l from-emerald-950 via-slate-900 to-indigo-950 rounded-2xl p-4 sm:p-5 text-white shadow-md border border-emerald-500/20">
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-500/20 rounded-xl text-emerald-400">
+                  <Sparkles size={18} />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm sm:text-base text-white">تسجيل وتثبيت إيراد / مبيعات جديدة مباشرة</h3>
+                  <p className="text-[11px] text-emerald-300">يتم حفظ وتثبيت الحركة فوراً في السيرفر وشيت جوجل وقاعدة البيانات دون فقدان</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleOpenEditModal(-1, 'Income')}
+                className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all cursor-pointer border border-white/20 flex items-center gap-1"
+              >
+                <Plus size={13} />
+                <span>إضافة عبر نافذة مفصلة</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickAddSale} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2.5 text-xs text-slate-900">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">التاريخ</label>
+                  <input
+                    type="date"
+                    value={quickSaleDate}
+                    onChange={e => setQuickSaleDate(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 bg-white rounded-xl font-bold border border-slate-300 text-slate-900 focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">الفرع</label>
+                  <select
+                    value={quickSaleBranch}
+                    onChange={e => setQuickSaleBranch(e.target.value)}
+                    className="w-full px-3 py-2 bg-white rounded-xl font-bold border border-slate-300 text-slate-900 focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">{selBranch !== 'ALL' ? selBranch : (availableBranches[0] || 'الرئيسي')}</option>
+                    {availableBranches.map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">الموظف / المحصل</label>
+                  <select
+                    value={quickSaleEmployee}
+                    onChange={e => setQuickSaleEmployee(e.target.value)}
+                    className="w-full px-3 py-2 bg-white rounded-xl font-bold border border-slate-300 text-slate-900 focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">{availableEmployees[0] || 'كاشير الفرع الرئيسي'}</option>
+                    {availableEmployees.map(e => (
+                      <option key={e} value={e}>{e}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">نوع الإيراد / التصنيف</label>
+                  <select
+                    value={quickSaleCategory}
+                    onChange={e => setQuickSaleCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-white rounded-xl font-bold border border-slate-300 text-slate-900 focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="مبيعات">مبيعات نقدية</option>
+                    <option value="مبيعات فرع">مبيعات فرع</option>
+                    <option value="مبيعات نقاط بيع (POS)">مبيعات نقاط بيع (POS)</option>
+                    <option value="إيراد خدمات">إيراد خدمات</option>
+                    <option value="إيرادات تشغيلية">إيرادات تشغيلية</option>
+                    <option value="إيرادات أخرى">إيرادات أخرى</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">المبلغ (د.ك)</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0.001"
+                    placeholder="0.000"
+                    value={quickSaleAmount}
+                    onChange={e => setQuickSaleAmount(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 bg-white rounded-xl font-mono font-black text-slate-900 border border-slate-300 focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">البيان / ملاحظات</label>
+                  <input
+                    type="text"
+                    placeholder="مثال: مبيعات كاش فرع..."
+                    value={quickSaleDesc}
+                    onChange={e => setQuickSaleDesc(e.target.value)}
+                    className="w-full px-3 py-2 bg-white rounded-xl font-bold text-slate-900 border border-slate-300 focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="submit"
+                  disabled={quickSaleSubmitting}
+                  className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 shadow-lg transition-all cursor-pointer"
+                >
+                  {quickSaleSubmitting ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" />
+                      <span>جاري الحفظ والتثبيت...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save size={15} />
+                      <span>حفظ وتثبيت الإيراد في النظام وشيت جوجل</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Sales Table Card */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Wallet size={18} className="text-emerald-400" />
+                <span className="font-extrabold text-sm sm:text-base">سجل تفاصيل المبيعات والإيرادات المحققة</span>
+                <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-mono font-bold">
+                  {viewData.filter(r => r.Type === 'Income' && r.isExcluded === 0).length} حركة
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenEditModal(-1, 'Income')}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                >
+                  <Plus size={13} />
+                  <span>إضافة حركة إيراد</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto max-h-[550px]">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-100 sticky top-0 border-b border-slate-200 text-slate-700 font-bold z-10">
+                  <tr>
+                    <th className="py-3 px-4 text-center w-12">#</th>
+                    <th className="py-3 px-4">التاريخ</th>
+                    <th className="py-3 px-4">البيان / العميل والتفاصيل</th>
+                    <th className="py-3 px-4">الموظف / المحصل</th>
+                    <th className="py-3 px-4">الفرع</th>
+                    <th className="py-3 px-4">التصنيف</th>
+                    <th className="py-3 px-4 text-left">المبلغ</th>
+                    <th className="py-3 px-4 text-center w-24">إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(() => {
+                    const incomeRows = viewData.filter(r => r.Type === 'Income' && r.isExcluded === 0);
+                    if (incomeRows.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={8} className="py-12 text-center text-slate-400">
+                            <div className="flex flex-col items-center justify-center gap-2">
+                              <Wallet size={36} className="text-slate-300" />
+                              <p className="font-bold text-sm text-slate-600">لا توجد حركات مبيعات أو إيرادات مسجلة لهذا الشهر حتى الآن</p>
+                              <p className="text-xs text-slate-400">يمكنك تسجيل أول حركة مبيعات باستخدام نموذج الإدخال السريع أعلاه</p>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return incomeRows.map((r, i) => {
+                      const idx = monthData.indexOf(r);
+                      return (
+                        <tr key={r._uid || i} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-2.5 px-4 text-center font-mono text-slate-400 font-bold">{i + 1}</td>
+                          <td className="py-2.5 px-4 font-mono font-bold text-slate-700 whitespace-nowrap">{r.DateStr || '—'}</td>
+                          <td className="py-2.5 px-4 font-bold text-slate-900">
+                            <div>{r.Description || r.Category}</div>
+                          </td>
+                          <td className="py-2.5 px-4 font-semibold text-slate-700">
+                            <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[11px]">
+                              {r.Employee || '—'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-4 font-semibold text-slate-700">
+                            <span className="inline-block px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md text-[11px] font-bold">
+                              {r.Branch || '—'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-4 font-semibold text-slate-700">
+                            <span className="inline-block px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded-md text-[11px] font-bold">
+                              {r.Category || 'مبيعات'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-4 text-left font-mono font-black text-emerald-600 text-sm whitespace-nowrap">
+                            {fmtC(r.Amount)}
+                          </td>
+                          <td className="py-2.5 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditModal(idx, 'Income')}
+                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors"
+                                title="تعديل الإيراد"
+                              >
+                                <PenSquare size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTransaction(r._uid)}
+                                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                                title="حذف الإيراد"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+                {viewData.filter(r => r.Type === 'Income' && r.isExcluded === 0).length > 0 && (
+                  <tfoot className="bg-slate-100 border-t-2 border-slate-300 font-bold">
+                    <tr>
+                      <td colSpan={6} className="py-3 px-4 font-black text-slate-900 text-right">
+                        إجمالي المبيعات والإيرادات المحققة في الفترة:
                       </td>
+                      <td className="py-3 px-4 text-left font-mono font-black text-emerald-700 text-base">
+                        {fmtC(stats.income)}
+                      </td>
+                      <td></td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </tfoot>
+                )}
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -2758,22 +3237,28 @@ export default function ProfitLoss({ branches: propBranches = [], categories = [
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">الفرع</label>
-                <input
-                  type="text"
+                <select
                   value={editModalData.Branch}
                   onChange={e => setEditModalData({ ...editModalData, Branch: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold"
-                />
+                >
+                  {availableBranches.map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">الموظف</label>
-                <input
-                  type="text"
+                <label className="block font-bold text-slate-700 mb-1">الموظف / المحصل</label>
+                <select
                   value={editModalData.Employee}
                   onChange={e => setEditModalData({ ...editModalData, Employee: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold"
-                />
+                >
+                  {availableEmployees.map(e => (
+                    <option key={e} value={e}>{e}</option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -2783,8 +3268,8 @@ export default function ProfitLoss({ branches: propBranches = [], categories = [
                   onChange={e => setEditModalData({ ...editModalData, Type: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold"
                 >
-                  <option value="Expense">مصروف (Expense)</option>
                   <option value="Income">إيراد / مبيعات (Income)</option>
+                  <option value="Expense">مصروف (Expense)</option>
                   <option value="Transfer-Out">تحويل صادر</option>
                   <option value="Transfer-In">تحويل وارد</option>
                 </select>
@@ -2794,14 +3279,26 @@ export default function ProfitLoss({ branches: propBranches = [], categories = [
                 <label className="block font-bold text-slate-700 mb-1">التصنيف</label>
                 <input
                   type="text"
+                  list="modal-categories-list"
                   value={editModalData.Category}
                   onChange={e => setEditModalData({ ...editModalData, Category: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold"
                 />
+                <datalist id="modal-categories-list">
+                  <option value="مبيعات" />
+                  <option value="مبيعات نقدية" />
+                  <option value="مبيعات نقاط بيع (POS)" />
+                  <option value="إيراد خدمات" />
+                  <option value="إيرادات تشغيلية" />
+                  <option value="مشتريات" />
+                  <option value="رواتب" />
+                  <option value="إيجار" />
+                  <option value="نثريات" />
+                </datalist>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">المبلغ</label>
+                <label className="block font-bold text-slate-700 mb-1">المبلغ (د.ك)</label>
                 <input
                   type="number"
                   step="0.001"
@@ -2845,9 +3342,11 @@ export default function ProfitLoss({ branches: propBranches = [], categories = [
               <button
                 type="button"
                 onClick={handleSaveModalRow}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-xs cursor-pointer"
+                disabled={savingRow}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-xs cursor-pointer flex items-center gap-1.5"
               >
-                حفظ
+                {savingRow && <Loader2 size={14} className="animate-spin" />}
+                <span>{savingRow ? 'جاري الحفظ والتثبيت...' : 'حفظ وتثبيت الحركة'}</span>
               </button>
             </div>
           </div>
