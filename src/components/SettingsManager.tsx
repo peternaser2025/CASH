@@ -554,41 +554,40 @@ export default function SettingsManager({ onRefreshParentState }: SettingsManage
 
   return (
     <div className="space-y-6 pb-12 font-sans" dir="rtl">
-      {/* Header Banner - Light Executive Theme */}
-      <div className="bg-gradient-to-r from-emerald-50/90 via-white to-sky-50/80 rounded-3xl p-6 lg:p-8 shadow-sm border border-emerald-200/80 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none -translate-x-1/2 -translate-y-1/2"></div>
+      {/* Header Banner - Facebook & eBay Modern Clean Theme */}
+      <div className="bg-white rounded-2xl p-6 lg:p-7 shadow-xs border border-[#E4E6EB] relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-100/80 text-emerald-800 border border-emerald-300/80 rounded-full text-xs font-black tracking-wide mb-3">
-              <ShieldCheck size={14} className="text-emerald-600" />
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#E7F3FF] text-[#1877F2] border border-[#1877F2]/20 rounded-full text-xs font-black tracking-wide mb-3">
+              <ShieldCheck size={14} className="text-[#1877F2]" />
               <span>ميثاق الحفظ التام وعدم المساس بالبيانات التاريخية (0% حذف)</span>
             </div>
-            <h1 className="text-2xl lg:text-3xl font-black tracking-tight text-slate-900 flex items-center gap-3">
+            <h1 className="text-xl lg:text-2xl font-black tracking-tight text-[#050505] flex items-center gap-3">
               <span>إدارة الإعدادات المركزية والجداول المرجعية</span>
-              <span className="text-xs bg-emerald-100/70 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-xl font-bold">
+              <span className="text-xs bg-[#E7F3FF] text-[#1877F2] border border-[#1877F2]/20 px-3 py-1 rounded-xl font-bold">
                 Google Sheets Multi-Sheet Sync
               </span>
             </h1>
-            <p className="text-slate-600 text-sm mt-2 max-w-2xl font-medium leading-relaxed">
-              تحكم مركزي كامل في هوية الشركة، الفروع، شجرة التصنيفات، الموردين المعتمدين، ومسؤولي العهد. مع تطبيق صارم لقواعد سلامة الربط المحاسبي ومنع تكرار أو حذف أي صفوف تاريخية في Google Sheets.
+            <p className="text-[#65676B] text-xs sm:text-sm mt-1.5 max-w-2xl font-medium leading-relaxed">
+              تحكم مركزي كامل في هوية الشركة، الفروع، شجرة التصنيفات، الموردين المعتمدين، ومسؤولي العهد مع ربط ديناميكي مباشر لشيت جوجل دون افتراض ترتيب ثابت للأعمدة وبحفظ تاريخي كامل.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             {/* Live Status Pill */}
-            <div className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl border text-xs font-bold ${
+            <div className={`flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-bold ${
               connectionStatus.tested && connectionStatus.success
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                ? 'bg-[#E3FCEF] text-[#00875A] border-[#ABF5D1]'
                 : connectionStatus.tested && !connectionStatus.success
-                ? 'bg-rose-50 text-rose-800 border-rose-300'
-                : 'bg-slate-100 text-slate-700 border-slate-200'
+                ? 'bg-[#FEE2E2] text-[#DC2626] border-[#FECACA]'
+                : 'bg-[#F0F2F5] text-[#65676B] border-[#E4E6EB]'
             }`}>
               <span className={`w-2 h-2 rounded-full ${
                 connectionStatus.tested && connectionStatus.success
-                  ? 'bg-emerald-500 animate-pulse'
+                  ? 'bg-[#00875A] animate-pulse'
                   : connectionStatus.tested && !connectionStatus.success
-                  ? 'bg-rose-500'
-                  : 'bg-amber-400'
+                  ? 'bg-[#DC2626]'
+                  : 'bg-[#FFAB00]'
               }`}></span>
               <span>
                 {connectionStatus.tested && connectionStatus.success
@@ -602,14 +601,14 @@ export default function SettingsManager({ onRefreshParentState }: SettingsManage
             <button
               onClick={() => loadSettings()}
               disabled={loading}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-2xl text-xs font-bold transition-all shadow-xs hover:shadow active:scale-95 cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-[#F0F2F5] text-[#050505] border border-[#CCD0D5] rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50"
             >
-              <RefreshCw size={15} className={loading ? "animate-spin text-emerald-600" : "text-slate-500"} />
+              <RefreshCw size={14} className={loading ? "animate-spin text-[#1877F2]" : "text-[#65676B]"} />
               <span>تحديث البيانات</span>
             </button>
             <button
               onClick={() => setActiveTab('scripts')}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black transition-all shadow-md shadow-emerald-600/20 active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#1877F2] hover:bg-[#166FE5] text-white rounded-xl text-xs font-black transition-all shadow-xs active:scale-95 cursor-pointer"
             >
               <Code size={15} />
               <span>أكواد وربط Google Sheets</span>
@@ -618,114 +617,114 @@ export default function SettingsManager({ onRefreshParentState }: SettingsManage
         </div>
 
         {/* Safety Guarantee Highlights */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-slate-200/80 text-xs">
-          <div className="flex items-center gap-2.5 bg-white/80 p-2.5 rounded-2xl border border-slate-200/70 shadow-xs">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></div>
-            <span className="text-slate-700"><strong>شيت Settings:</strong> هيكل مستقل 4 جداول</span>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-5 border-t border-[#E4E6EB] text-xs">
+          <div className="flex items-center gap-2.5 bg-[#F0F2F5] p-2.5 rounded-xl border border-[#E4E6EB]">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#00875A] shrink-0"></div>
+            <span className="text-[#050505]"><strong>شيت Settings:</strong> هيكل مستقل 4 جداول</span>
           </div>
-          <div className="flex items-center gap-2.5 bg-white/80 p-2.5 rounded-2xl border border-slate-200/70 shadow-xs">
-            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0"></div>
-            <span className="text-slate-700"><strong>الحفظ التاريخي:</strong> 0% حذف أو تفريغ</span>
+          <div className="flex items-center gap-2.5 bg-[#F0F2F5] p-2.5 rounded-xl border border-[#E4E6EB]">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#1877F2] shrink-0"></div>
+            <span className="text-[#050505]"><strong>الحفظ التاريخي:</strong> 0% حذف أو تفريغ</span>
           </div>
-          <div className="flex items-center gap-2.5 bg-white/80 p-2.5 rounded-2xl border border-slate-200/70 shadow-xs">
-            <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0"></div>
-            <span className="text-slate-700"><strong>سلامة الربط:</strong> تدقيق قبل أي إجراء</span>
+          <div className="flex items-center gap-2.5 bg-[#F0F2F5] p-2.5 rounded-xl border border-[#E4E6EB]">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#0053A0] shrink-0"></div>
+            <span className="text-[#050505]"><strong>سلامة الربط:</strong> تدقيق قبل أي إجراء</span>
           </div>
-          <div className="flex items-center gap-2.5 bg-white/80 p-2.5 rounded-2xl border border-slate-200/70 shadow-xs">
-            <div className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></div>
-            <span className="text-slate-700"><strong>توسيع الأعمدة:</strong> لليمين فقط بأمان</span>
+          <div className="flex items-center gap-2.5 bg-[#F0F2F5] p-2.5 rounded-xl border border-[#E4E6EB]">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#FFAB00] shrink-0"></div>
+            <span className="text-[#050505]"><strong>توسيع الأعمدة:</strong> لليمين فقط بأمان</span>
           </div>
         </div>
       </div>
 
-      {/* Navigation SubTabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-200">
+      {/* Navigation SubTabs - Facebook / eBay Segmented Controls */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-[#E4E6EB]">
         <button
           onClick={() => setActiveTab('company')}
-          className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl font-black text-xs transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'company'
-              ? 'bg-slate-900 text-white shadow-md shadow-slate-900/20'
-              : 'bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
+              ? 'bg-[#E7F3FF] text-[#1877F2] border border-[#1877F2]/30 shadow-2xs font-black'
+              : 'bg-white text-[#050505] hover:bg-[#F0F2F5] border border-[#CCD0D5]'
           }`}
         >
-          <Building2 size={16} />
+          <Building2 size={15} />
           <span>الهوية والبيانات المالية</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'company' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600 font-bold'}`}>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'company' ? 'bg-[#1877F2] text-white' : 'bg-[#F0F2F5] text-[#65676B] font-bold'}`}>
             عام
           </span>
         </button>
 
         <button
           onClick={() => setActiveTab('branches')}
-          className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl font-black text-xs transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'branches'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-              : 'bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
+              ? 'bg-[#E7F3FF] text-[#1877F2] border border-[#1877F2]/30 shadow-2xs font-black'
+              : 'bg-white text-[#050505] hover:bg-[#F0F2F5] border border-[#CCD0D5]'
           }`}
         >
-          <Building2 size={16} />
+          <Building2 size={15} />
           <span>فروع الشركة والمواقع</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'branches' ? 'bg-emerald-700 text-emerald-100' : 'bg-slate-100 text-slate-600 font-mono'}`}>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'branches' ? 'bg-[#1877F2] text-white' : 'bg-[#F0F2F5] text-[#65676B] font-mono'}`}>
             {branches.length}
           </span>
         </button>
 
         <button
           onClick={() => setActiveTab('categories')}
-          className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl font-black text-xs transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'categories'
-              ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
-              : 'bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
+              ? 'bg-[#E7F3FF] text-[#1877F2] border border-[#1877F2]/30 shadow-2xs font-black'
+              : 'bg-white text-[#050505] hover:bg-[#F0F2F5] border border-[#CCD0D5]'
           }`}
         >
-          <Tag size={16} />
+          <Tag size={15} />
           <span>شجرة التصنيفات والبنود</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'categories' ? 'bg-blue-700 text-blue-100' : 'bg-slate-100 text-slate-600 font-mono'}`}>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'categories' ? 'bg-[#1877F2] text-white' : 'bg-[#F0F2F5] text-[#65676B] font-mono'}`}>
             {categories.length}
           </span>
         </button>
 
         <button
           onClick={() => setActiveTab('vendors')}
-          className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl font-black text-xs transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'vendors'
-              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
-              : 'bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
+              ? 'bg-[#E7F3FF] text-[#1877F2] border border-[#1877F2]/30 shadow-2xs font-black'
+              : 'bg-white text-[#050505] hover:bg-[#F0F2F5] border border-[#CCD0D5]'
           }`}
         >
-          <Briefcase size={16} />
+          <Briefcase size={15} />
           <span>الموردون والشركات</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'vendors' ? 'bg-purple-700 text-purple-100' : 'bg-slate-100 text-slate-600 font-mono'}`}>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'vendors' ? 'bg-[#1877F2] text-white' : 'bg-[#F0F2F5] text-[#65676B] font-mono'}`}>
             {vendors.length}
           </span>
         </button>
 
         <button
           onClick={() => setActiveTab('employees')}
-          className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl font-black text-xs transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'employees'
-              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
-              : 'bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
+              ? 'bg-[#E7F3FF] text-[#1877F2] border border-[#1877F2]/30 shadow-2xs font-black'
+              : 'bg-white text-[#050505] hover:bg-[#F0F2F5] border border-[#CCD0D5]'
           }`}
         >
-          <Users size={16} />
+          <Users size={15} />
           <span>الموظفون والمسؤولون</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'employees' ? 'bg-amber-700 text-amber-100' : 'bg-slate-100 text-slate-600 font-mono'}`}>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'employees' ? 'bg-[#1877F2] text-white' : 'bg-[#F0F2F5] text-[#65676B] font-mono'}`}>
             {employees.length}
           </span>
         </button>
 
         <button
           onClick={() => setActiveTab('scripts')}
-          className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl font-black text-xs transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'scripts'
-              ? 'bg-slate-800 text-white shadow-md shadow-slate-800/30'
-              : 'bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
+              ? 'bg-[#1877F2] text-white shadow-xs font-black'
+              : 'bg-white text-[#050505] hover:bg-[#F0F2F5] border border-[#CCD0D5]'
           }`}
         >
-          <Code size={16} />
+          <Code size={15} />
           <span>أكواد وربط Google Sheets</span>
-          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold">
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${activeTab === 'scripts' ? 'bg-white/20 text-white' : 'bg-[#E3FCEF] text-[#00875A]'}`}>
             نشط ومربوط
           </span>
         </button>

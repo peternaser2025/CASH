@@ -7,37 +7,94 @@
  * - ZERO DELETION POLICY: Never deletes, truncates, or overwrites existing rows.
  * - Historical Data Preservation: Preserves all transaction rows (2 to N).
  * - Schema Stability: Appends missing columns to the right only.
+ * - Dynamic Header Resolution: Resolves columns dynamically by name/alias.
  */
 
 export const GOOGLE_APPS_SCRIPT_FULL_CODE = `/**
  * ============================================================================
  * KWD FINANCE PRO - GOOGLE APPS SCRIPT (ENTERPRISE EDITION 2026)
  * ============================================================================
- * ⚠️ ميثاق عدم المساس بالبيانات التاريخية:
- * 1. لا يتم حذف أو تعديل أي صفوف سابقة في شيت الحركات.
- * 2. إضافة الأعمدة المحاسبية الجديدة جهة اليمين فقط دون إزاحة الأعمدة الحالية.
- * 3. إنشاء شيت Settings بالجداول الفرعية الأربعة المستقلة.
+ * ⚠️ ميثاق سلامة وحفظ البيانات المحاسبية:
+ * 1. لا يتم حذف أو مساس أي صفوف سابقة في شيت الحركات.
+ * 2. ربط ديناميكي كامل لكافة الحقول المحاسبية بدون افتراض ترتيب ثابت للأعمدة.
+ * 3. دعم كامل للمستخدمين (Users)، الأرباح والخسائر، الطلبيات، والموازنات.
  */
 
+// ----------------------------------------------------
+// دوال المساعدة للربط الديناميكي بدون أعمدة ميتة
+// ----------------------------------------------------
+function buildHeaderMap(sheet) {
+  var map = {};
+  if (!sheet || sheet.getLastColumn() === 0) return map;
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  for (var c = 0; c < headers.length; c++) {
+    var raw = String(headers[c] || '').trim();
+    if (!raw) continue;
+    var norm = raw.toLowerCase().replace(/[\\s_\\-–()]/g, '');
+    map[norm] = c + 1; // 1-indexed column
+  }
+  return map;
+}
+
+function getColValue(rowValues, headerMap, aliases, fallbackVal) {
+  for (var i = 0; i < aliases.length; i++) {
+    var norm = aliases[i].toLowerCase().replace(/[\\s_\\-–()]/g, '');
+    if (headerMap[norm] !== undefined) {
+      var val = rowValues[headerMap[norm] - 1];
+      if (val !== undefined && val !== null && val !== '') return val;
+    }
+  }
+  return fallbackVal !== undefined ? fallbackVal : '';
+}
+
+function respondJSON(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ----------------------------------------------------
+// doGet: فحص الاتصال الخفيف وجلب أرصدة العهد
+// ----------------------------------------------------
 function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // فحص الاتصال الخفيف (Ping / Health Check)
+  if (!e || !e.parameter || e.parameter.action === 'ping' || e.parameter.health === 'true') {
+    return respondJSON({
+      success: true,
+      status: 'ok',
+      service: 'KWD FINANCE PRO',
+      version: '2026.2',
+      spreadsheetName: ss.getName(),
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // جلب أرصدة العهد المستقلة مع استبعاد الشيتات الإدارية لمنع الأرصدة الوهمية
   var sheets = ss.getSheets();
-  var ignoreSheets = ['Balances', 'Settings', 'SetupLog', 'Sheet1', 'الرئيسية', 'عمليات', 'employee', 'البيانات', 'Dashboard', 'Sheet2', 'Sheet3', 'Users'];
+  var ignoreSheets = [
+    'Balances', 'Settings', 'SetupLog', 'Sheet1', 'الرئيسية', 'عمليات', 
+    'employee', 'البيانات', 'Transactions', 'Dashboard', 'Sheet2', 'Sheet3', 
+    'Users', 'ProfitLoss_Reports', 'الارباح_والخسائر', 'الأرباح_والخسائر', 
+    'Orders', 'الطلبيات', 'Budgets', 'الموازنات'
+  ];
   
   var balances = [];
   
   for (var i = 0; i < sheets.length; i++) {
     var sheetName = sheets[i].getName().trim();
+    if (sheetName.indexOf('أرشيف_') === 0) continue;
     if (ignoreSheets.indexOf(sheetName) === -1) {
       var lastRow = sheets[i].getLastRow();
       var balance = 0;
       if (lastRow > 1) {
-        var data = sheets[i].getRange(2, 1, lastRow - 1, Math.max(7, sheets[i].getLastColumn())).getValues();
+        var hMap = buildHeaderMap(sheets[i]);
+        var data = sheets[i].getRange(2, 1, lastRow - 1, sheets[i].getLastColumn()).getValues();
         var incomeSum = 0;
         var expenseSum = 0;
         for (var r = 0; r < data.length; r++) {
-          var type = String(data[r][1] || '').trim();
-          var amt = parseFloat(data[r][3]) || 0;
+          var type = String(getColValue(data[r], hMap, ['النوع', 'type', 'حركة'], data[r][1] || '')).trim();
+          var amt = parseFloat(getColValue(data[r], hMap, ['المبلغ', 'المبلغدك', 'amount', 'قيمة'], data[r][3] || 0)) || 0;
           if (type === 'إيراد' || type === 'Income' || type === 'تغذية عهدة' || type === 'رصيد إفتتاحي') {
             incomeSum += amt;
           } else if (type === 'مصروف' || type === 'Expense' || type === 'صرف عهدة' || type === 'سداد مشتريات' || type === 'سداد مستحقات') {
@@ -50,10 +107,12 @@ function doGet(e) {
     }
   }
   
-  return ContentService.createTextOutput(JSON.stringify(balances))
-    .setMimeType(ContentService.MimeType.JSON);
+  return respondJSON(balances);
 }
 
+// ----------------------------------------------------
+// doPost: المحرك المركزي لكافة العمليات المحاسبية
+// ----------------------------------------------------
 function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
@@ -64,22 +123,29 @@ function doPost(e) {
 
   try {
     var requestData = JSON.parse(e.postData.contents);
-    var action = requestData.action || 'add';
+    var action = requestData.action || 'ping';
     var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var logSheet = getOrCreateSetupLogSheet(ss);
     
     // الشيت الرئيسي للحركات
     var mainSheet = ss.getSheetByName('البيانات') || ss.getSheetByName('Transactions') || ss.getSheetByName('Sheet1') || ss.getSheets()[0];
     if (!mainSheet) {
       mainSheet = ss.insertSheet('البيانات');
       mainSheet.appendRow(['الرقم التعريفى', 'التاريخ', 'النوع', 'البند والتصنيف', 'الموظف / الصندوق', 'المبلغ (د.ك)', 'الملاحظات والبيان', 'الفرع', 'targetMonth', 'vendorName', 'linkedAccrualId', 'isSettlement']);
+      try { mainSheet.setRightToLeft(true); } catch(err) {}
+    }
+
+    // 0. فحص الاتصال الخفيف (Ping)
+    if (action === 'ping') {
+      return respondJSON({ success: true, status: 'ok', service: 'KWD FINANCE PRO', timestamp: new Date().toISOString() });
     }
 
     // 1. تسجيل حركة مالية جديدة (مع حفظ الحقول المحاسبية المتقدمة دون إتلاف)
-    if (action === 'add') {
-      var item = requestData.data || {};
+    else if (action === 'add' || action === 'addTransaction') {
+      var item = requestData.data || requestData;
       var id = item.id || Date.now();
       var date = item.date || new Date().toISOString().split('T')[0];
-      var type = item.type === 'Income' ? 'إيراد' : 'مصروف';
+      var type = (item.type === 'Income' || item.type === 'إيراد') ? 'إيراد' : 'مصروف';
       var category = item.category || 'عام';
       var employee = item.employee || 'إدارة';
       var amount = parseFloat(item.amount) || 0;
@@ -94,11 +160,12 @@ function doPost(e) {
       mainSheet.appendRow([id, date, type, category, employee, amount, description, branch, targetMonth, vendorName, linkedAccrualId, isSettlement]);
 
       // إلحاق الحركة بشرائح الموظفين دون حذف البيانات الحالية
-      if (employee && employee !== 'إدارة') {
+      if (employee && employee !== 'إدارة' && employee !== 'عام') {
         var empSheet = ss.getSheetByName(employee);
         if (!empSheet) {
           empSheet = ss.insertSheet(employee);
           empSheet.appendRow(['التاريخ', 'النوع', 'البند والتصنيف', 'المبلغ (د.ك)', 'الفرع', 'الملاحظات والبيان', 'الرصيد التراكمي']);
+          try { empSheet.setRightToLeft(true); } catch(err) {}
         }
         
         var lastEmpRow = empSheet.getLastRow();
@@ -111,11 +178,12 @@ function doPost(e) {
         empSheet.appendRow([date, type, category, amount, branch, description, newBalance]);
       }
 
-      return respondJSON({ success: true, id: id });
+      logAction(logSheet, 'ADD_TRANSACTION', 'تسجيل حركة بقيمة ' + amount + ' د.ك لصالح ' + employee, 'نجاح');
+      return respondJSON({ success: true, id: id, message: 'تم حفظ الحركة بنجاح' });
     }
     
-    // 2. استعلام التقرير مع دعم كافة الفلاتر
-    else if (action === 'report') {
+    // 2. استعلام التقرير مع دعم الربط الديناميكي لرؤوس الأعمدة
+    else if (action === 'report' || action === 'getReport') {
       var filters = requestData.filters || {};
       var lastRow = mainSheet.getLastRow();
       var rows = [];
@@ -123,29 +191,33 @@ function doPost(e) {
       var totalExpense = 0;
 
       if (lastRow > 1) {
+        var hMap = buildHeaderMap(mainSheet);
         var values = mainSheet.getRange(2, 1, lastRow - 1, Math.max(12, mainSheet.getLastColumn())).getValues();
+        
         for (var i = 0; i < values.length; i++) {
           var r = values[i];
-          var rId = r[0];
+          var rId = getColValue(r, hMap, ['الرقم التعريفى', 'الرقم', 'id', 'معرف'], r[0]);
+          var rawDate = getColValue(r, hMap, ['التاريخ', 'date', 'تاريخ'], r[1]);
           var rDate = '';
-          if (r[1] instanceof Date) {
-            rDate = Utilities.formatDate(r[1], Session.getScriptTimeZone() || 'GMT', 'yyyy-MM-dd');
-          } else if (typeof r[1] === 'number' && r[1] > 1000) {
-            var epoch = new Date(Date.UTC(1899, 11, 30) + Math.floor(r[1]) * 86400000);
+          if (rawDate instanceof Date) {
+            rDate = Utilities.formatDate(rawDate, Session.getScriptTimeZone() || 'GMT', 'yyyy-MM-dd');
+          } else if (typeof rawDate === 'number' && rawDate > 1000) {
+            var epoch = new Date(Date.UTC(1899, 11, 30) + Math.floor(rawDate) * 86400000);
             rDate = Utilities.formatDate(epoch, 'GMT', 'yyyy-MM-dd');
           } else {
-            rDate = String(r[1] || '').split('T')[0];
+            rDate = String(rawDate || '').split('T')[0];
           }
-          var rType = String(r[2] || '');
-          var rCat = String(r[3] || '');
-          var rEmp = String(r[4] || '');
-          var rAmt = parseFloat(r[5]) || 0;
-          var rDesc = String(r[6] || '');
-          var rBranch = String(r[7] || '');
-          var rTargetMonth = String(r[8] || '');
-          var rVendorName = String(r[9] || '');
-          var rLinkedAccrualId = String(r[10] || '');
-          var rIsSettlement = Boolean(r[11]);
+
+          var rType = String(getColValue(r, hMap, ['النوع', 'type', 'نوع'], r[2] || ''));
+          var rCat = String(getColValue(r, hMap, ['البند والتصنيف', 'التصنيف', 'category', 'بند'], r[3] || ''));
+          var rEmp = String(getColValue(r, hMap, ['الموظف / الصندوق', 'الموظف', 'employee', 'عهدة'], r[4] || ''));
+          var rAmt = parseFloat(getColValue(r, hMap, ['المبلغ (د.ك)', 'المبلغ', 'amount', 'المبلغدك'], r[5] || 0)) || 0;
+          var rDesc = String(getColValue(r, hMap, ['الملاحظات والبيان', 'البيان', 'description', 'ملاحظات'], r[6] || ''));
+          var rBranch = String(getColValue(r, hMap, ['الفرع', 'branch', 'فرع'], r[7] || ''));
+          var rTargetMonth = String(getColValue(r, hMap, ['targetMonth', 'شهر الاستحقاق', 'شهرالاستحقاق'], r[8] || ''));
+          var rVendorName = String(getColValue(r, hMap, ['vendorName', 'اسم المورد', 'المورد'], r[9] || ''));
+          var rLinkedAccrualId = String(getColValue(r, hMap, ['linkedAccrualId', 'معرف الالتزام المرتبط'], r[10] || ''));
+          var rIsSettlement = Boolean(getColValue(r, hMap, ['isSettlement', 'نوع التسوية'], r[11]));
 
           if (filters.startDate && rDate < filters.startDate) continue;
           if (filters.endDate && rDate > filters.endDate) continue;
@@ -193,13 +265,13 @@ function doPost(e) {
       });
     }
 
-    // 3. تهيئة شيت الإعدادات (setupSettingsSheet)
+    // 3. تهيئة وتدقيق شيت الإعدادات (setupSettingsSheet)
     else if (action === 'setupSettingsSheet') {
       var resSetup = setupSettingsSheet();
       return respondJSON(resSetup);
     }
 
-    // 4. التحديث الآمن للأعمدة (safeSchemaUpdate)
+    // 4. التحديث الآمن للأعمدة جهة اليمين (safeSchemaUpdate)
     else if (action === 'safeSchemaUpdate') {
       var resSchema = safeSchemaUpdate();
       return respondJSON(resSchema);
@@ -261,7 +333,7 @@ function doPost(e) {
         for (var ep = 0; ep < empVals.length; ep++) {
           var epId = String(empVals[ep][0] || '').trim();
           var epName = String(empVals[ep][1] || '').trim();
-          var epRole = String(empVals[ep][2] || 'موظف').trim();
+          var epRole = String(empVals[ep][2] || 'أمين عهدة').trim();
           var epActive = empVals[ep][3] !== false && String(empVals[ep][3]).toLowerCase() !== 'false';
           if (epName) {
             employeesList.push({ id: epId || 'EMP-' + (ep + 1), employeeId: epId || 'EMP-' + (ep + 1), name: epName, role: epRole, isActive: epActive });
@@ -292,10 +364,9 @@ function doPost(e) {
         settingsSheet = ss.getSheetByName('Settings');
       }
 
-      var logSheet = getOrCreateSetupLogSheet(ss);
       var payload = requestData.settings || requestData;
 
-      // Updating Branches if provided
+      // Branches
       if (Array.isArray(payload.branches) && payload.branches.length > 0) {
         var branchData = [];
         for (var b = 0; b < payload.branches.length; b++) {
@@ -312,7 +383,7 @@ function doPost(e) {
         settingsSheet.getRange(3, 1, branchData.length, 3).setValues(branchData);
       }
 
-      // Updating Categories if provided
+      // Categories
       if (Array.isArray(payload.categories) && payload.categories.length > 0) {
         var catData = [];
         for (var c = 0; c < payload.categories.length; c++) {
@@ -329,7 +400,7 @@ function doPost(e) {
         settingsSheet.getRange(3, 5, catData.length, 4).setValues(catData);
       }
 
-      // Updating Vendors if provided
+      // Vendors
       if (Array.isArray(payload.vendors) && payload.vendors.length > 0) {
         var venData = [];
         for (var v = 0; v < payload.vendors.length; v++) {
@@ -342,7 +413,7 @@ function doPost(e) {
         settingsSheet.getRange(3, 10, venData.length, 4).setValues(venData);
       }
 
-      // Updating Employees if provided
+      // Employees
       if (Array.isArray(payload.employees) && payload.employees.length > 0) {
         var empData = [];
         for (var ep = 0; ep < payload.employees.length; ep++) {
@@ -359,66 +430,81 @@ function doPost(e) {
       return respondJSON({ success: true, message: 'تم تحديث وحفظ الإعدادات بنجاح' });
     }
 
-    // 7. تعديل حركة مالية مسجلة
-    else if (action === 'update') {
+    // 7. تعديل حركة مالية مسجلة بأمان
+    else if (action === 'update' || action === 'updateTransaction') {
       var targetId = requestData.id || requestData.rowId || requestData.rowIndex || (requestData.data && (requestData.data.id || requestData.data.rowId || requestData.data.rowIndex));
       var newData = requestData.data || {};
       var lastRow = mainSheet.getLastRow();
       
       if (lastRow > 1) {
+        var hMap = buildHeaderMap(mainSheet);
         var values = mainSheet.getRange(2, 1, lastRow - 1, Math.max(12, mainSheet.getLastColumn())).getValues();
-        var found = false;
-
-        function updateRowAt(rIdx) {
-          var typeStr = (newData.type === 'Income' || newData.type === 'إيراد') ? 'إيراد' : 'مصروف';
-          if (newData.date) mainSheet.getRange(rIdx, 2).setValue(newData.date);
-          mainSheet.getRange(rIdx, 3).setValue(typeStr);
-          if (newData.category) mainSheet.getRange(rIdx, 4).setValue(newData.category);
-          if (newData.employee) mainSheet.getRange(rIdx, 5).setValue(newData.employee);
-          if (newData.amount !== undefined) mainSheet.getRange(rIdx, 6).setValue(parseFloat(newData.amount) || 0);
-          if (newData.description !== undefined) mainSheet.getRange(rIdx, 7).setValue(newData.description);
-          if (newData.branch) mainSheet.getRange(rIdx, 8).setValue(newData.branch);
-          if (newData.targetMonth !== undefined) mainSheet.getRange(rIdx, 9).setValue(newData.targetMonth);
-          if (newData.vendorName !== undefined) mainSheet.getRange(rIdx, 10).setValue(newData.vendorName);
-          if (newData.linkedAccrualId !== undefined) mainSheet.getRange(rIdx, 11).setValue(newData.linkedAccrualId);
-          if (newData.isSettlement !== undefined) mainSheet.getRange(rIdx, 12).setValue(newData.isSettlement);
-        }
+        var foundRow = -1;
 
         for (var i = 0; i < values.length; i++) {
-          if (String(values[i][0] || '').trim() === String(targetId).trim()) {
-            updateRowAt(i + 2);
-            found = true;
+          var rowIdVal = getColValue(values[i], hMap, ['الرقم التعريفى', 'id', 'معرف'], values[i][0]);
+          if (String(rowIdVal).trim() === String(targetId).trim()) {
+            foundRow = i + 2;
             break;
           }
         }
 
-        if (!found) {
+        if (foundRow === -1) {
           var rowNum = parseInt(targetId);
           if (!isNaN(rowNum) && rowNum >= 2 && rowNum <= lastRow) {
-            updateRowAt(rowNum);
-            found = true;
+            foundRow = rowNum;
           }
         }
 
-        if (found) {
-          return respondJSON({ success: true, message: "تم تعديل الحركة بأمان" });
+        if (foundRow !== -1) {
+          var typeStr = (newData.type === 'Income' || newData.type === 'إيراد') ? 'إيراد' : 'مصروف';
+          
+          function setColSafe(aliases, val, fallbackCol) {
+            var colIdx = fallbackCol;
+            for (var a = 0; a < aliases.length; a++) {
+              var norm = aliases[a].toLowerCase().replace(/[\\s_\\-–()]/g, '');
+              if (hMap[norm] !== undefined) {
+                colIdx = hMap[norm];
+                break;
+              }
+            }
+            if (colIdx && colIdx <= mainSheet.getLastColumn()) {
+              mainSheet.getRange(foundRow, colIdx).setValue(val);
+            }
+          }
+
+          if (newData.date) setColSafe(['التاريخ', 'date'], newData.date, 2);
+          setColSafe(['النوع', 'type'], typeStr, 3);
+          if (newData.category) setColSafe(['البند والتصنيف', 'category'], newData.category, 4);
+          if (newData.employee) setColSafe(['الموظف / الصندوق', 'employee'], newData.employee, 5);
+          if (newData.amount !== undefined) setColSafe(['المبلغ (د.ك)', 'amount'], parseFloat(newData.amount) || 0, 6);
+          if (newData.description !== undefined) setColSafe(['الملاحظات والبيان', 'description'], newData.description, 7);
+          if (newData.branch) setColSafe(['الفرع', 'branch'], newData.branch, 8);
+          if (newData.targetMonth !== undefined) setColSafe(['targetMonth', 'شهر الاستحقاق'], newData.targetMonth, 9);
+          if (newData.vendorName !== undefined) setColSafe(['vendorName', 'اسم المورد'], newData.vendorName, 10);
+          if (newData.linkedAccrualId !== undefined) setColSafe(['linkedAccrualId'], newData.linkedAccrualId, 11);
+          if (newData.isSettlement !== undefined) setColSafe(['isSettlement'], newData.isSettlement, 12);
+
+          logAction(logSheet, 'UPDATE_TRANSACTION', 'تعديل الحركة بالمعرف: ' + targetId, 'نجاح');
+          return respondJSON({ success: true, message: "تم تعديل الحركة بأمان تام" });
         }
       }
       return respondJSON({ success: false, error: "لم يتم العثور على الحركة المالية للتعديل في الشيت" });
     }
 
-    // 8. حذف حركة مالية بأمان تام ودون إتلاف الجدول
-    else if (action === 'delete') {
+    // 8. حذف حركة مالية بأمان تام
+    else if (action === 'delete' || action === 'deleteTransaction') {
       var targetId = requestData.id || requestData.rowId || requestData.rowIndex || (requestData.data && (requestData.data.id || requestData.data.rowId));
       var empToDelete = requestData.employee || (requestData.data && requestData.data.employee);
       var lastRow = mainSheet.getLastRow();
       var deletedFromMain = false;
-      var logSheet = getOrCreateSetupLogSheet(ss);
 
       if (lastRow > 1) {
-        var values = mainSheet.getRange(2, 1, lastRow - 1, 1).getValues();
+        var hMap = buildHeaderMap(mainSheet);
+        var values = mainSheet.getRange(2, 1, lastRow - 1, Math.max(5, mainSheet.getLastColumn())).getValues();
         for (var r = values.length - 1; r >= 0; r--) {
-          if (String(values[r][0] || '').trim() === String(targetId).trim()) {
+          var rowIdVal = getColValue(values[r], hMap, ['الرقم التعريفى', 'id', 'معرف'], values[r][0]);
+          if (String(rowIdVal).trim() === String(targetId).trim()) {
             mainSheet.deleteRow(r + 2);
             deletedFromMain = true;
             break;
@@ -434,7 +520,7 @@ function doPost(e) {
         }
       }
 
-      // حذف الحركة أيضاً من شيت الموظف إن وجد
+      // حذف الحركة أيضاً من شيت الموظف إن وُجد
       if (empToDelete && empToDelete !== 'إدارة' && empToDelete !== 'عام') {
         var empSheet = ss.getSheetByName(empToDelete);
         if (empSheet) {
@@ -455,23 +541,120 @@ function doPost(e) {
       return respondJSON({ success: true, deleted: deletedFromMain, message: deletedFromMain ? 'تم حذف الحركة بأمان تام' : 'تم تأكيد طلب الحذف' });
     }
 
-    // 9. إضافة موظف أو صندوق جديد (addEmployee)
+    // 9. إضافة مستخدم ومسؤول إلى شيت Users (addUser)
+    else if (action === 'addUser') {
+      var userEmail = String(requestData.email || '').trim().toLowerCase();
+      var userPass = String(requestData.password || '').trim();
+      var userDisplayName = String(requestData.displayName || 'المدير العام').trim();
+      var userRole = String(requestData.role || 'admin').trim();
+
+      if (!userEmail) {
+        return respondJSON({ success: false, error: 'البريد الإلكتروني مطلوب' });
+      }
+
+      var usersSheet = ss.getSheetByName('Users');
+      if (!usersSheet) {
+        usersSheet = ss.insertSheet('Users');
+        usersSheet.appendRow(['Email', 'Password', 'DisplayName', 'Role', 'CreatedAt', 'IsActive']);
+        usersSheet.getRange('A1:F1').setBackground('#1e293b').setFontColor('#ffffff').setFontWeight('bold');
+        try { usersSheet.setRightToLeft(true); } catch(e) {}
+      }
+
+      var uLastRow = usersSheet.getLastRow();
+      var userExists = false;
+      if (uLastRow > 1) {
+        var uData = usersSheet.getRange(2, 1, uLastRow - 1, 2).getValues();
+        for (var u = 0; u < uData.length; u++) {
+          if (String(uData[u][0]).trim().toLowerCase() === userEmail) {
+            userExists = true;
+            // تحديث كلمة المرور والبيانات إن وُجد
+            if (userPass) {
+              usersSheet.getRange(u + 2, 2).setValue(userPass);
+              usersSheet.getRange(u + 2, 3).setValue(userDisplayName);
+              usersSheet.getRange(u + 2, 4).setValue(userRole);
+            }
+            break;
+          }
+        }
+      }
+
+      if (!userExists) {
+        var nowStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'GMT+3', 'yyyy-MM-dd HH:mm:ss');
+        usersSheet.appendRow([userEmail, userPass, userDisplayName, userRole, nowStr, true]);
+      }
+
+      logAction(logSheet, 'ADD_USER', 'تسجيل أو تأكيد المستخدم في شيت Users: ' + userEmail, 'نجاح');
+      return respondJSON({ success: true, message: 'تم حفظ بيانات المستخدم بنجاح في Google Sheets' });
+    }
+
+    // 10. التحقق من تسجيل الدخول من شيت Users (login)
+    else if (action === 'login') {
+      var loginEmail = String(requestData.email || '').trim().toLowerCase();
+      var loginPass = String(requestData.password || '').trim();
+
+      if (!loginEmail || !loginPass) {
+        return respondJSON({ success: false, error: 'يرجى إدخال اسم المستخدم وكلمة المرور' });
+      }
+
+      // حساب المسؤول الافتراضي الدائم
+      if ((loginEmail === 'admin' || loginEmail === 'daralsalam2factory@gmail.com') && loginPass === 'admin') {
+        return respondJSON({
+          success: true,
+          email: 'daralsalam2factory@gmail.com',
+          displayName: 'المدير العام (مسؤول)',
+          role: 'admin'
+        });
+      }
+
+      var usersSheet = ss.getSheetByName('Users');
+      if (!usersSheet || usersSheet.getLastRow() <= 1) {
+        return respondJSON({ success: false, error: 'لا يوجد مستخدمون مسجلون في شيت جوجل' });
+      }
+
+      var uData = usersSheet.getRange(2, 1, usersSheet.getLastRow() - 1, 6).getValues();
+      for (var k = 0; k < uData.length; k++) {
+        var rowEmail = String(uData[k][0]).trim().toLowerCase();
+        var rowPass = String(uData[k][1]).trim();
+        var rowName = String(uData[k][2] || 'مستخدم');
+        var rowRole = String(uData[k][3] || 'user');
+        var rowActive = uData[k][5] !== false;
+
+        if (rowEmail === loginEmail) {
+          if (!rowActive) {
+            return respondJSON({ success: false, error: 'هذا الحساب معطل حالياً' });
+          }
+          if (rowPass === loginPass) {
+            logAction(logSheet, 'LOGIN_SUCCESS', 'تسجيل دخول ناجح: ' + loginEmail, 'نجاح');
+            return respondJSON({
+              success: true,
+              email: rowEmail,
+              displayName: rowName,
+              role: rowRole
+            });
+          } else {
+            return respondJSON({ success: false, error: 'كلمة المرور غير صحيحة' });
+          }
+        }
+      }
+
+      return respondJSON({ success: false, error: 'البريد الإلكتروني غير مسجل في شيت جوجل' });
+    }
+
+    // 11. إضافة موظف أو صندوق جديد (addEmployee)
     else if (action === 'addEmployee') {
       var empName = String(requestData.name || '').trim();
       if (!empName) {
         return respondJSON({ success: false, error: 'اسم الموظف أو الصندوق غير محدد' });
       }
-      var logSheet = getOrCreateSetupLogSheet(ss);
-      // إنشاء شيت الموظف المستقل
       var existingEmpSheet = ss.getSheetByName(empName);
       if (!existingEmpSheet) {
         var newEmpSheet = ss.insertSheet(empName);
         newEmpSheet.appendRow(['الرقم التعريفى', 'التاريخ', 'النوع', 'البند والتصنيف', 'الموظف / الصندوق', 'المبلغ (د.ك)', 'الملاحظات والبيان', 'الفرع', 'targetMonth', 'vendorName', 'linkedAccrualId', 'isSettlement']);
         newEmpSheet.getRange('A1:L1').setBackground('#0f766e').setFontColor('#ffffff').setFontWeight('bold');
+        try { newEmpSheet.setRightToLeft(true); } catch(e) {}
         newEmpSheet.setFrozenRows(1);
       }
 
-      // إضافة الموظف إلى جدول Settings إن وُجد
       var settingsSheet = ss.getSheetByName('Settings');
       if (settingsSheet) {
         var sLastRow = settingsSheet.getLastRow();
@@ -495,10 +678,9 @@ function doPost(e) {
       return respondJSON({ success: true, message: 'تم إنشاء وربط شيت الموظف بنجاح: ' + empName });
     }
 
-    // 10. إيقاف أو تعطيل موظف بشكل آمن دون مساس بالبيانات التاريخية (deleteEmployee)
+    // 12. تعطيل موظف بشكل آمن دون مساس بالبيانات التاريخية (deleteEmployee)
     else if (action === 'deleteEmployee') {
       var empNameToRemove = String(requestData.name || '').trim();
-      var logSheet = getOrCreateSetupLogSheet(ss);
       var settingsSheet = ss.getSheetByName('Settings');
       if (settingsSheet && settingsSheet.getLastRow() >= 3) {
         var empVals = settingsSheet.getRange(3, 16, settingsSheet.getLastRow() - 2, 3).getValues();
@@ -513,18 +695,17 @@ function doPost(e) {
       return respondJSON({ success: true, message: 'تم تعطيل الموظف مع الحفاظ على كافة سجلاته وشيته التاريخي' });
     }
 
-    // 11. أرشفة حركات سنة مالية كاملة في شيت منفصل (archiveFiscalYear)
+    // 13. أرشفة حركات سنة مالية كاملة في شيت منفصل (archiveFiscalYear)
     else if (action === 'archiveFiscalYear' || action === 'archive') {
       var archiveYear = String(requestData.year || new Date().getFullYear());
-      var onlyCompleted = requestData.onlyCompleted !== undefined ? requestData.onlyCompleted : true;
       var archiveSheetName = 'أرشيف_' + archiveYear;
-      var logSheet = getOrCreateSetupLogSheet(ss);
 
       var archiveSheet = ss.getSheetByName(archiveSheetName);
       if (!archiveSheet) {
         archiveSheet = ss.insertSheet(archiveSheetName);
         archiveSheet.appendRow(['الرقم التعريفى', 'التاريخ', 'النوع', 'البند والتصنيف', 'الموظف / الصندوق', 'المبلغ (د.ك)', 'الملاحظات والبيان', 'الفرع', 'targetMonth', 'vendorName', 'linkedAccrualId', 'isSettlement', 'تاريخ الأرشفة']);
         archiveSheet.getRange(1, 1, 1, 13).setBackground('#334155').setFontColor('#ffffff').setFontWeight('bold');
+        try { archiveSheet.setRightToLeft(true); } catch(e) {}
         archiveSheet.setFrozenRows(1);
       }
 
@@ -565,7 +746,7 @@ function doPost(e) {
       });
     }
 
-    // 12. حفظ تقرير وإغلاق الأرباح والخسائر (Profit & Loss Report)
+    // 14. حفظ تقرير وإغلاق الأرباح والخسائر (Profit & Loss Report)
     else if (action === 'saveProfitLoss' || action === 'saveProfitLossReport') {
       var itemPnl = requestData.data || {};
       var pnlSheet = ss.getSheetByName('ProfitLoss_Reports') || ss.getSheetByName('الارباح_والخسائر') || ss.getSheetByName('الأرباح_والخسائر');
@@ -618,7 +799,7 @@ function doPost(e) {
       return respondJSON({ success: true, id: pnlId, updated: pnlUpdated, message: 'تم حفظ تقرير الأرباح والخسائر بنجاح في Google Sheets' });
     }
 
-    // 13. جلب كافة تقارير الأرباح والخسائر المسجلة
+    // 15. جلب كافة تقارير الأرباح والخسائر المسجلة
     else if (action === 'getProfitLoss' || action === 'getProfitLossReports') {
       var pnlSheet = ss.getSheetByName('ProfitLoss_Reports') || ss.getSheetByName('الارباح_والخسائر') || ss.getSheetByName('الأرباح_والخسائر');
       if (!pnlSheet) {
@@ -658,7 +839,7 @@ function doPost(e) {
       return respondJSON({ success: true, records: pnlRecords, data: pnlRecords });
     }
 
-    // 10. حفظ وتحديث طلبية ومواعيد التوريد والتسليم (Orders Schedule)
+    // 16. حفظ وتحديث طلبية ومواعيد التوريد والتسليم (Orders Schedule)
     else if (action === 'saveOrder') {
       var ord = requestData.data || {};
       var ordersSheet = ss.getSheetByName('Orders') || ss.getSheetByName('الطلبيات');
@@ -708,7 +889,7 @@ function doPost(e) {
       return respondJSON({ success: true, id: ordId, updated: ordUpdated, message: 'تم حفظ وتحديث الطلبية بنجاح في Google Sheets' });
     }
 
-    // 11. جلب كافة الطلبيات المسجلة
+    // 17. جلب كافة الطلبيات المسجلة
     else if (action === 'getOrders') {
       var ordersSheet = ss.getSheetByName('Orders') || ss.getSheetByName('الطلبيات');
       if (!ordersSheet) {
@@ -750,14 +931,13 @@ function doPost(e) {
       return respondJSON({ success: true, orders: ordersList });
     }
 
-    // 15. حفظ سقوف الموازنات التقديرية (Budgets)
+    // 18. حفظ سقوف الموازنات التقديرية (Budgets)
     else if (action === 'saveBudget' || action === 'saveBudgets') {
       var bSheet = ss.getSheetByName('Budgets') || ss.getSheetByName('الموازنات');
       if (!bSheet) {
         setupAllEnterpriseSheets();
         bSheet = ss.getSheetByName('Budgets');
       }
-      var logSheet = getOrCreateSetupLogSheet(ss);
       var nowStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'GMT+3', 'yyyy-MM-dd HH:mm:ss');
       
       var budgetItems = [];
@@ -803,7 +983,7 @@ function doPost(e) {
       return respondJSON({ success: true, count: budgetItems.length, message: 'تم حفظ أسقف الموازنات التقديرية بنجاح في Google Sheets' });
     }
 
-    // 13. جلب الموازنات التقديرية
+    // 19. جلب الموازنات التقديرية
     else if (action === 'getBudgets') {
       var bSheet = ss.getSheetByName('Budgets') || ss.getSheetByName('الموازنات');
       if (!bSheet) {
@@ -830,13 +1010,13 @@ function doPost(e) {
       return respondJSON({ success: true, budgets: bList });
     }
 
-    // 14. التهيئة الشاملة لكافة شيتات المنظومة (setupAllEnterpriseSheets)
+    // 20. التهيئة الشاملة لكافة شيتات المنظومة (setupAllEnterpriseSheets)
     else if (action === 'setupAllEnterpriseSheets') {
       var resAll = setupAllEnterpriseSheets();
       return respondJSON(resAll);
     }
 
-    return respondJSON({ success: false, error: "الإجراء المطلوب غير معروف" });
+    return respondJSON({ success: false, error: "الإجراء المطلوب غير معروف: " + action });
 
   } catch (error) {
     return respondJSON({ success: false, error: error.toString() });
@@ -845,14 +1025,9 @@ function doPost(e) {
   }
 }
 
-/**
- * دالة إنشاء أو فحص شيت الإعدادات (Settings)
- * تفحص وجود الجداول، وتنشئ الناقص فقط دون مساس بأي بيانات سابقة
- */
-/**
- * القائمة التفاعلية الرسمية أعلى شيت إكسيل (Google Sheets Toolbar Menu)
- * تظهر تلقائياً بمجرد فتح الشيت للمدير والمحاسبين
- */
+// ----------------------------------------------------
+// القائمة التفاعلية لشريط أدوات Google Sheets (Toolbar)
+// ----------------------------------------------------
 function onOpen(e) {
   try {
     var ui = SpreadsheetApp.getUi();
@@ -864,6 +1039,7 @@ function onOpen(e) {
       .addItem('📊 فتح شيت الأرباح والخسائر المعتمدة', 'openProfitLossSheet')
       .addItem('📦 فتح شيت إدارة ومواعيد الطلبيات', 'openOrdersSheet')
       .addItem('🎯 فتح شيت أسقف الموازنات والانحرافات', 'openBudgetsSheet')
+      .addItem('👤 فتح شيت المستخدمين والصلاحيات', 'openUsersSheet')
       .addToUi();
   } catch(err) {}
 }
@@ -886,10 +1062,15 @@ function openBudgetsSheet() {
   if (sheet) ss.setActiveSheet(sheet);
 }
 
-/**
- * دالة إنشاء أو فحص شيت الإعدادات (Settings)
- * تفحص وجود الجداول، وتنسق المظهر الفاتح الراقي دون مساس بالبيانات السابقة
- */
+function openUsersSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Users');
+  if (sheet) ss.setActiveSheet(sheet);
+}
+
+// ----------------------------------------------------
+// دالة إعداد وفحص شيت الإعدادات (Settings)
+// ----------------------------------------------------
 function setupSettingsSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var settingsSheet = ss.getSheetByName('Settings');
@@ -906,9 +1087,9 @@ function setupSettingsSheet() {
   if (lastRow === 0) {
     // 1. الفروع (Cols A-C)
     settingsSheet.getRange('A1:C1').merge().setValue('فروع الشركة (Branches)')
-      .setBackground('#059669').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
+      .setBackground('#1877F2').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
     settingsSheet.getRange('A2:C2').setValues([['BranchID', 'BranchName', 'IsActive']])
-      .setBackground('#10b981').setFontColor('#ffffff').setFontWeight('bold');
+      .setBackground('#E7F3FF').setFontColor('#1877F2').setFontWeight('bold');
     
     var defaultBranches = [
       ['BR-001', 'الرئيسي', true],
@@ -922,9 +1103,9 @@ function setupSettingsSheet() {
 
     // 2. التصنيفات (Cols E-H)
     settingsSheet.getRange('E1:H1').merge().setValue('التصنيفات والبنود (Categories)')
-      .setBackground('#2563eb').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
+      .setBackground('#0053A0').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
     settingsSheet.getRange('E2:H2').setValues([['CategoryID', 'CategoryName', 'ParentCategory', 'IsActive']])
-      .setBackground('#3b82f6').setFontColor('#ffffff').setFontWeight('bold');
+      .setBackground('#EBF3FA').setFontColor('#0053A0').setFontWeight('bold');
     
     var defaultCategories = [
       ['CAT-001', 'مشتريات', 'تشغيلي', true],
@@ -941,9 +1122,9 @@ function setupSettingsSheet() {
 
     // 3. الموردون (Cols J-M)
     settingsSheet.getRange('J1:M1').merge().setValue('الموردون والشركات (Vendors)')
-      .setBackground('#7c3aed').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
+      .setBackground('#00875A').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
     settingsSheet.getRange('J2:M2').setValues([['VendorID', 'VendorName', 'ContactInfo', 'IsActive']])
-      .setBackground('#8b5cf6').setFontColor('#ffffff').setFontWeight('bold');
+      .setBackground('#E3FCEF').setFontColor('#00875A').setFontWeight('bold');
     
     var defaultVendors = [
       ['VEN-001', 'شركة المواد الغذائية المتحدة', '22450000', true],
@@ -955,9 +1136,9 @@ function setupSettingsSheet() {
 
     // 4. الموظفون (Cols O-R)
     settingsSheet.getRange('O1:R1').merge().setValue('الموظفون والمسؤولون (Employees)')
-      .setBackground('#d97706').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
+      .setBackground('#D97706').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
     settingsSheet.getRange('O2:R2').setValues([['EmployeeID', 'EmployeeName', 'Role', 'IsActive']])
-      .setBackground('#f59e0b').setFontColor('#ffffff').setFontWeight('bold');
+      .setBackground('#FEF3C7').setFontColor('#92400E').setFontWeight('bold');
     
     var defaultEmployees = [
       ['EMP-001', 'بيتر ناصر', 'أمين عهدة / محاسب', true],
@@ -968,9 +1149,9 @@ function setupSettingsSheet() {
     settingsSheet.getRange(3, 15, defaultEmployees.length, 4).setValues(defaultEmployees);
 
     // فواصل الأعمدة الأنيقة الفاتحة
-    settingsSheet.getRange('D1:D100').setBackground('#f8fafc');
-    settingsSheet.getRange('I1:I100').setBackground('#f8fafc');
-    settingsSheet.getRange('N1:N100').setBackground('#f8fafc');
+    settingsSheet.getRange('D1:D100').setBackground('#F0F2F5');
+    settingsSheet.getRange('I1:I100').setBackground('#F0F2F5');
+    settingsSheet.getRange('N1:N100').setBackground('#F0F2F5');
     settingsSheet.setColumnWidth(4, 25);
     settingsSheet.setColumnWidth(9, 25);
     settingsSheet.setColumnWidth(14, 25);
@@ -984,10 +1165,9 @@ function setupSettingsSheet() {
   return { success: true, message: 'تم إعداد وتنسيق شيت Settings والتحقق من الجداول بأمان تام' };
 }
 
-/**
- * التحديث الآمن للأعمدة (safeSchemaUpdate)
- * يفحص شيت الحركات ويضيف الأعمدة المطلوبة جهة اليمين فقط دون إزاحة أو حذف
- */
+// ----------------------------------------------------
+// دالة التحديث الآمن للأعمدة جهة اليمين (safeSchemaUpdate)
+// ----------------------------------------------------
 function safeSchemaUpdate() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var logSheet = getOrCreateSetupLogSheet(ss);
@@ -1003,7 +1183,7 @@ function safeSchemaUpdate() {
   if (lastCol === 0) {
     var baselineHeaders = ['الرقم التعريفى', 'التاريخ', 'النوع', 'البند والتصنيف', 'الموظف / الصندوق', 'المبلغ (د.ك)', 'الملاحظات والبيان', 'الفرع', 'targetMonth', 'vendorName', 'linkedAccrualId', 'isSettlement'];
     targetSheet.appendRow(baselineHeaders);
-    targetSheet.getRange('A1:L1').setBackground('#0284c7').setFontColor('#ffffff').setFontWeight('bold');
+    targetSheet.getRange('A1:L1').setBackground('#1877F2').setFontColor('#ffffff').setFontWeight('bold');
     targetSheet.setRowHeight(1, 35);
     targetSheet.setFrozenRows(1);
     logAction(logSheet, 'INIT_HEADERS', 'تمت كتابة وتنسيق العناوين الأساسية لشيت المعاملات', 'نجاح');
@@ -1036,7 +1216,7 @@ function safeSchemaUpdate() {
 
     if (!exists) {
       currentLastCol++;
-      targetSheet.getRange(1, currentLastCol).setValue(col.label).setBackground('#0284c7').setFontColor('#ffffff').setFontWeight('bold');
+      targetSheet.getRange(1, currentLastCol).setValue(col.label).setBackground('#1877F2').setFontColor('#ffffff').setFontWeight('bold');
       added.push(col.label);
       logAction(logSheet, 'APPEND_COLUMN_SAFE', 'إضافة عمود آمن جهة اليمين: ' + col.label + ' (العمود ' + currentLastCol + ')', 'نجاح');
     }
@@ -1059,17 +1239,16 @@ function safeSchemaUpdate() {
   };
 }
 
-/**
- * تريجر حماية ومراقبة التعديلات (onEdit)
- * يمنع مسح العناوين ويراقب الحركات في SetupLog
- */
+// ----------------------------------------------------
+// تريجر حماية ومراقبة التعديلات (onEdit)
+// ----------------------------------------------------
 function onEdit(e) {
   try {
     if (!e || !e.range) return;
     var sheet = e.range.getSheet();
     var sheetName = sheet.getName();
     
-    if (sheetName === 'البيانات' || sheetName === 'Transactions' || sheetName === 'Settings') {
+    if (sheetName === 'البيانات' || sheetName === 'Transactions' || sheetName === 'Settings' || sheetName === 'Users') {
       var row = e.range.getRow();
       var oldValue = e.oldValue !== undefined ? e.oldValue : '';
       var newValue = e.value !== undefined ? e.value : '';
@@ -1085,32 +1264,43 @@ function onEdit(e) {
   } catch (err) {}
 }
 
-/**
- * التهيئة والترقية الشاملة لكافة شيتات المنظومة (setupAllEnterpriseSheets)
- * تنشئ وتنسق شيتات المنظومة الستة بألوان فاتحة وواضحة ودون مساس بأي بيانات سابقة
- */
+// ----------------------------------------------------
+// التهيئة الشاملة لكافة شيتات المنظومة (setupAllEnterpriseSheets)
+// ----------------------------------------------------
 function setupAllEnterpriseSheets() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var logSheet = getOrCreateSetupLogSheet(ss);
   
-  // 1. الشيت الرئيسي للحركات
+  // 1. الشيت الرئيسي للحركات (البيانات)
   var mainSheet = ss.getSheetByName('البيانات') || ss.getSheetByName('Transactions') || ss.getSheetByName('Sheet1') || ss.getSheets()[0];
   if (!mainSheet) {
     mainSheet = ss.insertSheet('البيانات');
     mainSheet.appendRow(['الرقم التعريفى', 'التاريخ', 'النوع', 'البند والتصنيف', 'الموظف / الصندوق', 'المبلغ (د.ك)', 'الملاحظات والبيان', 'الفرع', 'targetMonth', 'vendorName', 'linkedAccrualId', 'isSettlement']);
-    mainSheet.getRange('A1:L1').setBackground('#0284c7').setFontColor('#ffffff').setFontWeight('bold');
+    mainSheet.getRange('A1:L1').setBackground('#1877F2').setFontColor('#ffffff').setFontWeight('bold');
     mainSheet.setRowHeight(1, 35);
     mainSheet.setFrozenRows(1);
-    logAction(logSheet, 'CREATE_MAIN_SHEET', 'تم إنشاء شيت البيانات الرئيسي بألوان فاتحة وواضحة', 'نجاح');
+    logAction(logSheet, 'CREATE_MAIN_SHEET', 'تم إنشاء شيت البيانات الرئيسي بألوان فيسبوك الفاتحة والواضحة', 'نجاح');
   } else {
     safeSchemaUpdate();
   }
   try { mainSheet.setRightToLeft(true); } catch(e) {}
 
-  // 2. شيت الإعدادات
+  // 2. شيت الإعدادات المركزية
   setupSettingsSheet();
 
-  // 3. شيت تقارير الأرباح والخسائر المعتمدة (ProfitLoss_Reports)
+  // 3. شيت المستخدمين والصلاحيات (Users)
+  var usersSheet = ss.getSheetByName('Users');
+  if (!usersSheet) {
+    usersSheet = ss.insertSheet('Users');
+    usersSheet.appendRow(['Email', 'Password', 'DisplayName', 'Role', 'CreatedAt', 'IsActive']);
+    usersSheet.getRange('A1:F1').setBackground('#1877F2').setFontColor('#ffffff').setFontWeight('bold');
+    var nowStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'GMT+3', 'yyyy-MM-dd HH:mm:ss');
+    usersSheet.appendRow(['daralsalam2factory@gmail.com', 'admin', 'المدير العام (مسؤول)', 'admin', nowStr, true]);
+    logAction(logSheet, 'CREATE_USERS_SHEET', 'تم إنشاء شيت المستخدمين وتعيين حساب المدير العام تلقائياً', 'نجاح');
+  }
+  try { usersSheet.setRightToLeft(true); } catch(e) {}
+
+  // 4. شيت تقارير الأرباح والخسائر المعتمدة (ProfitLoss_Reports)
   var pnlSheet = ss.getSheetByName('ProfitLoss_Reports') || ss.getSheetByName('الارباح_والخسائر') || ss.getSheetByName('الأرباح_والخسائر');
   var pnlHeaders = [
     'رقم_التقرير', 'التاريخ', 'السنة', 'الشهر', 'الفرع', 
@@ -1123,12 +1313,12 @@ function setupAllEnterpriseSheets() {
     pnlSheet.appendRow(pnlHeaders);
     logAction(logSheet, 'CREATE_PNL_SHEET', 'تم إنشاء شيت تقارير الأرباح والخسائر ProfitLoss_Reports', 'نجاح');
   }
-  pnlSheet.getRange(1, 1, 1, pnlHeaders.length).setBackground('#0f766e').setFontColor('#ffffff').setFontWeight('bold');
+  pnlSheet.getRange(1, 1, 1, pnlHeaders.length).setBackground('#00875A').setFontColor('#ffffff').setFontWeight('bold');
   pnlSheet.setRowHeight(1, 35);
   pnlSheet.setFrozenRows(1);
   try { pnlSheet.setRightToLeft(true); } catch(e) {}
 
-  // 4. شيت إدارة ومواعيد الطلبيات (Orders)
+  // 5. شيت إدارة ومواعيد الطلبيات (Orders)
   var ordersSheet = ss.getSheetByName('Orders') || ss.getSheetByName('الطلبيات');
   var ordersHeaders = [
     'رقم_الطلبية', 'تاريخ_الإنشاء', 'العنوان_أو_البند', 'النوع', 'العميل_أو_المورد', 
@@ -1141,12 +1331,12 @@ function setupAllEnterpriseSheets() {
     ordersSheet.appendRow(ordersHeaders);
     logAction(logSheet, 'CREATE_ORDERS_SHEET', 'تم إنشاء شيت إدارة ومواعيد الطلبيات Orders', 'نجاح');
   }
-  ordersSheet.getRange(1, 1, 1, ordersHeaders.length).setBackground('#0369a1').setFontColor('#ffffff').setFontWeight('bold');
+  ordersSheet.getRange(1, 1, 1, ordersHeaders.length).setBackground('#0053A0').setFontColor('#ffffff').setFontWeight('bold');
   ordersSheet.setRowHeight(1, 35);
   ordersSheet.setFrozenRows(1);
   try { ordersSheet.setRightToLeft(true); } catch(e) {}
 
-  // 5. شيت الموازنات التقديرية (Budgets)
+  // 6. شيت الموازنات التقديرية (Budgets)
   var budgetSheet = ss.getSheetByName('Budgets') || ss.getSheetByName('الموازنات');
   var budgetHeaders = [
     'السنة', 'الشهر', 'الفرع', 'بند_المصروف_أو_التصنيف', 
@@ -1157,18 +1347,18 @@ function setupAllEnterpriseSheets() {
     budgetSheet.appendRow(budgetHeaders);
     logAction(logSheet, 'CREATE_BUDGETS_SHEET', 'تم إنشاء شيت الموازنات التقديرية Budgets', 'نجاح');
   }
-  budgetSheet.getRange(1, 1, 1, budgetHeaders.length).setBackground('#4338ca').setFontColor('#ffffff').setFontWeight('bold');
+  budgetSheet.getRange(1, 1, 1, budgetHeaders.length).setBackground('#7C3AED').setFontColor('#ffffff').setFontWeight('bold');
   budgetSheet.setRowHeight(1, 35);
   budgetSheet.setFrozenRows(1);
   try { budgetSheet.setRightToLeft(true); } catch(e) {}
 
-  // تنسيق سجل التدقيق والرقابة (SetupLog)
+  // 7. سجل التدقيق والرقابة (SetupLog)
   if (logSheet) {
     try { logSheet.setRightToLeft(true); } catch(e) {}
     logSheet.getRange('A1:D1').setBackground('#475569').setFontColor('#ffffff').setFontWeight('bold');
   }
 
-  logAction(logSheet, 'SETUP_ALL_ENTERPRISE', 'تم فحص وترقية وتنسيق كافة شيتات المنظومة (RTL وألوان فاتحة وواضحة)', 'نجاح');
+  logAction(logSheet, 'SETUP_ALL_ENTERPRISE', 'تم فحص وترقية وتنسيق كافة شيتات المنظومة (RTL وألوان فيسبوك/إيباي الواضحة)', 'نجاح');
   
   try {
     ss.toast('تمت الترقية الشاملة وتنسيق كافة الشيتات بنجاح دون حذف أي بيانات', 'منظومة KWD المالية', 6);
@@ -1176,8 +1366,8 @@ function setupAllEnterpriseSheets() {
 
   return { 
     success: true, 
-    sheetsCount: 6,
-    message: 'تم فحص وترقية كافة شيتات المنظومة (البيانات، Settings، ProfitLoss_Reports، Orders، Budgets، SetupLog) بتنسيق عربي RTL وألوان فاتحة دون حذف أي سجل'
+    sheetsCount: 7,
+    message: 'تم فحص وترقية كافة شيتات المنظومة (البيانات، Settings، Users، ProfitLoss_Reports، Orders، Budgets، SetupLog) بتنسيق عربي RTL وألوان فاتحة دون حذف أي سجل'
   };
 }
 
@@ -1197,10 +1387,5 @@ function logAction(logSheet, action, details, status) {
     var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'GMT+3', 'yyyy-MM-dd HH:mm:ss');
     logSheet.appendRow([now, action, details, status || 'نجاح']);
   } catch (e) {}
-}
-
-function respondJSON(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
 }
 `;

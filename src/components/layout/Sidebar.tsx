@@ -68,45 +68,45 @@ export default function Sidebar({
       {/* Mobile Drawer Overlay */}
       {mobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 md:hidden"
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 md:hidden"
           onClick={onCloseMobileMenu}
         />
       )}
 
-      {/* Sidebar Container */}
+      {/* Sidebar Container - Facebook & eBay Clean Modern Light Theme */}
       <aside className={`
-        fixed md:static inset-y-0 right-0 z-50 w-72 lg:w-80 bg-slate-950 text-slate-100 flex flex-col shrink-0 border-l border-slate-900 no-print transition-transform duration-300 ease-in-out
+        fixed md:static inset-y-0 right-0 z-50 w-72 lg:w-80 bg-white text-slate-800 flex flex-col shrink-0 border-l border-[#E4E6EB] shadow-xs no-print transition-transform duration-300 ease-in-out
         ${mobileMenuOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
       `}>
         {/* Brand Header */}
-        <div className="p-6 lg:p-7 flex items-center justify-between border-b border-slate-900">
-          <div className="flex items-center gap-3.5">
-            <div className="p-2.5 bg-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/15">
+        <div className="p-5 lg:p-6 flex items-center justify-between border-b border-[#E4E6EB]">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-[#1877F2] text-white rounded-2xl shadow-sm shadow-[#1877F2]/20">
               <Wallet size={22} className="text-white" />
             </div>
             <div>
-              <span className="font-black text-lg lg:text-xl tracking-tight text-white">KWD Finance</span>
+              <span className="font-black text-lg tracking-tight text-[#050505]">KWD Finance</span>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">النظام المالي الذكي</p>
+                <span className="h-2 w-2 rounded-full bg-[#00875A]"></span>
+                <p className="text-[10px] font-bold text-[#65676B]">منظومة الإدارة المالية الذكية</p>
               </div>
             </div>
           </div>
           <button 
             onClick={onCloseMobileMenu}
-            className="md:hidden p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-900 cursor-pointer"
+            className="md:hidden p-2 text-slate-500 hover:text-slate-900 rounded-xl hover:bg-[#F0F2F5] cursor-pointer"
           >
             <X size={20} />
           </button>
         </div>
 
-        {/* Structured Sidebar Navigation */}
-        <nav className="flex-1 px-3.5 py-6 space-y-6 overflow-y-auto">
-          {/* Group 1: Daily Operations & Statements */}
-          <div className="space-y-1.5">
-            <div className="px-3.5 pb-1 flex items-center justify-between text-[10px] font-black text-slate-500 uppercase tracking-wider">
+        {/* Structured Navigation List */}
+        <nav className="flex-1 px-3 py-5 space-y-6 overflow-y-auto">
+          {/* Group 1: Operations */}
+          <div className="space-y-1">
+            <div className="px-3 pb-1 flex items-center justify-between text-[11px] font-black text-[#65676B] uppercase tracking-wider">
               <span>العمليات والتقارير</span>
-              <span className="text-[9px] text-slate-600 font-mono">01</span>
+              <span className="text-[10px] text-[#8A8D91] font-mono">01</span>
             </div>
             <SidebarItem 
               icon={<LayoutDashboard size={18} />} 
@@ -156,11 +156,11 @@ export default function Sidebar({
             />
           </div>
 
-          {/* Group 2: Financial Control & Auditing */}
-          <div className="space-y-1.5">
-            <div className="px-3.5 pb-1 flex items-center justify-between text-[10px] font-black text-slate-500 uppercase tracking-wider">
+          {/* Group 2: Financial Control */}
+          <div className="space-y-1">
+            <div className="px-3 pb-1 flex items-center justify-between text-[11px] font-black text-[#65676B] uppercase tracking-wider">
               <span>الرقابة والتحليل المالي</span>
-              <span className="text-[9px] text-slate-600 font-mono">02</span>
+              <span className="text-[10px] text-[#8A8D91] font-mono">02</span>
             </div>
             <SidebarItem 
               icon={<BookOpen size={18} />} 
@@ -202,11 +202,11 @@ export default function Sidebar({
             />
           </div>
 
-          {/* Group 3: Administration & Cloud Tools */}
-          <div className="space-y-1.5">
-            <div className="px-3.5 pb-1 flex items-center justify-between text-[10px] font-black text-slate-500 uppercase tracking-wider">
+          {/* Group 3: Administration */}
+          <div className="space-y-1">
+            <div className="px-3 pb-1 flex items-center justify-between text-[11px] font-black text-[#65676B] uppercase tracking-wider">
               <span>النظام والإدارة السحابية</span>
-              <span className="text-[9px] text-slate-600 font-mono">03</span>
+              <span className="text-[10px] text-[#8A8D91] font-mono">03</span>
             </div>
             <SidebarItem 
               icon={<Users size={18} />} 
@@ -241,25 +241,25 @@ export default function Sidebar({
           </div>
         </nav>
 
-        {/* User profile & Logout */}
-        <div className="p-5 border-t border-slate-900 bg-slate-950/60">
-          <div className="flex items-center gap-3 mb-4 px-1">
+        {/* User Profile & Logout - Facebook/eBay Card */}
+        <div className="p-4 border-t border-[#E4E6EB] bg-[#F9FAFB]">
+          <div className="flex items-center gap-3 mb-3 px-1">
             <img 
               src={user?.photoURL || 'https://api.dicebear.com/7.x/bottts/svg?seed=admin'} 
-              className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 shrink-0" 
+              className="w-9 h-9 rounded-full bg-white border border-[#E4E6EB] shrink-0" 
               alt="User" 
             />
             <div className="overflow-hidden min-w-0 flex-1">
-              <p className="text-xs font-black text-white truncate">{user?.displayName || 'مسؤول النظام'}</p>
-              <p className="text-[10px] text-slate-500 font-bold truncate mt-0.5">{user?.email}</p>
+              <p className="text-xs font-black text-[#050505] truncate">{user?.displayName || 'المدير العام'}</p>
+              <p className="text-[10px] text-[#65676B] font-bold truncate mt-0.5">{user?.email}</p>
             </div>
           </div>
           <button 
             onClick={onLogout}
-            className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl border border-slate-900 hover:border-red-500/20 transition-all font-black duration-200 cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs text-[#65676B] hover:text-[#E41E3F] hover:bg-[#FEE2E2]/60 rounded-xl border border-[#E4E6EB] hover:border-[#FECACA] transition-all font-bold cursor-pointer"
           >
             <LogOut size={14} />
-            تسجيل الخروج
+            <span>تسجيل الخروج</span>
           </button>
         </div>
       </aside>
@@ -287,14 +287,14 @@ export function SidebarItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl font-bold text-xs transition-all duration-200 cursor-pointer group ${
+      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer group relative ${
         active 
-          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20 font-black' 
-          : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900/80'
+          ? 'bg-[#E7F3FF] text-[#1877F2] font-black' 
+          : 'text-[#050505] hover:bg-[#F0F2F5] hover:text-[#1877F2]'
       }`}
     >
       <div className="flex items-center gap-3 min-w-0">
-        <span className={`transition-colors shrink-0 ${active ? 'text-white' : 'text-slate-400 group-hover:text-emerald-400'}`}>
+        <span className={`transition-colors shrink-0 ${active ? 'text-[#1877F2]' : 'text-[#65676B] group-hover:text-[#1877F2]'}`}>
           {icon}
         </span>
         <span className="truncate">{label}</span>
@@ -302,27 +302,27 @@ export function SidebarItem({
       
       <div className="flex items-center gap-1.5 shrink-0">
         {badge && (
-          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black tracking-wide ${
             badgeType === 'warning'
-              ? 'bg-amber-400 text-slate-950'
+              ? 'bg-[#FEE2E2] text-[#DC2626] border border-[#FECACA]'
               : badgeType === 'success'
-              ? 'bg-emerald-500/30 text-emerald-300'
+              ? 'bg-[#E3FCEF] text-[#00875A] border border-[#ABF5D1]'
               : badgeType === 'neutral'
-              ? 'bg-slate-800 text-slate-300'
+              ? 'bg-[#F0F2F5] text-[#65676B] border border-[#E4E6EB]'
               : active 
-              ? 'bg-white/20 text-white' 
-              : 'bg-slate-800 text-slate-300 group-hover:bg-slate-700'
+              ? 'bg-[#1877F2] text-white' 
+              : 'bg-[#F0F2F5] text-[#65676B]'
           }`}>
             {badge}
           </span>
         )}
         {!active && (
-          <ChevronLeft size={14} className="text-slate-700 group-hover:text-slate-500 group-hover:-translate-x-0.5 transition-all" />
+          <ChevronLeft size={14} className="text-[#8A8D91] group-hover:text-[#1877F2] group-hover:-translate-x-0.5 transition-all" />
         )}
       </div>
 
       {active && (
-        <span className="absolute right-0 top-1/4 h-1/2 w-1 bg-white rounded-l-full"></span>
+        <span className="absolute right-0 top-1.5 bottom-1.5 w-1 bg-[#1877F2] rounded-l-full"></span>
       )}
     </button>
   );

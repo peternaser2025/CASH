@@ -343,7 +343,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden" dir="rtl">
+    <div className="flex h-screen bg-[#F0F2F5] overflow-hidden" dir="rtl">
       {/* Sidebar - Structured Enterprise Arabic Navigation */}
       <Sidebar
         activeTab={activeTab}
@@ -358,100 +358,100 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-y-auto print:bg-white print:overflow-visible">
-        {/* Header - Hidden on Print */}
-        <header className="h-20 bg-white border-b border-slate-200/80 flex items-center justify-between px-4 sm:px-8 lg:px-10 sticky top-0 z-40 no-print shrink-0 shadow-sm/50">
+      <main className="flex-1 flex flex-col min-w-0 bg-[#F0F2F5] overflow-y-auto print:bg-white print:overflow-visible">
+        {/* Header - Facebook / eBay Style */}
+        <header className="h-16 lg:h-18 bg-white border-b border-[#E4E6EB] flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-40 no-print shrink-0 shadow-xs">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-2 text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer"
+              className="md:hidden p-2 text-[#050505] hover:bg-[#F0F2F5] rounded-xl cursor-pointer"
             >
-              <Menu size={22} />
+              <Menu size={20} />
             </button>
-            <div className="w-1.5 h-7 bg-emerald-600 rounded-full"></div>
+            <div className="w-1.5 h-6 bg-[#1877F2] rounded-full"></div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                <span className="text-[11px] font-black text-[#1877F2] bg-[#E7F3FF] px-2.5 py-0.5 rounded-md">
                   {getSectionCategory()}
                 </span>
-                <span className="text-[10px] text-slate-400 font-bold">/</span>
-                <h2 className="text-base sm:text-lg lg:text-xl font-black text-slate-900 truncate">
+                <span className="text-[10px] text-[#8A8D91] font-bold">/</span>
+                <h2 className="text-sm sm:text-base lg:text-lg font-black text-[#050505] truncate">
                   {getSectionTitle()}
                 </h2>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-4">
-            {/* Fast New Transaction Quick Button */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Quick Action Button - Facebook Blue */}
             {activeTab !== 'new-transaction' && (
               <button
                 onClick={() => setActiveTab('new-transaction')}
-                className="hidden lg:flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-black rounded-xl transition-all shadow-sm shadow-emerald-600/20 cursor-pointer"
+                className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 bg-[#1877F2] hover:bg-[#166FE5] active:scale-95 text-white text-xs font-black rounded-xl transition-all shadow-xs cursor-pointer"
               >
                 <PlusCircle size={15} />
                 <span>حركة جديدة</span>
               </button>
             )}
 
-            {/* Quick Search Button */}
+            {/* Quick Search Button - Facebook Pill Style */}
             {activeTab !== 'global-search' && (
               <button
                 onClick={() => setActiveTab('global-search')}
-                className="p-2 sm:px-3 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-2 bg-[#F0F2F5] hover:bg-[#E4E6EB] text-[#050505] text-xs font-bold rounded-full transition-all flex items-center gap-2 cursor-pointer border border-[#CCD0D5]/50"
                 title="البحث والتدقيق الشامل"
               >
-                <Search size={16} />
-                <span className="hidden sm:inline">بحث وتدقيق</span>
+                <Search size={15} className="text-[#65676B]" />
+                <span className="hidden md:inline">بحث وتدقيق مالي</span>
               </button>
             )}
 
             {gasConnected === true ? (
-              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 text-[11px] font-black">
+              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-[#E3FCEF] text-[#00875A] rounded-full border border-[#ABF5D1] text-[11px] font-black">
                 <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00875A] opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00875A]"></span>
                 </span>
-                مربوط بالسحابة ✅
+                <span>سحابة Google متصلة</span>
               </div>
             ) : gasConnected === false ? (
               <button 
                 onClick={checkGasConnection}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-full border border-amber-200 text-[11px] font-black transition-all cursor-pointer"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-[#FFF0B3] hover:bg-[#FFE380] text-[#974F0C] rounded-full border border-[#FFE380] text-[11px] font-black transition-all cursor-pointer"
               >
-                ⚠️ مشكلة بالاتصال (إعادة المحاولة)
+                ⚠️ إعادة فحص الاتصال
               </button>
             ) : (
-              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-500 rounded-full border border-slate-200 text-[11px] font-bold animate-pulse">
-                جاري التحقق...
+              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-[#F0F2F5] text-[#65676B] rounded-full border border-[#E4E6EB] text-[11px] font-bold animate-pulse">
+                جاري الفحص...
               </div>
             )}
 
             {loadingData && (
-              <div className="flex items-center gap-2 text-xs text-gray-500 font-bold bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 animate-pulse">
-                <RefreshCw size={12} className="animate-spin text-emerald-500" />
+              <div className="flex items-center gap-2 text-xs text-[#65676B] font-bold bg-[#F0F2F5] px-3 py-1 rounded-full border border-[#E4E6EB] animate-pulse">
+                <RefreshCw size={12} className="animate-spin text-[#1877F2]" />
                 <span className="hidden md:inline">جاري التحديث...</span>
               </div>
             )}
 
-            {/* Custody Alert Bell Notification */}
+            {/* Notification Bell */}
             <button
               onClick={() => setActiveTab('dashboard')}
-              className="relative p-2.5 bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-800 rounded-2xl border border-slate-200 transition-all cursor-pointer group"
-              title="رادار تنبيهات العهد والإشعار المسبق"
+              className="relative p-2.5 bg-[#F0F2F5] hover:bg-[#E4E6EB] text-[#050505] rounded-full transition-all cursor-pointer group"
+              title="رادار تنبيهات العهد"
             >
-              <BellRing size={18} className={activeCustodyAlertsCount > 0 ? 'text-amber-600 animate-pulse' : 'text-slate-500'} />
+              <BellRing size={17} className={activeCustodyAlertsCount > 0 ? 'text-[#E41E3F] animate-pulse' : 'text-[#65676B]'} />
               {activeCustodyAlertsCount > 0 && (
-                <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-rose-600 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce">
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-[#E41E3F] text-white text-[9px] font-black rounded-full border-2 border-white flex items-center justify-center">
                   {activeCustodyAlertsCount}
                 </span>
               )}
             </button>
 
-            <div className="hidden xl:block text-left pr-2 border-r border-slate-200">
-              <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider">اليوم والتاريخ</p>
-              <p className="text-xs font-black text-gray-900 mt-0.5">
-                {new Date().toLocaleDateString('ar-KW', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            <div className="hidden xl:block text-left pr-2 border-r border-[#E4E6EB]">
+              <p className="text-[9px] font-bold text-[#8A8D91]">اليوم والتاريخ</p>
+              <p className="text-xs font-black text-[#050505] mt-0.5">
+                {new Date().toLocaleDateString('ar-KW', { weekday: 'short', year: 'numeric', month: 'numeric', day: 'numeric' })}
               </p>
             </div>
           </div>

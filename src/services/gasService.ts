@@ -120,7 +120,8 @@ export const gasService = {
     const targetUrl = customUrl?.trim() || this.getGasUrl();
     const start = Date.now();
     try {
-      const response = await fetch(targetUrl, { method: 'GET', redirect: 'follow' });
+      const pingUrl = targetUrl.includes('?') ? `${targetUrl}&action=ping` : `${targetUrl}?action=ping`;
+      const response = await fetch(pingUrl, { method: 'GET', redirect: 'follow' });
       const latencyMs = Date.now() - start;
       if (response.ok) {
         return { success: true, latencyMs, message: `الاتصال نشط وسريع بنجاح (${latencyMs}ms)` };
