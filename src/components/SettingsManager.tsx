@@ -1311,8 +1311,100 @@ export default function SettingsManager({ onRefreshParentState }: SettingsManage
       ) : (
         /* Google Apps Script & Safe Migration Tab */
         <div className="space-y-6">
+          {/* Quick 30-Second Execution Guide Banner for Google Sheets (2026) */}
+          <div className="bg-gradient-to-l from-[#1877F2]/10 via-white to-blue-50/60 rounded-3xl p-6 lg:p-7 border-2 border-[#1877F2]/30 shadow-md space-y-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E4E6EB] pb-4">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#1877F2] text-white rounded-full text-xs font-black mb-2 shadow-xs">
+                  <Sparkles size={14} />
+                  <span>تطبيق التحديث على شيت جوجل المفتوح (2026) في 30 ثانية</span>
+                </div>
+                <h2 className="text-xl font-black text-[#050505]">
+                  كيف يظهر التحديث الجديد والتنسيق الفاتح فوراً داخل شيت الإكسيل لديك؟
+                </h2>
+                <p className="text-xs sm:text-sm text-[#65676B] font-medium mt-1">
+                  شيت جوجل يحتاج إلى لصق الكود المحدث في محرره الداخلي (Apps Script) والضغط على "تشغيل" ليقوم بتوسيع الأعمدة وتنسيق شيت الموظفين وإنشاء شيتات الأرباح والطلبيات تلقائياً دون حذف أي بيانات.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={copyScriptToClipboard}
+                className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-xs font-black transition-all cursor-pointer shadow-md active:scale-95 shrink-0 ${
+                  copiedCode 
+                    ? 'bg-[#00875A] text-white shadow-emerald-700/30' 
+                    : 'bg-[#1877F2] hover:bg-[#166FE5] text-white shadow-blue-600/30'
+                }`}
+              >
+                {copiedCode ? <Check size={16} /> : <Copy size={16} />}
+                <span>{copiedCode ? 'تم نسخ الكود المحدث بنجاح!' : '١. اضغط هنا لنسخ الكود بالكامل'}</span>
+              </button>
+            </div>
+
+            {/* Step-by-Step Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Step 1 */}
+              <div className="bg-white rounded-2xl p-4 border border-[#E4E6EB] shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="w-8 h-8 rounded-xl bg-[#E7F3FF] text-[#1877F2] font-black text-sm flex items-center justify-center mb-3">
+                    ١
+                  </div>
+                  <h4 className="text-sm font-black text-[#050505] mb-1">افتح Apps Script بالشيت</h4>
+                  <p className="text-xs text-[#65676B] leading-relaxed">
+                    في صفحة شيت جوجل المفتوحة أمامك (<strong className="text-slate-800">2026</strong>)، اضغط من الشريط العلوي على:
+                    <br />
+                    <code className="inline-block mt-1.5 px-2 py-0.5 bg-[#F0F2F5] text-[#1877F2] rounded-md font-bold font-sans">
+                      الإضافات (Extensions) ⬅️ Apps Script
+                    </code>
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="bg-white rounded-2xl p-4 border border-[#E4E6EB] shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="w-8 h-8 rounded-xl bg-[#E7F3FF] text-[#1877F2] font-black text-sm flex items-center justify-center mb-3">
+                    ٢
+                  </div>
+                  <h4 className="text-sm font-black text-[#050505] mb-1">استبدل الكود واضغط حفظ</h4>
+                  <p className="text-xs text-[#65676B] leading-relaxed">
+                    حدد أي كود قديم في المحرر واحذفه، ثم الصق الكود الجديد الذي نسخته بالأعلى، واضغط على أيقونة <strong className="text-slate-800">الحفظ (Save 💾)</strong>.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="bg-white rounded-2xl p-4 border border-[#00875A]/40 bg-emerald-50/30 shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="w-8 h-8 rounded-xl bg-[#E3FCEF] text-[#00875A] font-black text-sm flex items-center justify-center mb-3">
+                    ٣
+                  </div>
+                  <h4 className="text-sm font-black text-[#00875A] mb-1">اختر الدالة واضغط تشغيل (Run)</h4>
+                  <p className="text-xs text-[#65676B] leading-relaxed">
+                    من القائمة المنسدلة العلوية بجوار زر Run، اختر:
+                    <br />
+                    <strong className="text-[#00875A] font-mono text-[11px] block mt-1">setupAllEnterpriseSheets</strong>
+                    ثم اضغط <strong className="text-[#00875A]">تشغيل (Run ▶️)</strong>.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Instant Result Summary */}
+            <div className="bg-white/90 p-3.5 rounded-2xl border border-[#E4E6EB] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2.5 text-[#050505] font-bold">
+                <CheckCircle2 size={16} className="text-[#00875A] shrink-0" />
+                <span>النتيجة الفورية في شيتك: توسيع أعمدة Employees بالكامل وتنسيق الدينار الكويتي، وظهور شيتات الأرباح والموازنات وقائمة المنظومة العلوية!</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#1877F2] bg-[#E7F3FF] px-3 py-1 rounded-xl shrink-0">
+                <ShieldCheck size={14} />
+                <span>صفر مساس بالبيانات القديمة</span>
+              </div>
+            </div>
+          </div>
+
           {/* Live WebApp Connection Controller Card */}
-          <div className="bg-white rounded-3xl p-6 lg:p-7 border border-emerald-200/90 shadow-sm space-y-5">
+          <div className="bg-white rounded-3xl p-6 lg:p-7 border border-[#E4E6EB] shadow-xs space-y-5">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
               <div>
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-black mb-1.5">
