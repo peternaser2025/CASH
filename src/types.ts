@@ -126,11 +126,26 @@ export interface EmployeeSetting {
   createdAt?: string;
 }
 
+export interface CompanyProfile {
+  companyName: string;
+  brandTagline?: string;
+  currency: string;
+  fiscalYear: string;
+  crNumber?: string;
+  taxNumber?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  reportHeaderTitle?: string;
+  signatoryTitle?: string;
+}
+
 export interface SystemSettings {
   branches: BranchSetting[];
   categories: CategorySetting[];
   vendors: VendorSetting[];
   employees: EmployeeSetting[];
+  companyProfile?: CompanyProfile;
   lastSync?: string;
 }
 

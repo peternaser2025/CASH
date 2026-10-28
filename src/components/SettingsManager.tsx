@@ -27,7 +27,17 @@ import {
   ChevronDown,
   Sparkles,
   ArrowRight,
-  Database
+  Database,
+  Globe,
+  Wifi,
+  Save,
+  Printer,
+  DollarSign,
+  Calendar,
+  MapPin,
+  Mail,
+  Award,
+  CheckCircle
 } from 'lucide-react';
 import { gasService } from '../services/gasService';
 import { 
@@ -35,7 +45,8 @@ import {
   CategorySetting, 
   VendorSetting, 
   EmployeeSetting, 
-  SystemSettings 
+  SystemSettings,
+  CompanyProfile
 } from '../types';
 import { GOOGLE_APPS_SCRIPT_FULL_CODE } from '../utils/googleAppsScriptCode';
 import { formatKWD } from '../utils/format';
@@ -44,7 +55,21 @@ interface SettingsManagerProps {
   onRefreshParentState?: () => void;
 }
 
-type ActiveSubTab = 'branches' | 'categories' | 'vendors' | 'employees' | 'scripts';
+type ActiveSubTab = 'company' | 'branches' | 'categories' | 'vendors' | 'employees' | 'scripts';
+
+const DEFAULT_COMPANY_PROFILE: CompanyProfile = {
+  companyName: 'مصنع دار السلام 2',
+  brandTagline: 'منظومة الإدارة المالية والتدقيق الرقابي KWD FINANCE PRO',
+  currency: 'د.ك (دينار كويتي)',
+  fiscalYear: '2026',
+  crNumber: 'CR-104928-KWD',
+  taxNumber: 'TX-49102-KWT',
+  phone: '+965 2200 0000',
+  email: 'finance@daralsalam2.com',
+  address: 'دولة الكويت - المنطقة الصناعية - مجمع دار السلام 2',
+  reportHeaderTitle: 'كشف مالي وتدقيق حسابات معتمد ورسمي',
+  signatoryTitle: 'المدير المالي العام / قسم الحسابات والرقابة'
+};
 
 const PARENT_CATEGORIES = [
   'تشغيلي',
@@ -69,6 +94,27 @@ export default function SettingsManager({ onRefreshParentState }: SettingsManage
   const [categories, setCategories] = useState<CategorySetting[]>([]);
   const [vendors, setVendors] = useState<VendorSetting[]>([]);
   const [employees, setEmployees] = useState<EmployeeSetting[]>([]);
+
+  // Company Profile
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(() => {
+    try {
+      const saved = localStorage.getItem('kwd_company_profile');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return DEFAULT_COMPANY_PROFILE;
+  });
+  const [companySavedSuccess, setCompanySavedSuccess] = useState<boolean>(false);
+
+  // GAS WebApp URL & Connection Testing
+  const [gasUrlInput, setGasUrlInput] = useState<string>(gasService.getGasUrl());
+  const [connectionStatus, setConnectionStatus] = useState<{
+    tested: boolean;
+    success?: boolean;
+    latencyMs?: number;
+    message?: string;
+    error?: string;
+  }>({ tested: false });
+  const [testingConn, setTestingConn] = useState<boolean>(false);
 
   // Modals state
   const [editModalItem, setEditModalItem] = useState<{ type: ActiveSubTab; item?: any } | null>(null);
@@ -95,6 +141,12 @@ export default function SettingsManager({ onRefreshParentState }: SettingsManage
         setCategories(data.settings.categories || []);
         setVendors(data.settings.vendors || []);
         setEmployees(data.settings.employees || []);
+        if (data.settings.companyProfile) {
+          setCompanyProfile(data.settings.companyProfile);
+          try {
+            localStorage.setItem('kwd_company_profile', JSON.stringify(data.settings.companyProfile));
+          } catch (e) {}
+        }
       } else {
         // Fallback or derive from simple arrays
         if (Array.isArray(data?.branches)) {
@@ -124,6 +176,16 @@ export default function SettingsManager({ onRefreshParentState }: SettingsManage
 
   useEffect(() => {
     loadSettings();
+    // Test initial connection passively
+    gasService.testConnection().then(res => {
+      setConnectionStatus({
+        tested: true,
+        success: res.success,
+        latencyMs: res.latencyMs,
+        message: res.message,
+        error: res.error
+      });
+    }).catch(() => {});
   }, []);
 
   // Save Settings
@@ -140,6 +202,7 @@ export default function SettingsManager({ onRefreshParentState }: SettingsManage
         categories: newCategories,
         vendors: newVendors,
         employees: newEmployees,
+        companyProfile,
         lastSync: new Date().toISOString()
       };
       await gasService.updateSettings(payload);
@@ -150,6 +213,62 @@ export default function SettingsManager({ onRefreshParentState }: SettingsManage
       if (onRefreshParentState) onRefreshParentState();
     } catch (err) {
       console.error('Failed to save settings:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTestConnection = async (urlToTest?: string) => {
+    setTestingConn(true);
+    try {
+      const res = await gasService.testConnection(urlToTest || gasUrlInput);
+      setConnectionStatus({
+        tested: true,
+        success: res.success,
+        latencyMs: res.latencyMs,
+        message: res.message,
+        error: res.error
+      });
+    } catch (err: any) {
+      setConnectionStatus({
+        tested: true,
+        success: false,
+        error: err.message || 'فشل الاتصال برابط WebApp'
+      });
+    } finally {
+      setTestingConn(false);
+    }
+  };
+
+  const handleSaveCustomGasUrl = async () => {
+    gasService.setGasUrl(gasUrlInput);
+    await handleTestConnection(gasUrlInput);
+  };
+
+  const handleResetGasUrl = async () => {
+    const defaultUrl = gasService.resetGasUrl();
+    setGasUrlInput(defaultUrl);
+    await handleTestConnection(defaultUrl);
+  };
+
+  const handleSaveCompanyProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      localStorage.setItem('kwd_company_profile', JSON.stringify(companyProfile));
+      await gasService.updateSettings({
+        branches,
+        categories,
+        vendors,
+        employees,
+        companyProfile,
+        lastSync: new Date().toISOString()
+      });
+      setCompanySavedSuccess(true);
+      setTimeout(() => setCompanySavedSuccess(false), 4000);
+      if (onRefreshParentState) onRefreshParentState();
+    } catch (err) {
+      console.error('Failed to save company profile:', err);
     } finally {
       setSaving(false);
     }
@@ -435,68 +554,107 @@ export default function SettingsManager({ onRefreshParentState }: SettingsManage
 
   return (
     <div className="space-y-6 pb-12 font-sans" dir="rtl">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-l from-slate-900 via-slate-800 to-emerald-950 text-white rounded-3xl p-6 lg:p-8 shadow-xl border border-slate-700/60 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none -translate-x-1/2 -translate-y-1/2"></div>
+      {/* Header Banner - Light Executive Theme */}
+      <div className="bg-gradient-to-r from-emerald-50/90 via-white to-sky-50/80 rounded-3xl p-6 lg:p-8 shadow-sm border border-emerald-200/80 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none -translate-x-1/2 -translate-y-1/2"></div>
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-black tracking-wide mb-3">
-              <ShieldCheck size={14} className="text-emerald-400" />
-              <span>ميثاق الحفظ التام وعدم المساس بالبيانات التاريخية</span>
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-100/80 text-emerald-800 border border-emerald-300/80 rounded-full text-xs font-black tracking-wide mb-3">
+              <ShieldCheck size={14} className="text-emerald-600" />
+              <span>ميثاق الحفظ التام وعدم المساس بالبيانات التاريخية (0% حذف)</span>
             </div>
-            <h1 className="text-2xl lg:text-3xl font-black tracking-tight text-white flex items-center gap-3">
+            <h1 className="text-2xl lg:text-3xl font-black tracking-tight text-slate-900 flex items-center gap-3">
               <span>إدارة الإعدادات المركزية والجداول المرجعية</span>
-              <span className="text-xs bg-slate-800 text-slate-300 border border-slate-700 px-3 py-1 rounded-xl font-bold">
-                Settings Sheet
+              <span className="text-xs bg-emerald-100/70 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-xl font-bold">
+                Google Sheets Multi-Sheet Sync
               </span>
             </h1>
-            <p className="text-slate-300 text-sm mt-2 max-w-2xl font-medium leading-relaxed">
-              تحكم مركزي كامل في فروع الشركة، شجرة التصنيفات والبنود، سجل الموردين المعتمدين، ومسؤولي العهد. مع تطبيق صارم لقواعد سلامة الربط المحاسبي (Referential Integrity) لمنع فقدان البيانات.
+            <p className="text-slate-600 text-sm mt-2 max-w-2xl font-medium leading-relaxed">
+              تحكم مركزي كامل في هوية الشركة، الفروع، شجرة التصنيفات، الموردين المعتمدين، ومسؤولي العهد. مع تطبيق صارم لقواعد سلامة الربط المحاسبي ومنع تكرار أو حذف أي صفوف تاريخية في Google Sheets.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            {/* Live Status Pill */}
+            <div className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl border text-xs font-bold ${
+              connectionStatus.tested && connectionStatus.success
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                : connectionStatus.tested && !connectionStatus.success
+                ? 'bg-rose-50 text-rose-800 border-rose-300'
+                : 'bg-slate-100 text-slate-700 border-slate-200'
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${
+                connectionStatus.tested && connectionStatus.success
+                  ? 'bg-emerald-500 animate-pulse'
+                  : connectionStatus.tested && !connectionStatus.success
+                  ? 'bg-rose-500'
+                  : 'bg-amber-400'
+              }`}></span>
+              <span>
+                {connectionStatus.tested && connectionStatus.success
+                  ? `جوجل شيت متصل (${connectionStatus.latencyMs || 0}ms)`
+                  : connectionStatus.tested && !connectionStatus.success
+                  ? 'تعذر الاتصال بالسكريبت'
+                  : 'جاري فحص الاتصال...'}
+              </span>
+            </div>
+
             <button
               onClick={() => loadSettings()}
               disabled={loading}
-              className="flex items-center gap-2 px-4 py-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-2xl text-xs font-bold transition-all shadow-sm hover:shadow active:scale-95 cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-2xl text-xs font-bold transition-all shadow-xs hover:shadow active:scale-95 cursor-pointer disabled:opacity-50"
             >
-              <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+              <RefreshCw size={15} className={loading ? "animate-spin text-emerald-600" : "text-slate-500"} />
               <span>تحديث البيانات</span>
             </button>
             <button
               onClick={() => setActiveTab('scripts')}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black transition-all shadow-lg shadow-emerald-900/30 active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black transition-all shadow-md shadow-emerald-600/20 active:scale-95 cursor-pointer"
             >
               <Code size={15} />
-              <span>سكريبت Google Sheets</span>
+              <span>أكواد وربط Google Sheets</span>
             </button>
           </div>
         </div>
 
         {/* Safety Guarantee Highlights */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-slate-700/60 text-xs">
-          <div className="flex items-center gap-2 text-slate-300">
-            <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
-            <span><strong>شيت Settings:</strong> هيكل مستقل</span>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-slate-200/80 text-xs">
+          <div className="flex items-center gap-2.5 bg-white/80 p-2.5 rounded-2xl border border-slate-200/70 shadow-xs">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></div>
+            <span className="text-slate-700"><strong>شيت Settings:</strong> هيكل مستقل 4 جداول</span>
           </div>
-          <div className="flex items-center gap-2 text-slate-300">
-            <div className="w-2 h-2 rounded-full bg-blue-400"></div>
-            <span><strong>حفظ الحركات:</strong> 0% حذف تاريخي</span>
+          <div className="flex items-center gap-2.5 bg-white/80 p-2.5 rounded-2xl border border-slate-200/70 shadow-xs">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0"></div>
+            <span className="text-slate-700"><strong>الحفظ التاريخي:</strong> 0% حذف أو تفريغ</span>
           </div>
-          <div className="flex items-center gap-2 text-slate-300">
-            <div className="w-2 h-2 rounded-full bg-purple-400"></div>
-            <span><strong>سلامة الربط:</strong> فحص قبل الحذف</span>
+          <div className="flex items-center gap-2.5 bg-white/80 p-2.5 rounded-2xl border border-slate-200/70 shadow-xs">
+            <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0"></div>
+            <span className="text-slate-700"><strong>سلامة الربط:</strong> تدقيق قبل أي إجراء</span>
           </div>
-          <div className="flex items-center gap-2 text-slate-300">
-            <div className="w-2 h-2 rounded-full bg-amber-400"></div>
-            <span><strong>توسيع الأعمدة:</strong> لليمين فقط</span>
+          <div className="flex items-center gap-2.5 bg-white/80 p-2.5 rounded-2xl border border-slate-200/70 shadow-xs">
+            <div className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></div>
+            <span className="text-slate-700"><strong>توسيع الأعمدة:</strong> لليمين فقط بأمان</span>
           </div>
         </div>
       </div>
 
       {/* Navigation SubTabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-200">
+        <button
+          onClick={() => setActiveTab('company')}
+          className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl font-black text-xs transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'company'
+              ? 'bg-slate-900 text-white shadow-md shadow-slate-900/20'
+              : 'bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
+          }`}
+        >
+          <Building2 size={16} />
+          <span>الهوية والبيانات المالية</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'company' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600 font-bold'}`}>
+            عام
+          </span>
+        </button>
+
         <button
           onClick={() => setActiveTab('branches')}
           className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl font-black text-xs transition-all cursor-pointer whitespace-nowrap ${
@@ -561,20 +719,261 @@ export default function SettingsManager({ onRefreshParentState }: SettingsManage
           onClick={() => setActiveTab('scripts')}
           className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl font-black text-xs transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'scripts'
-              ? 'bg-slate-900 text-white shadow-md shadow-slate-900/30'
+              ? 'bg-slate-800 text-white shadow-md shadow-slate-800/30'
               : 'bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
           }`}
         >
           <Code size={16} />
-          <span>أكواد التهيئة والترحيل (GAS)</span>
+          <span>أكواد وربط Google Sheets</span>
           <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold">
-            جاهز
+            نشط ومربوط
           </span>
         </button>
       </div>
 
       {/* Main Tab Contents */}
-      {activeTab !== 'scripts' ? (
+      {activeTab === 'company' ? (
+        /* Company Profile & Official Identity Tab */
+        <div className="bg-white rounded-3xl p-6 lg:p-8 border border-slate-200/90 shadow-sm space-y-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-800 border border-blue-200 rounded-full text-xs font-black mb-2">
+                <Building2 size={13} className="text-blue-600" />
+                <span>البيانات المؤسسية والترويسة الرسمية</span>
+              </div>
+              <h2 className="text-xl font-black text-slate-900">الهوية التجارية والبيئة المالية المعتمدة</h2>
+              <p className="text-xs text-slate-500 font-medium mt-1">
+                تظهر هذه البيانات تلقائياً في ترويسة كافة مستندات الصرف، كشوفات الحساب، وتقارير الأرباح والخسائر والطلبيات.
+              </p>
+            </div>
+
+            {companySavedSuccess && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-2xl text-xs font-black shadow-xs">
+                <CheckCircle2 size={16} className="text-emerald-600" />
+                <span>تم حفظ وتثبيت الهوية المالية بنجاح في المنظومة وشيت جوجل!</span>
+              </div>
+            )}
+          </div>
+
+          <form onSubmit={handleSaveCompanyProfile} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Card 1: Core Identity */}
+              <div className="bg-slate-50/80 rounded-2xl p-5 border border-slate-200/80 space-y-4">
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-200/80 pb-2.5">
+                  <Award size={16} className="text-emerald-600" />
+                  <span>بيانات المنشأة والنشاط</span>
+                </h3>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">اسم المنشأة / الشركة الرسمي *</label>
+                  <input
+                    type="text"
+                    required
+                    value={companyProfile.companyName}
+                    onChange={(e) => setCompanyProfile({ ...companyProfile, companyName: e.target.value })}
+                    placeholder="مثال: مصنع دار السلام 2"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">الشعار أو الوصف التجاري</label>
+                  <input
+                    type="text"
+                    value={companyProfile.brandTagline || ''}
+                    onChange={(e) => setCompanyProfile({ ...companyProfile, brandTagline: e.target.value })}
+                    placeholder="مثال: منظومة الإدارة المالية والتدقيق الرقابي KWD FINANCE PRO"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 transition-all"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                      <DollarSign size={13} className="text-emerald-600" />
+                      <span>العملة المعتمدة</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={companyProfile.currency}
+                      onChange={(e) => setCompanyProfile({ ...companyProfile, currency: e.target.value })}
+                      placeholder="د.ك (دينار كويتي)"
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                      <Calendar size={13} className="text-blue-600" />
+                      <span>السنة المالية</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={companyProfile.fiscalYear}
+                      onChange={(e) => setCompanyProfile({ ...companyProfile, fiscalYear: e.target.value })}
+                      placeholder="2026"
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">رقم السجل التجاري</label>
+                    <input
+                      type="text"
+                      value={companyProfile.crNumber || ''}
+                      onChange={(e) => setCompanyProfile({ ...companyProfile, crNumber: e.target.value })}
+                      placeholder="CR-104928-KWD"
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">الرقم الضريبي / الترخيص</label>
+                    <input
+                      type="text"
+                      value={companyProfile.taxNumber || ''}
+                      onChange={(e) => setCompanyProfile({ ...companyProfile, taxNumber: e.target.value })}
+                      placeholder="TX-49102-KWT"
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 transition-all"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Contact & Report Signatures */}
+              <div className="bg-slate-50/80 rounded-2xl p-5 border border-slate-200/80 space-y-4">
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-200/80 pb-2.5">
+                  <MapPin size={16} className="text-blue-600" />
+                  <span>الاتصال وعناوين الاعتماد الرسمي</span>
+                </h3>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                      <Phone size={13} className="text-slate-500" />
+                      <span>هاتف الإدارة المالية</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={companyProfile.phone || ''}
+                      onChange={(e) => setCompanyProfile({ ...companyProfile, phone: e.target.value })}
+                      placeholder="+965 2200 0000"
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                      <Mail size={13} className="text-slate-500" />
+                      <span>البريد الإلكتروني المعتمد</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={companyProfile.email || ''}
+                      onChange={(e) => setCompanyProfile({ ...companyProfile, email: e.target.value })}
+                      placeholder="finance@daralsalam2.com"
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">العنوان الجغرافي / المقر والمصنع</label>
+                  <input
+                    type="text"
+                    value={companyProfile.address || ''}
+                    onChange={(e) => setCompanyProfile({ ...companyProfile, address: e.target.value })}
+                    placeholder="دولة الكويت - المنطقة الصناعية - مجمع دار السلام 2"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                    <Printer size={13} className="text-purple-600" />
+                    <span>عنوان الترويسة العلوية للمطبوعات</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={companyProfile.reportHeaderTitle || ''}
+                    onChange={(e) => setCompanyProfile({ ...companyProfile, reportHeaderTitle: e.target.value })}
+                    placeholder="كشف مالي وتدقيق حسابات معتمد ورسمي"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">مسمى التوقيع وجهة الاعتماد</label>
+                  <input
+                    type="text"
+                    value={companyProfile.signatoryTitle || ''}
+                    onChange={(e) => setCompanyProfile({ ...companyProfile, signatoryTitle: e.target.value })}
+                    placeholder="المدير المالي العام / قسم الحسابات والرقابة"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Official Letterhead Live Preview */}
+            <div className="bg-slate-50/60 rounded-3xl p-6 border border-slate-200/80 space-y-3">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-600 mb-2">
+                <span className="flex items-center gap-2">
+                  <Printer size={15} className="text-slate-500" />
+                  <span>معاينة حية لترويسة المستندات والتقارير المطبوعة الرسمية</span>
+                </span>
+                <span className="text-[11px] bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-bold">
+                  تحديث فوري
+                </span>
+              </div>
+
+              <div className="bg-white rounded-2xl p-6 border border-slate-300/80 shadow-xs text-right relative overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b-2 border-slate-900 pb-4">
+                  <div>
+                    <h4 className="text-xl font-black text-slate-900">{companyProfile.companyName || 'اسم الشركة'}</h4>
+                    <p className="text-xs text-slate-500 font-bold mt-0.5">{companyProfile.brandTagline}</p>
+                    <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600 mt-2 font-medium">
+                      {companyProfile.crNumber && <span>س.ت: <strong>{companyProfile.crNumber}</strong></span>}
+                      {companyProfile.taxNumber && <span>ر.ض: <strong>{companyProfile.taxNumber}</strong></span>}
+                      {companyProfile.phone && <span>هاتف: <strong>{companyProfile.phone}</strong></span>}
+                      {companyProfile.address && <span>المقر: <strong>{companyProfile.address}</strong></span>}
+                    </div>
+                  </div>
+
+                  <div className="text-right sm:text-left border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
+                    <span className="text-xs font-black text-emerald-800 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200 inline-block mb-1">
+                      {companyProfile.currency || 'د.ك'}
+                    </span>
+                    <p className="text-[11px] font-bold text-slate-500">السنة المالية: {companyProfile.fiscalYear || '2026'}</p>
+                    <p className="text-[10px] text-slate-400 font-mono mt-1">وثيقة رسمية معتمدة</p>
+                  </div>
+                </div>
+
+                <div className="pt-3 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+                  <span>العنوان المطبوع: <strong>{companyProfile.reportHeaderTitle || 'كشف رسمي'}</strong></span>
+                  <span>المفوض بالاعتماد: <strong>{companyProfile.signatoryTitle || 'الإدارة المالية'}</strong></span>
+                </div>
+              </div>
+            </div>
+
+            {/* Submit Action Button */}
+            <div className="flex justify-end pt-3">
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex items-center gap-2 px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black shadow-lg shadow-emerald-600/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Save size={16} />
+                <span>{saving ? 'جاري الحفظ والتثبيت...' : 'حفظ وتثبيت البيانات المؤسسية'}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : activeTab !== 'scripts' ? (
         <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-6">
           {/* Controls Bar */}
           <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
@@ -913,6 +1312,112 @@ export default function SettingsManager({ onRefreshParentState }: SettingsManage
       ) : (
         /* Google Apps Script & Safe Migration Tab */
         <div className="space-y-6">
+          {/* Live WebApp Connection Controller Card */}
+          <div className="bg-white rounded-3xl p-6 lg:p-7 border border-emerald-200/90 shadow-sm space-y-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-black mb-1.5">
+                  <Wifi size={13} className="text-emerald-600" />
+                  <span>محرك الربط المباشر مع Google Sheets WebApp</span>
+                </div>
+                <h3 className="text-lg font-black text-slate-900">إدارة رابط النشر والاتصال الحي</h3>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  يمكنك تعديل رابط الـ WebApp الخاص بسكريبت جوجل في أي وقت أو فحص سرعة الاستجابة اللحظية دون فقدان أي بيانات.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleTestConnection()}
+                  disabled={testingConn}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black transition-all shadow-xs active:scale-95 cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw size={14} className={testingConn ? "animate-spin" : ""} />
+                  <span>{testingConn ? 'جاري الفحص...' : 'فحص الاتصال الحي الآن'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetGasUrl}
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  title="استعادة الرابط الافتراضي"
+                >
+                  استعادة الافتراضي
+                </button>
+              </div>
+            </div>
+
+            {/* URL input field */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="relative flex-1">
+                <Globe size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={gasUrlInput}
+                  onChange={(e) => setGasUrlInput(e.target.value)}
+                  placeholder="https://script.google.com/macros/s/.../exec"
+                  className="w-full pr-10 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-emerald-500 focus:bg-white transition-all text-left"
+                  dir="ltr"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveCustomGasUrl}
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black transition-all shadow-xs active:scale-95 cursor-pointer whitespace-nowrap"
+              >
+                تحديث وحفظ الرابط
+              </button>
+            </div>
+
+            {/* Connection feedback box */}
+            {connectionStatus.tested && (
+              <div className={`p-4 rounded-2xl border text-xs font-bold flex items-center justify-between gap-3 ${
+                connectionStatus.success
+                  ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                  : 'bg-rose-50 text-rose-900 border-rose-300'
+              }`}>
+                <div className="flex items-center gap-2.5">
+                  {connectionStatus.success ? (
+                    <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertTriangle size={18} className="text-rose-600 shrink-0" />
+                  )}
+                  <span>{connectionStatus.success ? connectionStatus.message : connectionStatus.error}</span>
+                </div>
+                {connectionStatus.latencyMs !== undefined && (
+                  <span className="font-mono text-[11px] bg-white/80 px-2.5 py-1 rounded-lg border border-slate-200 text-slate-700">
+                    زمن الاستجابة: {connectionStatus.latencyMs}ms
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Toolbar Menu Notice */}
+            <div className="bg-gradient-to-r from-sky-50 via-slate-50 to-emerald-50 rounded-2xl p-4 border border-sky-200 text-xs text-slate-700 space-y-2">
+              <div className="flex items-center gap-2 font-black text-sky-900">
+                <Sparkles size={16} className="text-sky-600" />
+                <span>قائمة شريط الأدوات التفاعلية المدمجة في Google Sheets (onOpen Menu)</span>
+              </div>
+              <p className="font-medium text-slate-600 leading-relaxed">
+                تم تضمين دالة <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-mono text-slate-900 font-bold">onOpen(e)</code> داخل السكريبت أدناه. بمجرد فتحك لملف Google Sheets ستجد قائمة مخصصة جديدة باسم <strong className="text-slate-900">"🏢 منظومة KWD FINANCE PRO"</strong> في أعلى الشاشة تمكّنك بنقرة واحدة من:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 font-bold text-slate-800 text-[11px]">
+                <div className="bg-white/80 p-2 rounded-xl border border-slate-200/60 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span>التهيئة الشاملة للشيتات الستة</span>
+                </div>
+                <div className="bg-white/80 p-2 rounded-xl border border-slate-200/60 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                  <span>التحديث الآمن للأعمدة لليمين</span>
+                </div>
+                <div className="bg-white/80 p-2 rounded-xl border border-slate-200/60 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                  <span>الانتقال الفوري بين الشيتات المعتمدة</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Action triggers */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div className="bg-white rounded-3xl p-6 border border-emerald-200 shadow-sm flex flex-col justify-between">

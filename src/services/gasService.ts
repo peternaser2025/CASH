@@ -3,10 +3,17 @@ import { apiService } from './apiService';
 import { isAccrualType, calculateRowCashFlow } from '../utils/format';
 import { toFils, toKWD } from '../utils/money';
 
-// Standard Vite env variable access
-const VITE_GAS_URL = (import.meta as any).env.VITE_GAS_URL;
-// Fallback to the known URL if the env variable is missing
-const GAS_URL = VITE_GAS_URL || 'https://script.google.com/macros/s/AKfycbwFEmOuT2zpaXd3eltQLf0GOkllzHjMUQCcYxxiyYpvA0VtCY5L9nZVPm3grJ3x9852iQ/exec';
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwFEmOuT2zpaXd3eltQLf0GOkllzHjMUQCcYxxiyYpvA0VtCY5L9nZVPm3grJ3x9852iQ/exec';
+
+export function getEffectiveGasUrl(): string {
+  try {
+    const saved = localStorage.getItem('kwd_gas_webapp_url');
+    if (saved && saved.trim().startsWith('http')) return saved.trim();
+  } catch (e) {}
+  return (import.meta as any).env.VITE_GAS_URL || DEFAULT_GAS_URL;
+}
+
+let GAS_URL = getEffectiveGasUrl();
 
 // Smart Cache Store
 const reportCache: Map<string, { data: ReportData; timestamp: number }> = new Map();
@@ -87,7 +94,41 @@ function safeParseGasResponse(text: string, responseOk: boolean = true): { succe
 
 export const gasService = {
   getGasUrl(): string {
+    GAS_URL = getEffectiveGasUrl();
     return GAS_URL;
+  },
+
+  setGasUrl(url: string) {
+    if (url && url.trim().startsWith('http')) {
+      localStorage.setItem('kwd_gas_webapp_url', url.trim());
+      GAS_URL = url.trim();
+    } else {
+      localStorage.removeItem('kwd_gas_webapp_url');
+      GAS_URL = getEffectiveGasUrl();
+    }
+    this.clearCache();
+  },
+
+  resetGasUrl(): string {
+    localStorage.removeItem('kwd_gas_webapp_url');
+    GAS_URL = DEFAULT_GAS_URL;
+    this.clearCache();
+    return DEFAULT_GAS_URL;
+  },
+
+  async testConnection(customUrl?: string): Promise<{ success: boolean; latencyMs?: number; message?: string; error?: string }> {
+    const targetUrl = customUrl?.trim() || this.getGasUrl();
+    const start = Date.now();
+    try {
+      const response = await fetch(targetUrl, { method: 'GET', redirect: 'follow' });
+      const latencyMs = Date.now() - start;
+      if (response.ok) {
+        return { success: true, latencyMs, message: `الاتصال نشط وسريع بنجاح (${latencyMs}ms)` };
+      }
+      return { success: false, error: `استجابة غير متوقعة: كود ${response.status}` };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'تعذر الاتصال برابط WebApp. يرجى التأكد من نشر السكريبت بصلاحية Anyone' };
+    }
   },
 
   clearCache() {

@@ -849,6 +849,47 @@ function doPost(e) {
  * دالة إنشاء أو فحص شيت الإعدادات (Settings)
  * تفحص وجود الجداول، وتنشئ الناقص فقط دون مساس بأي بيانات سابقة
  */
+/**
+ * القائمة التفاعلية الرسمية أعلى شيت إكسيل (Google Sheets Toolbar Menu)
+ * تظهر تلقائياً بمجرد فتح الشيت للمدير والمحاسبين
+ */
+function onOpen(e) {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    ui.createMenu('🏢 منظومة KWD FINANCE PRO')
+      .addItem('🚀 ترقية وتنسيق كافة الشيتات (setupAllEnterpriseSheets)', 'setupAllEnterpriseSheets')
+      .addItem('📋 تهيئة وتنسيق شيت الإعدادات المركزية (setupSettingsSheet)', 'setupSettingsSheet')
+      .addItem('🛡️ التحديث الآمن للأعمدة جهة اليمين (safeSchemaUpdate)', 'safeSchemaUpdate')
+      .addSeparator()
+      .addItem('📊 فتح شيت الأرباح والخسائر المعتمدة', 'openProfitLossSheet')
+      .addItem('📦 فتح شيت إدارة ومواعيد الطلبيات', 'openOrdersSheet')
+      .addItem('🎯 فتح شيت أسقف الموازنات والانحرافات', 'openBudgetsSheet')
+      .addToUi();
+  } catch(err) {}
+}
+
+function openProfitLossSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('ProfitLoss_Reports') || ss.getSheetByName('الارباح_والخسائر');
+  if (sheet) ss.setActiveSheet(sheet);
+}
+
+function openOrdersSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Orders') || ss.getSheetByName('الطلبيات');
+  if (sheet) ss.setActiveSheet(sheet);
+}
+
+function openBudgetsSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Budgets') || ss.getSheetByName('الموازنات');
+  if (sheet) ss.setActiveSheet(sheet);
+}
+
+/**
+ * دالة إنشاء أو فحص شيت الإعدادات (Settings)
+ * تفحص وجود الجداول، وتنسق المظهر الفاتح الراقي دون مساس بالبيانات السابقة
+ */
 function setupSettingsSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var settingsSheet = ss.getSheetByName('Settings');
@@ -859,14 +900,15 @@ function setupSettingsSheet() {
     logAction(logSheet, 'CREATE_SETTINGS_SHEET', 'تم إنشاء شيت الإعدادات Settings لأول مرة', 'نجاح');
   }
   
+  try { settingsSheet.setRightToLeft(true); } catch(e) {}
+  
   var lastRow = settingsSheet.getLastRow();
   if (lastRow === 0) {
-    // تنسيق وإنشاء العناوين
     // 1. الفروع (Cols A-C)
     settingsSheet.getRange('A1:C1').merge().setValue('فروع الشركة (Branches)')
-      .setBackground('#047857').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
+      .setBackground('#059669').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
     settingsSheet.getRange('A2:C2').setValues([['BranchID', 'BranchName', 'IsActive']])
-      .setBackground('#065f46').setFontColor('#ffffff').setFontWeight('bold');
+      .setBackground('#10b981').setFontColor('#ffffff').setFontWeight('bold');
     
     var defaultBranches = [
       ['BR-001', 'الرئيسي', true],
@@ -880,9 +922,9 @@ function setupSettingsSheet() {
 
     // 2. التصنيفات (Cols E-H)
     settingsSheet.getRange('E1:H1').merge().setValue('التصنيفات والبنود (Categories)')
-      .setBackground('#1e40af').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
+      .setBackground('#2563eb').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
     settingsSheet.getRange('E2:H2').setValues([['CategoryID', 'CategoryName', 'ParentCategory', 'IsActive']])
-      .setBackground('#1e3a8a').setFontColor('#ffffff').setFontWeight('bold');
+      .setBackground('#3b82f6').setFontColor('#ffffff').setFontWeight('bold');
     
     var defaultCategories = [
       ['CAT-001', 'مشتريات', 'تشغيلي', true],
@@ -899,9 +941,9 @@ function setupSettingsSheet() {
 
     // 3. الموردون (Cols J-M)
     settingsSheet.getRange('J1:M1').merge().setValue('الموردون والشركات (Vendors)')
-      .setBackground('#6b21a8').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
+      .setBackground('#7c3aed').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
     settingsSheet.getRange('J2:M2').setValues([['VendorID', 'VendorName', 'ContactInfo', 'IsActive']])
-      .setBackground('#581c87').setFontColor('#ffffff').setFontWeight('bold');
+      .setBackground('#8b5cf6').setFontColor('#ffffff').setFontWeight('bold');
     
     var defaultVendors = [
       ['VEN-001', 'شركة المواد الغذائية المتحدة', '22450000', true],
@@ -913,9 +955,9 @@ function setupSettingsSheet() {
 
     // 4. الموظفون (Cols O-R)
     settingsSheet.getRange('O1:R1').merge().setValue('الموظفون والمسؤولون (Employees)')
-      .setBackground('#b45309').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
+      .setBackground('#d97706').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
     settingsSheet.getRange('O2:R2').setValues([['EmployeeID', 'EmployeeName', 'Role', 'IsActive']])
-      .setBackground('#92400e').setFontColor('#ffffff').setFontWeight('bold');
+      .setBackground('#f59e0b').setFontColor('#ffffff').setFontWeight('bold');
     
     var defaultEmployees = [
       ['EMP-001', 'بيتر ناصر', 'أمين عهدة / محاسب', true],
@@ -925,12 +967,21 @@ function setupSettingsSheet() {
     ];
     settingsSheet.getRange(3, 15, defaultEmployees.length, 4).setValues(defaultEmployees);
 
+    // فواصل الأعمدة الأنيقة الفاتحة
+    settingsSheet.getRange('D1:D100').setBackground('#f8fafc');
+    settingsSheet.getRange('I1:I100').setBackground('#f8fafc');
+    settingsSheet.getRange('N1:N100').setBackground('#f8fafc');
+    settingsSheet.setColumnWidth(4, 25);
+    settingsSheet.setColumnWidth(9, 25);
+    settingsSheet.setColumnWidth(14, 25);
+    settingsSheet.setFrozenRows(2);
+
     logAction(logSheet, 'INIT_SETTINGS_TABLES', 'تمت تهيئة الجداول الأربعة الافتراضية بنجاح', 'نجاح');
   } else {
     logAction(logSheet, 'VERIFY_SETTINGS_SHEET', 'تم التحقق من شيت الإعدادات، البيانات الحالية محفوظة 100%', 'مكتمل');
   }
 
-  return { success: true, message: 'تم إعداد شيت Settings والتحقق من الجداول الفرعية بأمان تام' };
+  return { success: true, message: 'تم إعداد وتنسيق شيت Settings والتحقق من الجداول بأمان تام' };
 }
 
 /**
@@ -946,11 +997,16 @@ function safeSchemaUpdate() {
     return { success: false, error: 'لم يتم العثور على شيت المعاملات' };
   }
 
+  try { targetSheet.setRightToLeft(true); } catch(e) {}
+
   var lastCol = targetSheet.getLastColumn();
   if (lastCol === 0) {
     var baselineHeaders = ['الرقم التعريفى', 'التاريخ', 'النوع', 'البند والتصنيف', 'الموظف / الصندوق', 'المبلغ (د.ك)', 'الملاحظات والبيان', 'الفرع', 'targetMonth', 'vendorName', 'linkedAccrualId', 'isSettlement'];
     targetSheet.appendRow(baselineHeaders);
-    logAction(logSheet, 'INIT_HEADERS', 'تمت كتابة العناوين الأساسية لشيت المعاملات', 'نجاح');
+    targetSheet.getRange('A1:L1').setBackground('#0284c7').setFontColor('#ffffff').setFontWeight('bold');
+    targetSheet.setRowHeight(1, 35);
+    targetSheet.setFrozenRows(1);
+    logAction(logSheet, 'INIT_HEADERS', 'تمت كتابة وتنسيق العناوين الأساسية لشيت المعاملات', 'نجاح');
     return { success: true, addedColumns: baselineHeaders };
   }
 
@@ -980,11 +1036,18 @@ function safeSchemaUpdate() {
 
     if (!exists) {
       currentLastCol++;
-      targetSheet.getRange(1, currentLastCol).setValue(col.label);
+      targetSheet.getRange(1, currentLastCol).setValue(col.label).setBackground('#0284c7').setFontColor('#ffffff').setFontWeight('bold');
       added.push(col.label);
       logAction(logSheet, 'APPEND_COLUMN_SAFE', 'إضافة عمود آمن جهة اليمين: ' + col.label + ' (العمود ' + currentLastCol + ')', 'نجاح');
     }
   }
+
+  // تنسيق عمود المبلغ المالي (العمود 6) إن وجد
+  try {
+    if (targetSheet.getLastRow() > 1) {
+      targetSheet.getRange(2, 6, targetSheet.getLastRow() - 1, 1).setNumberFormat('#,##0.000');
+    }
+  } catch(e) {}
 
   return {
     success: true,
@@ -1023,8 +1086,8 @@ function onEdit(e) {
 }
 
 /**
- * التهيئة الشاملة لكافة شيتات المنظومة (setupAllEnterpriseSheets)
- * تنشئ شيتات الأرباح والخسائر والطلبيات والموازنات التقديرية بأمان تام ودون حذف
+ * التهيئة والترقية الشاملة لكافة شيتات المنظومة (setupAllEnterpriseSheets)
+ * تنشئ وتنسق شيتات المنظومة الستة بألوان فاتحة وواضحة ودون مساس بأي بيانات سابقة
  */
 function setupAllEnterpriseSheets() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1035,65 +1098,86 @@ function setupAllEnterpriseSheets() {
   if (!mainSheet) {
     mainSheet = ss.insertSheet('البيانات');
     mainSheet.appendRow(['الرقم التعريفى', 'التاريخ', 'النوع', 'البند والتصنيف', 'الموظف / الصندوق', 'المبلغ (د.ك)', 'الملاحظات والبيان', 'الفرع', 'targetMonth', 'vendorName', 'linkedAccrualId', 'isSettlement']);
-    mainSheet.getRange('A1:L1').setBackground('#0f172a').setFontColor('#ffffff').setFontWeight('bold');
-    logAction(logSheet, 'CREATE_MAIN_SHEET', 'تم إنشاء شيت البيانات الرئيسي', 'نجاح');
+    mainSheet.getRange('A1:L1').setBackground('#0284c7').setFontColor('#ffffff').setFontWeight('bold');
+    mainSheet.setRowHeight(1, 35);
+    mainSheet.setFrozenRows(1);
+    logAction(logSheet, 'CREATE_MAIN_SHEET', 'تم إنشاء شيت البيانات الرئيسي بألوان فاتحة وواضحة', 'نجاح');
   } else {
     safeSchemaUpdate();
   }
+  try { mainSheet.setRightToLeft(true); } catch(e) {}
 
   // 2. شيت الإعدادات
   setupSettingsSheet();
 
   // 3. شيت تقارير الأرباح والخسائر المعتمدة (ProfitLoss_Reports)
   var pnlSheet = ss.getSheetByName('ProfitLoss_Reports') || ss.getSheetByName('الارباح_والخسائر') || ss.getSheetByName('الأرباح_والخسائر');
+  var pnlHeaders = [
+    'رقم_التقرير', 'التاريخ', 'السنة', 'الشهر', 'الفرع', 
+    'إجمالي_الإيرادات', 'مخزون_أول_المدة', 'مشتريات_الفترة', 'مخزون_آخر_المدة', 
+    'تكلفة_البضاعة_COGS', 'مجمل_الربح', 'المصروفات_التشغيلية', 'المصروفات_المستحقة', 
+    'صافي_الربح_والخسارة', 'ملاحظات_وإيضاحات', 'تاريخ_الاعتماد_والحفظ'
+  ];
   if (!pnlSheet) {
     pnlSheet = ss.insertSheet('ProfitLoss_Reports');
-    var pnlHeaders = [
-      'رقم_التقرير', 'التاريخ', 'السنة', 'الشهر', 'الفرع', 
-      'إجمالي_الإيرادات', 'مخزون_أول_المدة', 'مشتريات_الفترة', 'مخزون_آخر_المدة', 
-      'تكلفة_البضاعة_COGS', 'مجمل_الربح', 'المصروفات_التشغيلية', 'المصروفات_المستحقة', 
-      'صافي_الربح_والخسارة', 'ملاحظات_وإيضاحات', 'تاريخ_الاعتماد_والحفظ'
-    ];
     pnlSheet.appendRow(pnlHeaders);
-    pnlSheet.getRange(1, 1, 1, pnlHeaders.length).setBackground('#0b1d36').setFontColor('#ffffff').setFontWeight('bold');
-    pnlSheet.setFrozenRows(1);
     logAction(logSheet, 'CREATE_PNL_SHEET', 'تم إنشاء شيت تقارير الأرباح والخسائر ProfitLoss_Reports', 'نجاح');
   }
+  pnlSheet.getRange(1, 1, 1, pnlHeaders.length).setBackground('#0f766e').setFontColor('#ffffff').setFontWeight('bold');
+  pnlSheet.setRowHeight(1, 35);
+  pnlSheet.setFrozenRows(1);
+  try { pnlSheet.setRightToLeft(true); } catch(e) {}
 
   // 4. شيت إدارة ومواعيد الطلبيات (Orders)
   var ordersSheet = ss.getSheetByName('Orders') || ss.getSheetByName('الطلبيات');
+  var ordersHeaders = [
+    'رقم_الطلبية', 'تاريخ_الإنشاء', 'العنوان_أو_البند', 'النوع', 'العميل_أو_المورد', 
+    'الفرع', 'تاريخ_التسليم_المحدد', 'إجمالي_المبلغ', 'المدفوع', 'المتبقي', 
+    'حالة_التنفيذ', 'الأولوية', 'حالة_الدفع', 'الموظف_المسؤول', 'الهاتف', 
+    'الملاحظات_والشروط', 'تفاصيل_البنود_JSON', 'تاريخ_التحديث'
+  ];
   if (!ordersSheet) {
     ordersSheet = ss.insertSheet('Orders');
-    var ordersHeaders = [
-      'رقم_الطلبية', 'تاريخ_الإنشاء', 'العنوان_أو_البند', 'النوع', 'العميل_أو_المورد', 
-      'الفرع', 'تاريخ_التسليم_المحدد', 'إجمالي_المبلغ', 'المدفوع', 'المتبقي', 
-      'حالة_التنفيذ', 'الأولوية', 'حالة_الدفع', 'الموظف_المسؤول', 'الهاتف', 
-      'الملاحظات_والشروط', 'تفاصيل_البنود_JSON', 'تاريخ_التحديث'
-    ];
     ordersSheet.appendRow(ordersHeaders);
-    ordersSheet.getRange(1, 1, 1, ordersHeaders.length).setBackground('#134e4a').setFontColor('#ffffff').setFontWeight('bold');
-    ordersSheet.setFrozenRows(1);
     logAction(logSheet, 'CREATE_ORDERS_SHEET', 'تم إنشاء شيت إدارة ومواعيد الطلبيات Orders', 'نجاح');
   }
+  ordersSheet.getRange(1, 1, 1, ordersHeaders.length).setBackground('#0369a1').setFontColor('#ffffff').setFontWeight('bold');
+  ordersSheet.setRowHeight(1, 35);
+  ordersSheet.setFrozenRows(1);
+  try { ordersSheet.setRightToLeft(true); } catch(e) {}
 
   // 5. شيت الموازنات التقديرية (Budgets)
   var budgetSheet = ss.getSheetByName('Budgets') || ss.getSheetByName('الموازنات');
+  var budgetHeaders = [
+    'السنة', 'الشهر', 'الفرع', 'بند_المصروف_أو_التصنيف', 
+    'سقف_الموازنة_التقديرية', 'المنصرف_الفعلي', 'نسبة_الاستهلاك_%', 'الحالة_الرقابية', 'تاريخ_الاعتماد'
+  ];
   if (!budgetSheet) {
     budgetSheet = ss.insertSheet('Budgets');
-    var budgetHeaders = [
-      'السنة', 'الشهر', 'الفرع', 'بند_المصروف_أو_التصنيف', 
-      'سقف_الموازنة_التقديرية', 'المنصرف_الفعلي', 'نسبة_الاستهلاك_%', 'الحالة_الرقابية', 'تاريخ_الاعتماد'
-    ];
     budgetSheet.appendRow(budgetHeaders);
-    budgetSheet.getRange(1, 1, 1, budgetHeaders.length).setBackground('#1e3a8a').setFontColor('#ffffff').setFontWeight('bold');
-    budgetSheet.setFrozenRows(1);
     logAction(logSheet, 'CREATE_BUDGETS_SHEET', 'تم إنشاء شيت الموازنات التقديرية Budgets', 'نجاح');
   }
+  budgetSheet.getRange(1, 1, 1, budgetHeaders.length).setBackground('#4338ca').setFontColor('#ffffff').setFontWeight('bold');
+  budgetSheet.setRowHeight(1, 35);
+  budgetSheet.setFrozenRows(1);
+  try { budgetSheet.setRightToLeft(true); } catch(e) {}
 
-  logAction(logSheet, 'SETUP_ALL_ENTERPRISE', 'تم فحص وتهيئة كافة شيتات النظام المعتمد بنجاح', 'نجاح');
+  // تنسيق سجل التدقيق والرقابة (SetupLog)
+  if (logSheet) {
+    try { logSheet.setRightToLeft(true); } catch(e) {}
+    logSheet.getRange('A1:D1').setBackground('#475569').setFontColor('#ffffff').setFontWeight('bold');
+  }
+
+  logAction(logSheet, 'SETUP_ALL_ENTERPRISE', 'تم فحص وترقية وتنسيق كافة شيتات المنظومة (RTL وألوان فاتحة وواضحة)', 'نجاح');
+  
+  try {
+    ss.toast('تمت الترقية الشاملة وتنسيق كافة الشيتات بنجاح دون حذف أي بيانات', 'منظومة KWD المالية', 6);
+  } catch(e) {}
+
   return { 
     success: true, 
-    message: 'تم فحص وتهيئة كافة شيتات المنظومة (البيانات، Settings، ProfitLoss_Reports، Orders، Budgets، SetupLog) بأمان تام ودون حذف'
+    sheetsCount: 6,
+    message: 'تم فحص وترقية كافة شيتات المنظومة (البيانات، Settings، ProfitLoss_Reports، Orders، Budgets، SetupLog) بتنسيق عربي RTL وألوان فاتحة دون حذف أي سجل'
   };
 }
 
@@ -1102,7 +1186,8 @@ function getOrCreateSetupLogSheet(ss) {
   if (!logSheet) {
     logSheet = ss.insertSheet('SetupLog');
     logSheet.appendRow(['التاريخ والوقت', 'نوع الإجراء', 'التفاصيل', 'الحالة']);
-    logSheet.getRange('A1:D1').setBackground('#1f2937').setFontColor('#ffffff').setFontWeight('bold');
+    logSheet.getRange('A1:D1').setBackground('#475569').setFontColor('#ffffff').setFontWeight('bold');
+    try { logSheet.setRightToLeft(true); } catch(e) {}
   }
   return logSheet;
 }
