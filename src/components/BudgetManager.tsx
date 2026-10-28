@@ -110,6 +110,24 @@ export default function BudgetManager({
       { type: 'branches', data: branchBudgets, updatedAt: new Date().toISOString() }
     ]).catch(err => console.warn('Budget backend sync:', err));
 
+    // Sync with Google Sheets Budgets sheet
+    try {
+      const [year, month] = selectedMonth.split('-');
+      const budgetsToSync = Object.entries(categoryBudgets).map(([cat, limit]) => ({
+        year,
+        month,
+        branch: 'ALL',
+        category: cat,
+        limit,
+        budgetLimit: limit,
+        actual: budgetAnalytics.actualSpending[cat] || 0,
+        actualSpent: budgetAnalytics.actualSpending[cat] || 0
+      }));
+      gasService.saveBudgets(budgetsToSync).catch(err => {
+        console.warn('Google Sheets budget sync failed:', err);
+      });
+    } catch (e) {}
+
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };

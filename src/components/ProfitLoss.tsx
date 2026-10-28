@@ -590,7 +590,34 @@ export default function ProfitLoss({ branches: propBranches = [], categories = [
         }).catch(() => {});
       } catch (e) {}
 
-      if (showToast) toast(`تم حفظ وتحديث بيانات شهر ${periodKey} بنجاح`);
+      // Asynchronously backup to Google Sheets ProfitLoss_Reports sheet
+      try {
+        const [pYear, pMonth] = periodKey.split('-');
+        gasService.saveProfitLoss({
+          id: `PNL-${periodKey}-${selBranch || 'ALL'}`,
+          year: pYear || new Date().getFullYear().toString(),
+          month: pMonth || (new Date().getMonth() + 1).toString(),
+          branch: selBranch === 'ALL' ? 'الكل' : (selBranch || 'الكل'),
+          date: new Date().toISOString().split('T')[0],
+          income: stats.income,
+          totalRevenue: stats.income,
+          openingStock: stats.op,
+          openingInventory: stats.op,
+          purchases: stats.purchases,
+          closingStock: stats.cl,
+          endingInventory: stats.cl,
+          cogs: stats.cogs,
+          grossProfit: stats.gross,
+          opex: stats.opex,
+          operatingExpenses: stats.opex,
+          accrued: stats.accrued,
+          accruedExpenses: stats.accrued,
+          netProfit: stats.net,
+          notes: `إغلاق واعتماد شهر ${periodKey} فرع ${selBranch === 'ALL' ? 'الكل' : selBranch}`
+        }).catch(err => console.warn('GAS PnL save warning:', err));
+      } catch (e) {}
+
+      if (showToast) toast(`تم حفظ وتحديث بيانات شهر ${periodKey} بنجاح في النظام وشيت Google`);
     } catch (e: any) {
       toast('فشل الحفظ: ' + (e.message || ''));
     }

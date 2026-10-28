@@ -28,6 +28,7 @@ import { Order, OrderItem, OrderPriority, OrderStatus, OrderType, PaymentStatus 
 import { formatKWD, normalizeArabicSearch } from '../utils/format';
 import { exportElementToPDF } from '../utils/pdfExport';
 import { apiService } from '../services/apiService';
+import { gasService } from '../services/gasService';
 import PrintHeader from './print/PrintHeader';
 import PrintSignatures from './print/PrintSignatures';
 import OrderInvoicePrintModal from './OrderInvoicePrintModal';
@@ -508,6 +509,10 @@ export default function OrdersManager({
     apiService.saveOrder(orderToSave).catch(err => {
       console.warn('Background server save failed for order, saved locally:', err);
     });
+    // Persist to Google Sheets Orders sheet
+    gasService.saveOrder(orderToSave).catch(err => {
+      console.warn('Background Google Sheets save failed for order:', err);
+    });
 
     setIsFormModalOpen(false);
     setEditingOrder(null);
@@ -543,6 +548,7 @@ export default function OrdersManager({
 
     if (updatedOrderObj) {
       apiService.saveOrder(updatedOrderObj).catch(() => {});
+      gasService.saveOrder(updatedOrderObj).catch(() => {});
     }
 
     if (selectedOrderDetails && selectedOrderDetails.id === orderId) {

@@ -361,6 +361,33 @@ export default function SettingsManager({ onRefreshParentState }: SettingsManage
     }
   };
 
+  const handleRunSetupAllEnterprise = async () => {
+    setScriptFeedback(null);
+    setLoading(true);
+    try {
+      const res = await gasService.setupAllEnterpriseSheets();
+      if (res.success) {
+        setScriptFeedback({
+          type: 'success',
+          message: res.message || 'تم فحص وتهيئة كافة شيتات المنظومة (البيانات، Settings، ProfitLoss_Reports، Orders، Budgets، SetupLog) بأمان تام!'
+        });
+        await loadSettings();
+      } else {
+        setScriptFeedback({
+          type: 'error',
+          message: res.error || 'تعذر استكمال التهيئة الشاملة تلقائياً.'
+        });
+      }
+    } catch (e: any) {
+      setScriptFeedback({
+        type: 'error',
+        message: e.message || 'خطأ أثناء الاتصال بسكريبت Google'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const copyScriptToClipboard = () => {
     navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_FULL_CODE);
     setCopiedCode(true);
@@ -887,7 +914,7 @@ export default function SettingsManager({ onRefreshParentState }: SettingsManage
         /* Google Apps Script & Safe Migration Tab */
         <div className="space-y-6">
           {/* Action triggers */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div className="bg-white rounded-3xl p-6 border border-emerald-200 shadow-sm flex flex-col justify-between">
               <div>
                 <div className="flex items-center gap-3 mb-3">
@@ -909,7 +936,7 @@ export default function SettingsManager({ onRefreshParentState }: SettingsManage
                 className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black shadow-md shadow-emerald-600/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
               >
                 <Sparkles size={16} />
-                <span>تشغيل الفحص والتهيئة في Google Sheets الآن</span>
+                <span>تشغيل الفحص والتهيئة في Google Sheets</span>
               </button>
             </div>
 
@@ -934,7 +961,32 @@ export default function SettingsManager({ onRefreshParentState }: SettingsManage
                 className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-xs font-black shadow-md shadow-blue-600/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
               >
                 <Layers size={16} />
-                <span>تشغيل التحديث الآمن للأعمدة الآن</span>
+                <span>تشغيل التحديث الآمن للأعمدة</span>
+              </button>
+            </div>
+
+            <div className="bg-white rounded-3xl p-6 border border-indigo-200 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2.5 bg-indigo-100 text-indigo-800 rounded-2xl">
+                    <Sparkles size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900">3. الترقية والتهيئة الشاملة setupAllEnterpriseSheets()</h3>
+                    <p className="text-xs text-slate-500 font-medium">تهيئة شيتات الأرباح، الطلبيات، والموازنات والرقابة</p>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed mb-4">
+                  ينشئ ويفحص تلقائياً شيتات المنظومة: <strong>ProfitLoss_Reports</strong> (الأرباح والخسائر)، <strong>Orders</strong> (الطلبيات والتوريد)، <strong>Budgets</strong> (الموازنات التقديرية)، و <strong>SetupLog</strong> (سجل التدقيق الرقابي) دون حذف أي صفوف نهائياً.
+                </p>
+              </div>
+              <button
+                onClick={handleRunSetupAllEnterprise}
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-600/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Sparkles size={16} />
+                <span>تشغيل الترقية الشاملة لكافة الشيتات الآن</span>
               </button>
             </div>
           </div>

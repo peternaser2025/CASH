@@ -648,5 +648,158 @@ export const gasService = {
       console.warn('Fiscal year archiving connection warning:', error);
       return { success: false, error: 'خطأ أثناء الاتصال بسيرفر الأرشفة' };
     }
+  },
+
+  async saveProfitLoss(data: any): Promise<{ success: boolean; id?: string; error?: string }> {
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      return { success: true };
+    }
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'saveProfitLoss', data }),
+      });
+      const text = await response.text();
+      return safeParseGasResponse(text, response.ok);
+    } catch (error: any) {
+      console.warn('saveProfitLoss warning:', error);
+      return { success: false, error: error.message || 'فشل حفظ تقرير الأرباح والخسائر في شيت جوجل' };
+    }
+  },
+
+  async getProfitLoss(): Promise<{ success: boolean; records?: any[]; data?: any[]; error?: string }> {
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      return { success: true, records: [] };
+    }
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'getProfitLoss' }),
+      });
+      const text = await response.text();
+      const parsed = safeParseGasResponse(text, response.ok);
+      return {
+        success: parsed.success !== false,
+        records: parsed.records || parsed.data || [],
+        data: parsed.data || parsed.records || []
+      };
+    } catch (error: any) {
+      console.warn('getProfitLoss warning:', error);
+      return { success: false, records: [], error: error.message };
+    }
+  },
+
+  async saveOrder(order: any): Promise<{ success: boolean; id?: string; error?: string }> {
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      return { success: true };
+    }
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'saveOrder', data: order }),
+      });
+      const text = await response.text();
+      return safeParseGasResponse(text, response.ok);
+    } catch (error: any) {
+      console.warn('saveOrder warning:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  async getOrders(): Promise<{ success: boolean; orders?: any[]; error?: string }> {
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      return { success: true, orders: [] };
+    }
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'getOrders' }),
+      });
+      const text = await response.text();
+      const parsed = safeParseGasResponse(text, response.ok);
+      return {
+        success: parsed.success !== false,
+        orders: parsed.orders || []
+      };
+    } catch (error: any) {
+      console.warn('getOrders warning:', error);
+      return { success: false, orders: [], error: error.message };
+    }
+  },
+
+  async saveBudgets(budgets: any): Promise<{ success: boolean; count?: number; error?: string }> {
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      return { success: true };
+    }
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'saveBudgets', data: budgets }),
+      });
+      const text = await response.text();
+      return safeParseGasResponse(text, response.ok);
+    } catch (error: any) {
+      console.warn('saveBudgets warning:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  async getBudgets(): Promise<{ success: boolean; budgets?: any[]; error?: string }> {
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      return { success: true, budgets: [] };
+    }
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'getBudgets' }),
+      });
+      const text = await response.text();
+      const parsed = safeParseGasResponse(text, response.ok);
+      return {
+        success: parsed.success !== false,
+        budgets: parsed.budgets || []
+      };
+    } catch (error: any) {
+      console.warn('getBudgets warning:', error);
+      return { success: false, budgets: [], error: error.message };
+    }
+  },
+
+  async setupAllEnterpriseSheets(): Promise<{ success: boolean; message?: string; error?: string }> {
+    if (!GAS_URL || GAS_URL.includes('...')) {
+      return { success: true, message: 'Google Apps Script غير مهيأ' };
+    }
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'setupAllEnterpriseSheets' }),
+      });
+      const text = await response.text();
+      return safeParseGasResponse(text, response.ok);
+    } catch (error: any) {
+      console.warn('setupAllEnterpriseSheets warning:', error);
+      return { success: false, error: error.message };
+    }
   }
 };
